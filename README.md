@@ -114,7 +114,6 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ```
 balkon-dergisi/
 ├── 📂 public/                 # Static files
-│   └── pdf.worker.min.mjs     # PDF.js worker
 ├── 📂 src/
 │   ├── 📂 app/                # Next.js App Router
 │   │   ├── 📂 admin/          # Admin panel
@@ -170,19 +169,11 @@ balkon-dergisi/
 
 ### PDF Worker Configuration
 
-The PDF.js worker file should be located at `public/pdf.worker.min.mjs`:
+The application uses PDF.js from a CDN for processing PDF files:
 
 ```javascript
-// Inside next.config.ts
-headers: [
-  {
-    source: '/pdf.worker.min.mjs',
-    headers: [{
-      key: 'Cache-Control',
-      value: 'public, max-age=31536000, immutable'
-    }]
-  }
-]
+pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.worker.min.mjs'
+```
 ```
 
 ### Supabase Configuration
@@ -249,17 +240,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=production_supabase_anon_key
 - **Caching**: Proper cache headers for static assets
 - **Lazy Loading**: Components and images loaded on demand
 - **WebP Conversion**: Automatic PDF to WebP conversion
-
-## 🐛 Known Issues and Solutions
-
-### PDF Worker Not Loading
-**Solution**: Ensure that the `public/pdf.worker.min.mjs` file exists.
-
-### Supabase Connection Error
-**Solution**: Check the environment variables.
-
-### Build Errors
-**Solution**: Fix TypeScript and ESLint errors.
 
 ## 🤝 Contributing
 

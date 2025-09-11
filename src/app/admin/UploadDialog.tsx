@@ -298,7 +298,7 @@ export default function UploadDialog() {
       log('PDF sayfaları render edilmeye hazırlanıyor')
       const pdfBuffer = await pdf.arrayBuffer()
       const pdfjs = await import('pdfjs-dist')
-      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+      pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.worker.min.mjs'
       const pdfDoc = await pdfjs.getDocument({ data: pdfBuffer }).promise
       log(`Toplam sayfa: ${pdfDoc.numPages}`)
 

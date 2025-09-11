@@ -161,51 +161,12 @@ export function Footer() {
               </p>
             </TimelineContent>
           </div>
-
-          {/* Developer Info */}
-          <div>
-            <TimelineContent
-              as="h3"
-              animationNum={6}
-              timelineRef={footerRef}
-              customVariants={revealVariants}
-              className="text-gray-900 font-semibold mb-4"
-            >
-              Geliştirici
-            </TimelineContent>
-            <TimelineContent
-              as="div"
-              animationNum={7}
-              timelineRef={footerRef}
-              customVariants={revealVariants}
-              className="space-y-3 text-gray-600"
-            >
-              <p className="text-sm">
-                <a 
-                  href="https://github.com/Woffluon"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-red-500 hover:text-red-600 transition-colors font-medium"
-                >
-                  Efe Arabacı
-                </a>
-              </p>
-              <p className="text-xs">
-                <a 
-                  href="mailto:efe.arabaci.dev@gmail.com"
-                  className="text-gray-500 hover:text-red-500 transition-colors"
-                >
-                  efe.arabaci.dev@gmail.com
-                </a>
-              </p>
-            </TimelineContent>
-          </div>
         </div>
 
         {/* Inspirational Quote Section */}
         <TimelineContent
           as="div"
-          animationNum={8}
+          animationNum={6}
           timelineRef={footerRef}
           customVariants={revealVariants}
           className="border-t border-gray-200 pt-8 mb-8"
@@ -223,7 +184,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <TimelineContent
           as="div"
-          animationNum={9}
+          animationNum={7}
           timelineRef={footerRef}
           customVariants={revealVariants}
           className="border-t border-gray-200 pt-8"
