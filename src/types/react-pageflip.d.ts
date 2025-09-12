@@ -10,6 +10,7 @@ declare module 'react-pageflip' {
     drawShadow?: boolean
     usePortrait?: boolean
     mobileScrollSupport?: boolean
+    onFlip?: (e: { data: number }) => void
     children?: React.ReactNode
   }
   const HTMLFlipBook: React.ComponentType<HTMLFlipBookProps>

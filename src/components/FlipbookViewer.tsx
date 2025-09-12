@@ -2,10 +2,10 @@
 
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-type PageFlipAPI = { flipNext: () => void; flipPrev: () => void }
+type PageFlipAPI = { flipNext: () => void; flipPrev: () => void; getCurrentPageIndex: () => number }
 type PageFlipHandle = { pageFlip: () => PageFlipAPI }
 
 type FlipBookComponent = React.ComponentType<{
@@ -18,6 +18,7 @@ type FlipBookComponent = React.ComponentType<{
   drawShadow?: boolean;
   usePortrait?: boolean;
   mobileScrollSupport?: boolean;
+  onFlip?: (e: { data: number }) => void;
 } & { children?: React.ReactNode }>
 const SafeFlipBook = dynamic(() => import('react-pageflip'), {
   ssr: false,
@@ -36,6 +37,8 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const bookRef = useRef<PageFlipHandle | null>(null)
   const [dims, setDims] = useState<{ w: number; h: number }>({ w: 500, h: 700 })
+  const [currentPage, setCurrentPage] = useState(0)
+  const [preloadedPages, setPreloadedPages] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     function updateSize() {
@@ -61,6 +64,36 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
     }
   }, [])
 
+  // Preload next pages when current page changes
+  useEffect(() => {
+    const preloadNextPages = () => {
+      const pagesToPreload = []
+      for (let i = 1; i <= 3; i++) {
+        const nextPageIndex = currentPage + i
+        if (nextPageIndex < pages.length && !preloadedPages.has(nextPageIndex)) {
+          pagesToPreload.push(nextPageIndex)
+        }
+      }
+      
+      if (pagesToPreload.length > 0) {
+        pagesToPreload.forEach(pageIndex => {
+          const img = new window.Image()
+          img.onload = () => {
+            setPreloadedPages(prev => new Set([...prev, pageIndex]))
+          }
+          img.src = pages[pageIndex]
+        })
+      }
+    }
+
+    preloadNextPages()
+  }, [currentPage, pages, preloadedPages])
+
+  // Handle page flip events
+  const onFlip = useCallback((e: { data: number }) => {
+    setCurrentPage(e.data)
+  }, [])
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!bookRef.current) return
@@ -79,12 +112,25 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
     <div ref={containerRef} className="relative w-full flex justify-center items-center overflow-hidden" style={{ height: dims.h }}>
       {/* Flipbook */}
       {/* @ts-expect-error: react-pageflip type doesn't include ref but runtime supports it */}
-      <SafeFlipBook ref={bookRef} width={dims.w} height={dims.h} showCover size="fixed" maxShadowOpacity={0} drawShadow={false} usePortrait mobileScrollSupport>
-        {pages.map((url, index) => (
-          <div key={index} className="page overflow-hidden" style={{ width: dims.w, height: dims.h }}>
-            <Image src={url} alt={`Dergi Sayfası ${index + 1}`} width={dims.w} height={dims.h} className="object-cover w-full h-full" priority={index === 0} />
-          </div>
-        ))}
+      <SafeFlipBook ref={bookRef} width={dims.w} height={dims.h} showCover size="fixed" maxShadowOpacity={0} drawShadow={false} usePortrait mobileScrollSupport onFlip={onFlip}>
+        {pages.map((url, index) => {
+          // Prioritize first page and next 3 pages from current position
+          const shouldPrioritize = index === 0 || (index >= currentPage && index <= currentPage + 3)
+          
+          return (
+            <div key={index} className="page overflow-hidden" style={{ width: dims.w, height: dims.h }}>
+              <Image 
+                src={url} 
+                alt={`Dergi Sayfası ${index + 1}`} 
+                width={dims.w} 
+                height={dims.h} 
+                className="object-cover w-full h-full" 
+                priority={shouldPrioritize}
+                loading={shouldPrioritize ? 'eager' : 'lazy'}
+              />
+            </div>
+          )
+        })}
       </SafeFlipBook>
 
       {/* Tap zones for mobile */}
