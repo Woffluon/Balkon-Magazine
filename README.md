@@ -141,7 +141,6 @@ balkon-dergisi/
 ├── 📄 next.config.ts          # Next.js configuration
 ├── 📄 tailwind.config.js      # Tailwind configuration
 ├── 📄 tsconfig.json           # TypeScript configuration
-└── 📄 vercel.json             # Vercel deployment configuration
 ```
 
 ## 🎨 User Interface Features
@@ -285,4 +284,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
   <p><strong>"Every page a story ❋ Every story a balcony ❋ Every balcony a breath"</strong></p>
   <p>Made with ❤️ by Sezai Karakoç Anatolian High School</p>
   <p>⭐ If you liked this project, don't forget to star it!</p>
+
 </div>
