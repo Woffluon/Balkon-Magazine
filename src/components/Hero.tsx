@@ -118,26 +118,26 @@ export function Hero({
                 <span className="text-gray-600">& Basılı</span>
               </div>
             </TimelineContent>
-            <div className="lg:absolute right-0 bottom-24 flex lg:flex-col flex-row-reverse lg:gap-0 gap-4">
+            <div className="lg:absolute right-0 bottom-24 flex lg:flex-col flex-row-reverse lg:gap-0 gap-2 w-full lg:w-auto overflow-hidden">
               <TimelineContent
                 as="div"
                 animationNum={6}
                 timelineRef={heroRef}
                 customVariants={revealVariants}
-                className="flex lg:text-4xl sm:text-3xl text-2xl items-center gap-2 mb-2"
+                className="flex lg:text-4xl sm:text-2xl text-lg items-center gap-1 sm:gap-2 mb-2 flex-wrap lg:flex-nowrap w-full lg:w-auto"
               >
-                <span className="text-red-500 font-semibold">Lise</span>
-                <span className="text-gray-600 uppercase font-semibold">öğrencileri</span>
+                <span className="text-red-500 font-semibold whitespace-nowrap">Lise</span>
+                <span className="text-gray-600 uppercase font-semibold break-words lg:whitespace-nowrap">öğrencileri</span>
               </TimelineContent>
               <TimelineContent
                 as="div"
                 animationNum={7}
                 timelineRef={heroRef}
                 customVariants={revealVariants}
-                className="flex items-center gap-2 mb-2 sm:text-base text-xs"
+                className="flex items-center gap-1 sm:gap-2 mb-2 sm:text-base text-xs flex-wrap lg:flex-nowrap w-full lg:w-auto"
               >
-                <span className="text-red-500 font-bold">Yaratıcılık</span>
-                <span className="text-gray-600">platformu</span>
+                <span className="text-red-500 font-bold whitespace-nowrap">Yaratıcılık</span>
+                <span className="text-gray-600 whitespace-nowrap">platformu</span>
                 <span className="text-gray-300 lg:hidden block">|</span>
               </TimelineContent>
             </div>
