@@ -12,6 +12,7 @@
 /out/
 
 # Production
+package-lock.json
 /build
 
 # Misc
