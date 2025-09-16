@@ -94,7 +94,7 @@ export function Hero({
                 preserveAspectRatio="xMidYMid slice"
                 width={"100%"}
                 height={"100%"}
-                xlinkHref="https://i.imgur.com/DDGnSEA.jpeg?auto=format&fit=crop&w=1200"
+                xlinkHref="/hero_image.webp"
               />
             </svg>
           </TimelineContent>
