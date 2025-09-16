@@ -113,7 +113,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```
 balkon-dergisi/
-├── 📂 public/                 # Static files
+├── 📂 public/
 ├── 📂 src/
 │   ├── 📂 app/                # Next.js App Router
 │   │   ├── 📂 admin/          # Admin panel
@@ -286,3 +286,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
   <p>⭐ If you liked this project, don't forget to star it!</p>
 
 </div>
+
