@@ -113,6 +113,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```
 balkon-dergisi/
+├── 📂 docs/
+│   └── SUPABASE.md        # Full Supabase DB & Storage setup guide
 ├── 📂 public/
 ├── 📂 src/
 │   ├── 📂 app/                # Next.js App Router
@@ -166,21 +168,16 @@ balkon-dergisi/
 
 ## 🔧 Advanced Configuration
 
-### PDF Worker Configuration
+### Supabase Setup
 
-The application uses PDF.js from a CDN for processing PDF files:
+For a complete, step-by-step guide to database and storage configuration (including SQL for tables, indexes, RLS policies, and Storage policies), see:
 
-```javascript
-pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.149/pdf.worker.min.mjs'
-```
-```
+- `docs/SUPABASE.md`
 
-### Supabase Configuration
-
-1. Create a Supabase project
-2. Create a storage bucket: `magazines`
-3. Configure authentication settings
-4. Create database tables
+Quick start:
+- Create a Supabase project and set environment variables in `.env.local`.
+- Create a Storage bucket named `magazines`.
+- Run the SQL in `docs/SUPABASE.md` to create tables and policies.
 
 ### Security Settings
 
