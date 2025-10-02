@@ -64,7 +64,6 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
     }
   }, [])
 
-  // Preload exactly the next 3 pages relative to current page (without forcing immediate render)
   useEffect(() => {
     const nextIndices = [currentPage + 1, currentPage + 2, currentPage + 3]
     nextIndices.forEach((idx) => {
@@ -78,7 +77,6 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
     })
   }, [currentPage, pages, preloadedPages])
 
-  // Handle page flip events
   const onFlip = useCallback((e: { data: number }) => {
     setCurrentPage(e.data)
   }, [])
@@ -103,7 +101,6 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
       {/* @ts-expect-error: react-pageflip type doesn't include ref but runtime supports it */}
       <SafeFlipBook ref={bookRef} width={dims.w} height={dims.h} showCover size="fixed" maxShadowOpacity={0} drawShadow={false} usePortrait mobileScrollSupport onFlip={onFlip}>
         {pages.map((url, index) => {
-          // Load only current, previous 1, and next 3 pages
           const shouldLoad = index === currentPage || index === currentPage - 1 || (index > currentPage && index <= currentPage + 3) || preloadedPages.has(index)
           const shouldPrioritize = index >= currentPage && index <= currentPage + 3
           

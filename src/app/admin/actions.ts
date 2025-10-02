@@ -100,10 +100,8 @@ async function listAllFiles(issue: number) {
     for (const item of data ?? []) {
       const p = prefix ? `${prefix}/${item.name}` : item.name
       if (item.id) {
-        // it's a file
         paths.push(p)
       } else {
-        // folder; recurse
         await listDir(p)
       }
     }
