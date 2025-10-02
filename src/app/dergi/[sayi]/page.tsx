@@ -31,7 +31,6 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
     })
     imageUrls = sorted.map((f) => supabase.storage.from('magazines').getPublicUrl(`${sayi}/pages/${f.name}`).data.publicUrl)
   } else if (!magazine.pdf_url && magazine.cover_image_url) {
-    // Sayfa bulunamazsa ve PDF de yoksa en azından kapak göster
     imageUrls = [magazine.cover_image_url]
   }
 

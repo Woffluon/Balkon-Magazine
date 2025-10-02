@@ -1,27 +1,22 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Image optimization
   images: {
     unoptimized: true,
     domains: ['eeiauxebadeoifomrxeu.supabase.co'],
     formats: ['image/webp', 'image/avif'],
   },
-  // Monorepo/OneDrive kök yanlış algılanmasını susturmak için
-  outputFileTracingRoot: 'C:/Users/karsi/OneDrive/Desktop',
+  outputFileTracingRoot: process.cwd(),
   
-  // Server configuration
   experimental: {
     serverActions: {
-      bodySizeLimit: '100gb', // For large file uploads
+      bodySizeLimit: '100gb',
     },
   },
   
-  // Performance optimizations
   poweredByHeader: false,
   compress: true,
   
-  // Static file caching
   async headers() {
     return [
       {
@@ -44,7 +39,6 @@ const nextConfig: NextConfig = {
     ];
   },
   
-  // Environment-specific optimizations
   ...(process.env.NODE_ENV === 'production' && {
     output: 'standalone',
   }),
