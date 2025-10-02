@@ -4,14 +4,21 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-export async function login(formData: FormData): Promise<void> {
+export type LoginState = {
+  error?: string
+}
+
+export async function login(
+  _prevState: LoginState,
+  formData: FormData
+): Promise<LoginState | void> {
   const supabase = await createClient()
 
   const email = formData.get('email') as string
   const password = formData.get('password') as string
 
   if (!email || !password) {
-    redirect('/admin/login?error=missing_credentials')
+    return { error: 'E-posta ve şifre gereklidir.' }
   }
 
   const { error } = await supabase.auth.signInWithPassword({
@@ -20,8 +27,7 @@ export async function login(formData: FormData): Promise<void> {
   })
 
   if (error) {
-    console.error('Login error:', error.message)
-    redirect('/admin/login?error=Kimlik bilgileri geçersiz')
+    return { error: 'E-posta veya şifre hatalı.' }
   }
 
   revalidatePath('/', 'layout')

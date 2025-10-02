@@ -10,6 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { RowActions } from './RowActions'
+import MagazineTable from './MagazineTable'
 
 
 export default async function AdminDashboard() {
@@ -26,8 +27,18 @@ export default async function AdminDashboard() {
 
   if (error) {
     console.error('Error fetching magazines:', error)
-    return <p>Dergiler yüklenirken bir hata oluştu.</p>
+    return (
+      <main className="w-full min-h-screen bg-[#f9f9f9] pt-4">
+        <div className="responsive-container py-6 sm:py-8">
+          <div className="rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm">
+            Dergiler yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.
+          </div>
+        </div>
+      </main>
+    )
   }
+
+  const hasItems = Boolean(magazines && magazines.length > 0)
 
   return (
     <main className="w-full min-h-screen bg-[#f9f9f9] pt-4">
@@ -36,32 +47,18 @@ export default async function AdminDashboard() {
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-gray-900">Dergi Yönetimi</h1>
           <UploadDialog />
         </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs sm:text-sm">Sayı No</TableHead>
-                <TableHead className="text-xs sm:text-sm">Başlık</TableHead>
-                <TableHead className="text-xs sm:text-sm">Yayın Tarihi</TableHead>
-                <TableHead className="text-xs sm:text-sm">İşlemler</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {magazines?.map((magazine) => (
-                <TableRow key={magazine.id}>
-                  <TableCell className="text-xs sm:text-sm">{magazine.issue_number}</TableCell>
-                  <TableCell className="text-xs sm:text-sm max-w-[200px] truncate">{magazine.title}</TableCell>
-                  <TableCell className="text-xs sm:text-sm">
-                    {new Date(magazine.publication_date).toLocaleDateString('tr-TR')}
-                  </TableCell>
-                  <TableCell>
-                    <RowActions id={magazine.id} issue={magazine.issue_number} title={magazine.title} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+
+        {!hasItems ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center">
+            <div className="mb-2 text-xl font-semibold text-gray-900">Henüz dergi bulunmuyor</div>
+            <p className="mb-6 max-w-md text-sm text-gray-600">Yeni sayılar ekleyerek yönetim panelinizi zenginleştirin. Kapak ve sayfaları kolayca yükleyin.</p>
+            <UploadDialog />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <MagazineTable magazines={magazines as any} />
+          </div>
+        )}
       </div>
     </main>
   )
