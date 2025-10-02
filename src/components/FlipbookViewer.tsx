@@ -1,7 +1,6 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -64,29 +63,18 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
     }
   }, [])
 
-  // Preload next pages when current page changes
+  // Preload exactly the next 3 pages relative to current page (without forcing immediate render)
   useEffect(() => {
-    const preloadNextPages = () => {
-      const pagesToPreload = []
-      for (let i = 1; i <= 3; i++) {
-        const nextPageIndex = currentPage + i
-        if (nextPageIndex < pages.length && !preloadedPages.has(nextPageIndex)) {
-          pagesToPreload.push(nextPageIndex)
+    const nextIndices = [currentPage + 1, currentPage + 2, currentPage + 3]
+    nextIndices.forEach((idx) => {
+      if (idx < pages.length && !preloadedPages.has(idx)) {
+        const img = new window.Image()
+        img.onload = () => {
+          setPreloadedPages((prev) => new Set([...prev, idx]))
         }
+        img.src = pages[idx]
       }
-      
-      if (pagesToPreload.length > 0) {
-        pagesToPreload.forEach(pageIndex => {
-          const img = new window.Image()
-          img.onload = () => {
-            setPreloadedPages(prev => new Set([...prev, pageIndex]))
-          }
-          img.src = pages[pageIndex]
-        })
-      }
-    }
-
-    preloadNextPages()
+    })
   }, [currentPage, pages, preloadedPages])
 
   // Handle page flip events
@@ -114,20 +102,25 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
       {/* @ts-expect-error: react-pageflip type doesn't include ref but runtime supports it */}
       <SafeFlipBook ref={bookRef} width={dims.w} height={dims.h} showCover size="fixed" maxShadowOpacity={0} drawShadow={false} usePortrait mobileScrollSupport onFlip={onFlip}>
         {pages.map((url, index) => {
-          // Prioritize first page and next 3 pages from current position
-          const shouldPrioritize = index === 0 || (index >= currentPage && index <= currentPage + 3)
+          // Load only current, previous 1, and next 3 pages
+          const shouldLoad = index === currentPage || index === currentPage - 1 || (index > currentPage && index <= currentPage + 3) || preloadedPages.has(index)
+          const shouldPrioritize = index >= currentPage && index <= currentPage + 3
           
           return (
             <div key={index} className="page overflow-hidden" style={{ width: dims.w, height: dims.h }}>
-              <Image 
-                src={url} 
-                alt={`Dergi Sayfası ${index + 1}`} 
-                width={dims.w} 
-                height={dims.h} 
-                className="object-cover w-full h-full" 
-                priority={shouldPrioritize}
-                loading={shouldPrioritize ? 'eager' : 'lazy'}
-              />
+              {shouldLoad ? (
+                <img
+                  src={url}
+                  alt={`Dergi Sayfası ${index + 1}`}
+                  width={dims.w}
+                  height={dims.h}
+                  loading={shouldPrioritize ? 'eager' : 'lazy'}
+                  decoding="async"
+                  style={{ objectFit: 'cover', width: '100%', height: '100%' }}
+                />
+              ) : (
+                <div aria-hidden className="w-full h-full bg-neutral-100" />
+              )}
             </div>
           )
         })}
