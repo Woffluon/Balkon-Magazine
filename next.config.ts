@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
     domains: ['eeiauxebadeoifomrxeu.supabase.co'],
     formats: ['image/webp', 'image/avif'],
   },
+  // Monorepo/OneDrive kök yanlış algılanmasını susturmak için
+  outputFileTracingRoot: 'C:/Users/karsi/OneDrive/Desktop',
   
   // Server configuration
   experimental: {

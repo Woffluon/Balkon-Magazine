@@ -15,7 +15,11 @@ import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const initialState: LoginState = { error: undefined };
-  const [state, formAction, isPending] = useActionState(login as any, initialState);
+  const loginAction = login as (
+    prevState: LoginState,
+    formData: FormData
+  ) => Promise<LoginState>;
+  const [state, formAction, isPending] = useActionState(loginAction, initialState);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#f9f9f9] px-4 pt-20">

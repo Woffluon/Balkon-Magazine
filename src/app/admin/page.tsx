@@ -1,15 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import UploadDialog from './UploadDialog'
 import { redirect } from 'next/navigation'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { RowActions } from './RowActions'
+// Tablo bileşenleri ve RowActions bu dosyada kullanılmıyor; MagazineTable içeride kullanıyor.
 import MagazineTable from './MagazineTable'
 
 
@@ -56,7 +48,8 @@ export default async function AdminDashboard() {
           </div>
         ) : (
           <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <MagazineTable magazines={magazines as any} />
+            <MagazineTable magazines={magazines}
+            />
           </div>
         )}
       </div>

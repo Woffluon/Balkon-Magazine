@@ -97,7 +97,7 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
                 <DialogHeader>
                   <DialogTitle className="text-lg font-semibold">Silme işlemini onaylayın</DialogTitle>
                 </DialogHeader>
-                <p className="text-sm text-muted-foreground">Sayı {issue} - "{title}" tamamen kaldırılacak. Bu işlem geri alınamaz.</p>
+                <p className="text-sm text-muted-foreground">Sayı {issue} - &quot;{title}&quot; tamamen kaldırılacak. Bu işlem geri alınamaz.</p>
                 <form
                   action={async (formData: FormData) => {
                     startTransition(async () => {
