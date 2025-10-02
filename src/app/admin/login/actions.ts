@@ -11,7 +11,7 @@ export type LoginState = {
 export async function login(
   _prevState: LoginState,
   formData: FormData
-): Promise<LoginState | void> {
+): Promise<LoginState> {
   const supabase = await createClient()
 
   const email = formData.get('email') as string

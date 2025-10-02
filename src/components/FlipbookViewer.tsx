@@ -1,6 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -109,13 +110,12 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
           return (
             <div key={index} className="page overflow-hidden" style={{ width: dims.w, height: dims.h }}>
               {shouldLoad ? (
-                <img
+                <Image
                   src={url}
                   alt={`Dergi Sayfası ${index + 1}`}
                   width={dims.w}
                   height={dims.h}
-                  loading={shouldPrioritize ? 'eager' : 'lazy'}
-                  decoding="async"
+                  priority={shouldPrioritize}
                   style={{ objectFit: 'cover', width: '100%', height: '100%' }}
                 />
               ) : (
