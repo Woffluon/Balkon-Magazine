@@ -12,6 +12,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isAdminRoute = pathname?.startsWith("/admin");
+  const isMagazineViewerRoute = pathname?.startsWith("/dergi/");
 
   if (isAdminRoute) {
     return <>{children}</>;
@@ -21,7 +22,7 @@ export function AppShell({ children }: AppShellProps) {
     <>
       <Header />
       {children}
-      <Footer />
+      {!isMagazineViewerRoute && <Footer />}
     </>
   );
 }
