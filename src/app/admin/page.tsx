@@ -3,14 +3,18 @@ import UploadDialog from './UploadDialog'
 import { redirect } from 'next/navigation'
 // Tablo bileşenleri ve RowActions bu dosyada kullanılmıyor; MagazineTable içeride kullanıyor.
 import MagazineTable from './MagazineTable'
+import { UserMenu } from './UserMenu'
 
 
 export default async function AdminDashboard() {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  
+  if (userError || !user) {
     redirect('/admin/login')
   }
+
+  const userEmail = user.email || ''
 
   const { data: magazines, error } = await supabase
     .from('magazines')
@@ -37,7 +41,10 @@ export default async function AdminDashboard() {
       <div className="responsive-container py-6 sm:py-8">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-gray-900">Dergi Yönetimi</h1>
-          <UploadDialog />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <UserMenu userEmail={userEmail} />
+            <UploadDialog />
+          </div>
         </div>
 
         {!hasItems ? (
