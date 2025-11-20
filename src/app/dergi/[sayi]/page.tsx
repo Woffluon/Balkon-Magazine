@@ -1,6 +1,10 @@
 import FlipbookViewer from '@/components/FlipbookViewer'
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
+import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
+import { MagazineService } from '@/lib/services/MagazineService'
+import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
+import { STORAGE_PATHS } from '@/lib/constants/storage'
 
 export const dynamic = 'force-static'
 
@@ -9,29 +13,41 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
   const { sayi: sayiStr } = await params
   const sayi = Number(sayiStr)
 
-  const { data: magazine } = await supabase
-    .from('magazines')
-    .select('*')
-    .eq('issue_number', sayi)
-    .single()
+  // Use MagazineService to fetch magazine data
+  const magazineRepository = new SupabaseMagazineRepository(supabase)
+  const storageService = new SupabaseStorageService(supabase)
+  const magazineService = new MagazineService(magazineRepository, storageService)
+
+  const magazine = await magazineService.getMagazineByIssue(sayi)
 
   if (!magazine) return notFound()
 
-  // Öncelik: Storage'dan gerçek sayfa görsellerini listele
-  const { data: files, error: listErr } = await supabase.storage
-    .from('magazines')
-    .list(`${sayi}/pages`, { limit: 1000 })
-
+  // Use StorageService to list page images
   let imageUrls: string[] = []
-  if (!listErr && files && files.length > 0) {
-    const sorted = [...files].sort((a, b) => {
-      const na = parseInt(a.name.replace(/\D/g, ''), 10) || 0
-      const nb = parseInt(b.name.replace(/\D/g, ''), 10) || 0
-      return na - nb
-    })
-    imageUrls = sorted.map((f) => supabase.storage.from('magazines').getPublicUrl(`${sayi}/pages/${f.name}`).data.publicUrl)
-  } else if (!magazine.pdf_url && magazine.cover_image_url) {
-    imageUrls = [magazine.cover_image_url]
+  
+  try {
+    const pagesPath = STORAGE_PATHS.getPagesPath(sayi)
+    const files = await storageService.list(pagesPath)
+    
+    if (files.length > 0) {
+      // Sort files by page number
+      const sorted = [...files].sort((a, b) => {
+        const na = parseInt(a.name.replace(/\D/g, ''), 10) || 0
+        const nb = parseInt(b.name.replace(/\D/g, ''), 10) || 0
+        return na - nb
+      })
+      
+      imageUrls = sorted.map((f) => storageService.getPublicUrl(`${sayi}/pages/${f.name}`))
+    } else if (!magazine.pdf_url && magazine.cover_image_url) {
+      // Fallback to cover image if no pages found
+      imageUrls = [magazine.cover_image_url]
+    }
+  } catch (error) {
+    console.error('Error listing page files:', error)
+    // Fallback to cover image on error
+    if (magazine.cover_image_url) {
+      imageUrls = [magazine.cover_image_url]
+    }
   }
 
   return (
@@ -70,11 +86,13 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
   const supabase = await createClient()
   const { sayi: sayiStr } = await params
   const sayi = Number(sayiStr)
-  const { data: magazine } = await supabase
-    .from('magazines')
-    .select('title')
-    .eq('issue_number', sayi)
-    .single()
+  
+  // Use MagazineService to fetch magazine data
+  const magazineRepository = new SupabaseMagazineRepository(supabase)
+  const storageService = new SupabaseStorageService(supabase)
+  const magazineService = new MagazineService(magazineRepository, storageService)
+  
+  const magazine = await magazineService.getMagazineByIssue(sayi)
 
   if (!magazine) return {}
 

@@ -85,7 +85,7 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
       } else {
         setError(result.error || 'Bir hata oluştu')
       }
-    } catch (err) {
+    } catch {
       setError('Şifre güncellenirken bir hata oluştu. Lütfen tekrar deneyin.')
     } finally {
       setIsLoading(false)

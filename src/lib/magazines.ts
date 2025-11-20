@@ -1,17 +1,20 @@
 import { createClient } from '@/lib/supabase/server'
 import { Magazine } from '@/types/magazine'
+import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
 
+/**
+ * Retrieves all published magazines
+ * Uses the repository pattern to abstract database access
+ * 
+ * @returns Promise resolving to array of published magazines
+ * @throws {DatabaseError} If database query fails
+ */
 export async function getPublishedMagazines(): Promise<Magazine[]> {
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('magazines')
-    .select('*')
-    .eq('is_published', true)
-    .order('issue_number', { ascending: false })
-
-  if (error) {
-    throw new Error(`Magazines fetch failed: ${error.message}`)
-  }
-
-  return data ?? []
+  const repository = new SupabaseMagazineRepository(supabase)
+  
+  const allMagazines = await repository.findAll()
+  
+  // Filter for published magazines
+  return allMagazines.filter(magazine => magazine.is_published)
 }

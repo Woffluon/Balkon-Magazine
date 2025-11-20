@@ -20,7 +20,8 @@
     "start": "next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf .next"
+    "clean": "rm -rf .next",
+    "postinstall": "node -e \"require('fs').copyFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs', 'public/pdf.worker.min.mjs')\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
@@ -36,7 +37,7 @@
     "motion": "^12.23.12",
     "next": "15.5.2",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^5.4.149",
+    "pdfjs-dist": "^5.4.394",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.62.0",
