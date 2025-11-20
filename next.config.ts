@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   
   experimental: {
     serverActions: {
-      bodySizeLimit: '50mb',
+      bodySizeLimit: '500mb',
     },
   },
   
@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https:",
+      "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       `connect-src 'self' https://${supabaseDomain} https://*.supabase.co`,
       "frame-ancestors 'none'",
