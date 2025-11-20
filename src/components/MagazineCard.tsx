@@ -1,12 +1,13 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import React from 'react'
 import type { Magazine } from '@/types/magazine'
 
 type Props = {
   magazine: Magazine
 }
 
-export function MagazineCard({ magazine }: Props) {
+export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props) {
   return (
     <Link 
       key={magazine.id} 
@@ -24,6 +25,7 @@ export function MagazineCard({ magazine }: Props) {
                 alt={magazine.title}
                 fill
                 className="object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
+                style={{ willChange: 'transform' }}
                 sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
               />
               {/* Gradient overlay */}
@@ -47,7 +49,7 @@ export function MagazineCard({ magazine }: Props) {
           )}
           
           {/* Reading indicator */}
-          <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:scale-110">
+          <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:scale-110" style={{ willChange: 'transform, opacity' }}>
             <div className="bg-white/90 backdrop-blur-sm rounded-full px-3 py-1 text-xs font-bold text-gray-700 shadow-sm border border-white/20">
               OKU
             </div>
@@ -79,7 +81,7 @@ export function MagazineCard({ magazine }: Props) {
             </div>
             
             {/* Read more indicator */}
-            <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:translate-x-1">
+            <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:translate-x-1" style={{ willChange: 'transform, opacity' }}>
               <svg 
                 className="w-4 h-4 text-red-500" 
                 fill="none" 
@@ -97,4 +99,10 @@ export function MagazineCard({ magazine }: Props) {
       </div>
     </Link>
   )
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison function for deep equality check
+  return prevProps.magazine.id === nextProps.magazine.id &&
+         prevProps.magazine.title === nextProps.magazine.title &&
+         prevProps.magazine.cover_image_url === nextProps.magazine.cover_image_url &&
+         prevProps.magazine.issue_number === nextProps.magazine.issue_number
+})

@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/middleware/authMiddleware'
 import { parseFormDataWithZod } from '@/lib/validators/formDataParser'
@@ -96,5 +96,33 @@ export async function saveUploadLog(issue: string, content: string) {
   })
   
   return path
+}
+
+/**
+ * Revalidates a specific magazine page by issue number
+ * Triggers on-demand ISR revalidation for the magazine detail page
+ * Also revalidates the home page to reflect any changes
+ */
+export async function revalidateMagazinePage(issueNumber: number) {
+  await requireAuth()
+  
+  revalidatePath(`/dergi/${issueNumber}`)
+  revalidatePath('/') // Also revalidate home page
+  
+  return { success: true, revalidated: [`/dergi/${issueNumber}`, '/'] }
+}
+
+/**
+ * Revalidates the magazines cache tag
+ * Triggers on-demand revalidation for all cached magazine data
+ * Use this after publishing/unpublishing magazines or updating magazine metadata
+ */
+export async function revalidateMagazines() {
+  await requireAuth()
+  
+  revalidateTag('magazines')
+  revalidatePath('/') // Also revalidate home page
+  
+  return { success: true, revalidated: 'magazines tag' }
 }
 

@@ -52,5 +52,6 @@ errors.txt
 *.tmp
 
 # Development files
+pdf.worker.min.mjs
 reports
 .turbo

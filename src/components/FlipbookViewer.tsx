@@ -1,8 +1,8 @@
 'use client'
 
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 type PageFlipAPI = { flipNext: () => void; flipPrev: () => void; getCurrentPageIndex: () => number }
@@ -32,7 +32,7 @@ interface FlipbookViewerProps {
 const ASPECT_W = 848
 const ASPECT_H = 1200
 
-export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
+export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
   const pages = useMemo(() => (imageUrls ?? []).filter(Boolean), [imageUrls])
   const containerRef = useRef<HTMLDivElement | null>(null)
   const bookRef = useRef<PageFlipHandle | null>(null)
@@ -55,26 +55,36 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
       }
     }
     updateSize()
+    // Only ResizeObserver - more efficient and covers all resize scenarios
     const ro = new ResizeObserver(() => updateSize())
     if (containerRef.current) ro.observe(containerRef.current)
-    window.addEventListener('resize', updateSize)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', updateSize)
-    }
+    return () => ro.disconnect()
   }, [])
 
+  // Image preload with AbortController
   useEffect(() => {
+    const abortController = new AbortController()
+    const { signal } = abortController
+    
     const nextIndices = [currentPage + 1, currentPage + 2, currentPage + 3]
     nextIndices.forEach((idx) => {
       if (idx < pages.length && !preloadedPages.has(idx)) {
         const img = new window.Image()
         img.onload = () => {
-          setPreloadedPages((prev) => new Set([...prev, idx]))
+          if (!signal.aborted) {
+            setPreloadedPages((prev) => new Set([...prev, idx]))
+          }
+        }
+        img.onerror = (error) => {
+          if (!signal.aborted) {
+            console.warn(`Failed to preload page ${idx}:`, error)
+          }
         }
         img.src = pages[idx]
       }
     })
+    
+    return () => abortController.abort()
   }, [currentPage, pages, preloadedPages])
 
   const onFlip = useCallback((e: { data: number }) => {
@@ -144,5 +154,5 @@ export default function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
       </button>
     </div>
   )
-}
+})
 

@@ -1,8 +1,22 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseConfig } from '@/lib/config/env'
+
+/**
+ * Creates a simple Supabase client for public data access without cookies
+ * Use this for cached operations that don't require authentication
+ * @returns Supabase client instance
+ * @throws {Error} If Supabase environment variables are not configured
+ */
+export function createPublicClient(): SupabaseClient {
+  return createSupabaseClient(
+    supabaseConfig.url,
+    supabaseConfig.anonKey
+  )
+}
 
 /**
  * Creates a Supabase client for server-side usage without authentication check

@@ -29,13 +29,15 @@ export class PDFProcessor implements IFileProcessor {
    * @throws {ProcessingError} If PDF loading or rendering fails
    */
   async process(file: File, options?: ProcessOptions): Promise<ProcessResult> {
+    let pdfDoc: pdfjs.PDFDocumentProxy | null = null
+    
     try {
       // Set PDF.js worker
       pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC
       
       // Load PDF document
       const pdfBuffer = await file.arrayBuffer()
-      const pdfDoc = await pdfjs.getDocument({ data: pdfBuffer }).promise
+      pdfDoc = await pdfjs.getDocument({ data: pdfBuffer }).promise
       
       const pages: ProcessedPage[] = []
       const targetHeight = options?.targetHeight ?? PDF_CONFIG.TARGET_HEIGHT
@@ -76,6 +78,12 @@ export class PDFProcessor implements IFileProcessor {
         throw new ProcessingError(`PDF işleme başarısız: ${error.message}`, error)
       }
       throw new ProcessingError('PDF işleme başarısız: Bilinmeyen hata', error)
+    } finally {
+      // Always cleanup PDF document resources, even on error
+      if (pdfDoc) {
+        pdfDoc.destroy()
+        pdfDoc = null
+      }
     }
   }
   
@@ -93,32 +101,41 @@ export class PDFProcessor implements IFileProcessor {
     targetHeight: number,
     quality: number
   ): Promise<Blob> {
-    // Calculate scale to achieve target height
-    const viewport = page.getViewport({ scale: 1 })
-    const scale = targetHeight / viewport.height
-    const scaledViewport = page.getViewport({ scale })
-    
-    // Create canvas
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
+    let canvas: HTMLCanvasElement | null = document.createElement('canvas')
+    let ctx: CanvasRenderingContext2D | null = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
     
     if (!ctx) {
       throw new ProcessingError('Canvas context unavailable')
     }
     
-    canvas.width = Math.ceil(scaledViewport.width)
-    canvas.height = Math.ceil(scaledViewport.height)
-    
-    // Render PDF page to canvas
-    const renderContext = {
-      canvasContext: ctx,
-      viewport: scaledViewport,
-      canvas: canvas
+    try {
+      // Calculate scale to achieve target height
+      const viewport = page.getViewport({ scale: 1 })
+      const scale = targetHeight / viewport.height
+      const scaledViewport = page.getViewport({ scale })
+      
+      canvas.width = Math.ceil(scaledViewport.width)
+      canvas.height = Math.ceil(scaledViewport.height)
+      
+      // Render PDF page to canvas
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: scaledViewport,
+        canvas: canvas
+      }
+      await page.render(renderContext).promise
+      
+      // Convert canvas to WebP blob
+      return await this.canvasToBlob(canvas, quality)
+    } finally {
+      // Cleanup canvas resources
+      if (canvas) {
+        canvas.width = 0
+        canvas.height = 0
+        ctx = null
+        canvas = null
+      }
     }
-    await page.render(renderContext).promise
-    
-    // Convert canvas to WebP blob
-    return this.canvasToBlob(canvas, quality)
   }
   
   /**

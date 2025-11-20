@@ -26,8 +26,8 @@ export const PDF_CONFIG = {
   /** Target height in pixels for PDF page rendering */
   TARGET_HEIGHT: 1200,
   
-  /** PDF.js worker source URL - uses local worker from node_modules */
-  WORKER_SRC: '/pdf.worker.min.mjs' as const,
+  /** PDF.js worker source URL - configurable via environment variable */
+  WORKER_SRC: (process.env.NEXT_PUBLIC_PDFJS_WORKER_URL || '/pdf.worker.min.mjs') as string,
   
   /** Canvas rendering context type */
   CONTEXT_TYPE: '2d' as const,
@@ -48,6 +48,26 @@ export const UPLOAD_LIMITS = {
   
   /** Maximum individual file size for client uploads (100MB in bytes) */
   MAX_CLIENT_FILE_SIZE: 100 * 1024 * 1024,
+  
+  /**
+   * Number of concurrent page uploads to process in parallel
+   * 
+   * This value controls how many pages are uploaded simultaneously during magazine upload.
+   * Higher values increase upload speed but may cause:
+   * - Increased memory usage
+   * - Higher server load
+   * - Potential rate limiting issues
+   * 
+   * Lower values reduce resource usage but increase total upload time.
+   * 
+   * Recommended values:
+   * - 3-5: Balanced performance for most use cases
+   * - 5-10: Fast uploads with good connection and server capacity
+   * - 1-3: Conservative approach for limited resources
+   * 
+   * @default 5
+   */
+  CONCURRENT_UPLOADS: 5,
 } as const
 
 /**

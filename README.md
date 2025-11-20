@@ -44,7 +44,7 @@
 - **Database**: Supabase PostgreSQL
 - **Authentication**: Supabase Auth
 - **Storage**: Supabase Storage
-- **PDF Processing**: PDF.js + PDF-lib
+- **PDF Processing**: PDF.js
 
 ### Development Tools
 - **Build Tool**: Turbopack (development)

@@ -1,7 +1,7 @@
 "use client";
+import React, { useRef, useMemo } from 'react'
 import type { Magazine } from '@/types/magazine'
 import { MagazineCard } from '@/components/MagazineCard'
-import { useRef } from 'react'
 import { TimelineContent } from '@/components/ui/timeline-animation'
 
 type Props = {
@@ -10,10 +10,10 @@ type Props = {
   showCount?: boolean
 }
 
-export function MagazineGrid({ magazines, title = 'Tüm Sayılar', showCount = true }: Props) {
+export const MagazineGrid = React.memo(function MagazineGrid({ magazines, title = 'Tüm Sayılar', showCount = true }: Props) {
   const gridRef = useRef<HTMLDivElement>(null)
 
-  const revealVariants = {
+  const revealVariants = useMemo(() => ({
     visible: (i: number) => ({
       y: 0,
       opacity: 1,
@@ -29,7 +29,7 @@ export function MagazineGrid({ magazines, title = 'Tüm Sayılar', showCount = t
       y: 20,
       opacity: 0,
     },
-  }
+  }), []) // Empty dependency array - variants never change
 
   return (
     <section data-magazine-grid className="w-full relative" ref={gridRef}>
@@ -106,4 +106,4 @@ export function MagazineGrid({ magazines, title = 'Tüm Sayılar', showCount = t
       </div>
     </section>
   )
-}
+})
