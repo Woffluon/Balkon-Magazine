@@ -1,28 +1,37 @@
-import { createClient } from '@/lib/supabase/server'
+import { getAuthenticatedClient } from '@/lib/supabase/server'
 import UploadDialog from './UploadDialog'
-import { redirect } from 'next/navigation'
 // Tablo bileşenleri ve RowActions bu dosyada kullanılmıyor; MagazineTable içeride kullanıyor.
 import MagazineTable from './MagazineTable'
 import { UserMenu } from './UserMenu'
+import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
+import { MagazineService } from '@/lib/services/MagazineService'
+import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
+import type { Magazine } from '@/types/magazine'
 
 
 export default async function AdminDashboard() {
-  const supabase = await createClient()
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
-  
-  if (userError || !user) {
-    redirect('/admin/login')
+  // getAuthenticatedClient will redirect to login if not authenticated
+  const supabase = await getAuthenticatedClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const userEmail = user?.email || ''
+
+  // Use MagazineService instead of direct Supabase calls
+  let magazines: Magazine[] = []
+  let error: Error | null = null
+
+  try {
+    const magazineRepository = new SupabaseMagazineRepository(supabase)
+    const storageService = new SupabaseStorageService(supabase)
+    const magazineService = new MagazineService(magazineRepository, storageService)
+    
+    magazines = await magazineService.getAllMagazines()
+  } catch (err) {
+    error = err instanceof Error ? err : new Error('Unknown error')
+    console.error('Error fetching magazines:', error)
   }
 
-  const userEmail = user.email || ''
-
-  const { data: magazines, error } = await supabase
-    .from('magazines')
-    .select('*')
-    .order('issue_number', { ascending: false })
-
   if (error) {
-    console.error('Error fetching magazines:', error)
     return (
       <main className="w-full min-h-screen bg-[#f9f9f9] pt-4">
         <div className="responsive-container py-6 sm:py-8">
