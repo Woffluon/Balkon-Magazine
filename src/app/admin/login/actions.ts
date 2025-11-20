@@ -3,12 +3,32 @@
 import { getServerClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { parseFormDataWithZod } from '@/lib/validators/formDataParser'
 import { loginSchema } from '@/lib/validators/magazineSchemas'
 import { ValidationError } from '@/lib/errors/AppError'
+import { rateLimiter } from '@/lib/services/rateLimiting'
 
 export type LoginState = {
   error?: string
+}
+
+/**
+ * Extract client IP address from request headers
+ * Checks multiple headers in order of preference
+ */
+async function getClientIP(): Promise<string> {
+  const headersList = await headers()
+  
+  // Check common headers for client IP (in order of preference)
+  const ip = 
+    headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
+    headersList.get('x-real-ip') ||
+    headersList.get('cf-connecting-ip') || // Cloudflare
+    headersList.get('x-client-ip') ||
+    'unknown'
+  
+  return ip
 }
 
 export async function login(
@@ -16,6 +36,18 @@ export async function login(
   formData: FormData
 ): Promise<LoginState> {
   try {
+    // Extract client IP for rate limiting
+    const clientIP = await getClientIP()
+
+    // Check rate limit before processing login
+    if (!rateLimiter.checkLoginLimit(clientIP)) {
+      const resetTime = rateLimiter.getLoginResetTime(clientIP)
+      const minutesRemaining = resetTime ? Math.ceil(resetTime / 60000) : 15
+      return { 
+        error: `Çok fazla başarısız giriş denemesi. Lütfen ${minutesRemaining} dakika sonra tekrar deneyin.` 
+      }
+    }
+
     const supabase = await getServerClient()
 
     // Validate form data using Zod schema
@@ -27,8 +59,13 @@ export async function login(
     })
 
     if (error) {
+      // Record failed login attempt
+      rateLimiter.recordLoginAttempt(clientIP)
       return { error: 'E-posta veya şifre hatalı.' }
     }
+
+    // Reset login attempts on successful login
+    rateLimiter.resetLoginAttempts(clientIP)
 
     revalidatePath('/', 'layout')
   } catch (error) {

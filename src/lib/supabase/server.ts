@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { supabaseConfig } from '@/lib/config/env'
+import { env } from '@/lib/env'
 
 /**
  * Creates a simple Supabase client for public data access without cookies
@@ -13,8 +13,8 @@ import { supabaseConfig } from '@/lib/config/env'
  */
 export function createPublicClient(): SupabaseClient {
   return createSupabaseClient(
-    supabaseConfig.url,
-    supabaseConfig.anonKey
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   )
 }
 
@@ -27,8 +27,8 @@ export async function createClient(): Promise<SupabaseClient> {
   const cookieStore = await cookies()
 
   return createServerClient(
-    supabaseConfig.url,
-    supabaseConfig.anonKey,
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {
         get(name: string) {

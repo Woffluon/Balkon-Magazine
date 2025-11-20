@@ -6,6 +6,14 @@ import type { IMagazineRepository } from '@/lib/repositories/IMagazineRepository
 import type { FileProcessorFactory } from '@/lib/processors/FileProcessorFactory'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { UPLOAD_CONFIG } from '@/lib/constants/upload'
+import {
+  validatePDF,
+  validateImage,
+  validateMimeType,
+  validateFileSize,
+  FILE_SIZE_LIMITS,
+  ALLOWED_MIME_TYPES
+} from '@/lib/services/fileValidation'
 
 /**
  * Upload Service
@@ -44,9 +52,18 @@ export class UploadService {
    * @throws {ProcessingError} If file processing fails
    * @throws {StorageError} If storage upload fails
    * @throws {DatabaseError} If database creation fails
+   * @throws {ValidationError} If file validation fails
    */
   async uploadMagazine(data: MagazineUploadData): Promise<Magazine> {
     const { pdf, cover, title, issueNumber, publicationDate, onPageProgress, onCoverProgress, onPdfProcessing } = data
+    
+    // Validate PDF file (server-side validation)
+    await this.validatePDFFile(pdf)
+    
+    // Validate cover image if provided (server-side validation)
+    if (cover) {
+      await this.validateImageFile(cover)
+    }
     
     // Process PDF to pages
     const pages = await this.processPDFToPages(pdf, issueNumber, onPageProgress, onPdfProcessing)
@@ -65,6 +82,60 @@ export class UploadService {
     }
     
     return await this.magazineRepository.create(magazineDto)
+  }
+
+  /**
+   * Validates a PDF file using magic number, MIME type, and size validation
+   * Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4
+   * 
+   * @param file - The PDF file to validate
+   * @throws {Error} If validation fails
+   */
+  private async validatePDFFile(file: File): Promise<void> {
+    // Validate file size
+    const sizeResult = await validateFileSize(file, FILE_SIZE_LIMITS.PDF)
+    if (!sizeResult.valid) {
+      throw new Error(sizeResult.error || 'PDF dosyası çok büyük')
+    }
+
+    // Validate MIME type
+    const mimeResult = await validateMimeType(file, [...ALLOWED_MIME_TYPES.PDF])
+    if (!mimeResult.valid) {
+      throw new Error(mimeResult.error || 'Geçersiz PDF dosya türü')
+    }
+
+    // Validate magic number (file signature)
+    const magicResult = await validatePDF(file)
+    if (!magicResult.valid) {
+      throw new Error(magicResult.error || 'Geçersiz PDF dosya formatı')
+    }
+  }
+
+  /**
+   * Validates an image file using magic number, MIME type, and size validation
+   * Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4
+   * 
+   * @param file - The image file to validate
+   * @throws {Error} If validation fails
+   */
+  private async validateImageFile(file: File): Promise<void> {
+    // Validate file size
+    const sizeResult = await validateFileSize(file, FILE_SIZE_LIMITS.IMAGE)
+    if (!sizeResult.valid) {
+      throw new Error(sizeResult.error || 'Kapak görseli çok büyük')
+    }
+
+    // Validate MIME type
+    const mimeResult = await validateMimeType(file, [...ALLOWED_MIME_TYPES.IMAGE])
+    if (!mimeResult.valid) {
+      throw new Error(mimeResult.error || 'Geçersiz görsel dosya türü')
+    }
+
+    // Validate magic number (file signature)
+    const magicResult = await validateImage(file)
+    if (!magicResult.valid) {
+      throw new Error(magicResult.error || 'Geçersiz görsel dosya formatı')
+    }
   }
 
   /**

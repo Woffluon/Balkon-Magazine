@@ -1,5 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { ProgressBar } from './ProgressBar'
+import { FILE_SIZE_LIMITS } from '@/lib/services/fileValidation'
+import { useState } from 'react'
 
 interface UploadFormProps {
   title: string
@@ -30,6 +32,45 @@ export function UploadForm({
   onPdfChange,
   onCoverChange
 }: UploadFormProps) {
+  const [pdfError, setPdfError] = useState<string | null>(null)
+  const [coverError, setCoverError] = useState<string | null>(null)
+
+  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setPdfError(null)
+    
+    if (file) {
+      // Client-side file size validation
+      if (file.size > FILE_SIZE_LIMITS.PDF) {
+        const maxSizeMB = (FILE_SIZE_LIMITS.PDF / (1024 * 1024)).toFixed(0)
+        setPdfError(`PDF dosyası çok büyük (maksimum ${maxSizeMB}MB)`)
+        onPdfChange(null)
+        e.target.value = '' // Clear the input
+        return
+      }
+    }
+    
+    onPdfChange(file)
+  }
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setCoverError(null)
+    
+    if (file) {
+      // Client-side file size validation
+      if (file.size > FILE_SIZE_LIMITS.IMAGE) {
+        const maxSizeMB = (FILE_SIZE_LIMITS.IMAGE / (1024 * 1024)).toFixed(0)
+        setCoverError(`Kapak görseli çok büyük (maksimum ${maxSizeMB}MB)`)
+        onCoverChange(null)
+        e.target.value = '' // Clear the input
+        return
+      }
+    }
+    
+    onCoverChange(file)
+  }
+
   return (
     <div className="grid gap-3 sm:gap-4">
       <div className="grid gap-2">
@@ -84,11 +125,14 @@ export function UploadForm({
           id="pdf" 
           type="file" 
           accept="application/pdf" 
-          onChange={(e) => onPdfChange(e.target.files?.[0] ?? null)} 
+          onChange={handlePdfChange} 
           required 
           disabled={busy}
           className="w-full text-xs sm:text-sm"
         />
+        {pdfError && (
+          <p className="text-xs text-red-600">{pdfError}</p>
+        )}
       </div>
       
       <div className="grid gap-2">
@@ -99,10 +143,13 @@ export function UploadForm({
           id="cover" 
           type="file" 
           accept="image/*" 
-          onChange={(e) => onCoverChange(e.target.files?.[0] ?? null)} 
+          onChange={handleCoverChange} 
           disabled={busy}
           className="w-full text-xs sm:text-sm"
         />
+        {coverError && (
+          <p className="text-xs text-red-600">{coverError}</p>
+        )}
         <ProgressBar value={coverPct} />
       </div>
       

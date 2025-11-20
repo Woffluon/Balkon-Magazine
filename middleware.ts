@@ -1,20 +1,20 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { env } from '@/lib/env'
 
 /**
- * Validates that a required environment variable exists
- * @param key - The environment variable key
- * @param value - The environment variable value
- * @returns The validated value
- * @throws {Error} If the value is undefined or empty
+ * Middleware for authentication and session management
+ * 
+ * Features:
+ * - Automatic session refresh when within 5 minutes of expiration
+ * - Redirects unauthenticated users to login page
+ * - Redirects authenticated users away from login page
+ * 
+ * Requirements: 13.1, 13.2, 13.3, 13.4
+ * 
+ * Note: Supabase JWT expiry should be configured to 1 hour in the Supabase dashboard:
+ * Settings > Auth > JWT Expiry = 3600 seconds (1 hour)
  */
-function requireEnv(key: string, value: string | undefined): string {
-  if (!value || value.trim() === '') {
-    throw new Error(`Missing required environment variable: ${key}`)
-  }
-  return value
-}
-
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: {
@@ -23,8 +23,8 @@ export async function middleware(request: NextRequest) {
   })
 
   const supabase = createServerClient(
-    requireEnv('NEXT_PUBLIC_SUPABASE_URL', process.env.NEXT_PUBLIC_SUPABASE_URL),
-    requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {
         get(name: string) {
@@ -70,6 +70,25 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session } } = await supabase.auth.getSession()
   const { pathname } = request.nextUrl
+
+  // Check if session needs refresh (within 5 minutes of expiration)
+  if (session) {
+    const expiresAt = session.expires_at
+    if (expiresAt) {
+      const now = Math.floor(Date.now() / 1000) // Current time in seconds
+      const timeUntilExpiry = expiresAt - now
+      const fiveMinutes = 5 * 60 // 300 seconds
+      
+      // If session expires in less than 5 minutes, refresh it
+      if (timeUntilExpiry < fiveMinutes && timeUntilExpiry > 0) {
+        const { error: refreshError } = await supabase.auth.refreshSession()
+        
+        if (refreshError) {
+          console.error('Failed to refresh session in middleware:', refreshError)
+        }
+      }
+    }
+  }
 
   if (!session && pathname.startsWith('/admin') && pathname !== '/admin/login') {
     return NextResponse.redirect(new URL('/admin/login', request.url))

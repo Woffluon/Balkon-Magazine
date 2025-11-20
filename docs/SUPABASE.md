@@ -6,14 +6,39 @@ This guide explains how to create and configure the Supabase database and storag
 - Backend: Supabase (Postgres, Auth, Storage)
 - Admin panel: `/admin` (login required), public site: `/` and `/dergi/[sayi]`
 
-Contents:
-- Environment variables
-- Database schema (tables, indexes, RLS policies)
-- Storage bucket and policies
-- Optional: Page records table
-- Optional: Stricter admin model
-- How the code uses Supabase
-- Verification checklist
+**Implementation Files (DO NOT DELETE):**
+- `src/lib/supabase/client.ts` - Browser client for client-side operations
+- `src/lib/supabase/server.ts` - Server clients (public, authenticated, with cookies)
+- `middleware.ts` - Authentication middleware with session refresh
+- `src/lib/env.ts` - Environment variable validation
+
+**About This Document:**
+This comprehensive guide contains all the information you need to understand and work with Supabase in this project. It includes:
+- Complete code implementations with explanations
+- Database setup SQL scripts
+- Usage patterns and best practices
+- Troubleshooting solutions
+
+You should not need to reference the individual implementation files unless you're modifying the core Supabase integration. Everything is documented here with full code examples.
+
+**Contents:**
+1. [Environment Variables](#1-environment-variables) - Configuration and validation
+2. [Database Schema](#2-database-schema-sql) - Tables, indexes, and RLS policies
+3. [Storage Bucket](#3-storage-bucket-and-policies) - File storage configuration
+4. [Optional: Page Records Table](#4-optional-page-records-table) - Alternative page storage
+5. [Optional: Stricter Admin Model](#5-optional-stricter-admin-model) - Enhanced security
+6. [How the Code Uses Supabase](#6-how-the-code-uses-supabase) - Implementation details
+7. [Complete Implementation Reference](#7-complete-implementation-reference) - Client selection guide
+8. [Verification Checklist](#8-verification-checklist) - Testing your setup
+9. [Running the SQL](#9-running-the-sql) - Setup instructions
+10. [Troubleshooting](#10-troubleshooting) - Common issues and solutions
+
+**Quick Start:**
+1. Set up `.env.local` with Supabase credentials
+2. Run the SQL from section 2 (Database Schema) and section 3 (Storage Bucket)
+3. Configure JWT expiry to 3600 seconds in Supabase dashboard
+4. Run `npm install && npm run dev`
+5. Test with the verification checklist (section 8)
 
 ---
 
@@ -22,15 +47,33 @@ Contents:
 Create a `.env.local` file at the repo root and set the following variables. These values can be found in your Supabase project dashboard:
 
 ```bash
+# Required Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Optional Configuration
+NEXT_PUBLIC_SITE_URL=https://yourdomain.com
+NEXT_PUBLIC_GOOGLE_VERIFICATION=your_google_verification_code
+NEXT_PUBLIC_PDFJS_WORKER_URL=/pdf.worker.min.mjs
 ```
 
-Both the server and client Supabase clients use these variables:
-- Server: `src/lib/supabase/server.ts`
-- Client: `src/lib/supabase/client.ts`
+### Environment Variable Validation
 
-> Note: Only anonymous key (public) is used by the frontend. Server-side privileged operations are still governed by Row-Level Security (RLS) policies.
+The application validates all environment variables at startup using Zod schemas (`src/lib/env.ts`). This ensures:
+- Type safety across the application
+- Early detection of configuration errors
+- Clear error messages for missing or invalid variables
+
+If validation fails, the application will throw a detailed error message indicating which variables are missing or invalid.
+
+### JWT Expiry Configuration
+
+For optimal session management and security, configure the JWT expiry in your Supabase dashboard:
+
+1. Go to **Settings** > **Auth** in your Supabase project dashboard
+2. Set **JWT Expiry** to `3600` seconds (1 hour)
+
+The middleware automatically refreshes sessions when they are within 5 minutes of expiration, ensuring users don't experience unexpected logouts during active use.
 
 ---
 
@@ -38,7 +81,9 @@ Both the server and client Supabase clients use these variables:
 
 This project stores magazine metadata in the `public.magazines` table. Optionally, you can store individual page records in `public.magazine_pages` (the app currently reads pages from Storage, not from the table).
 
-The SQL below is idempotent—safe to run multiple times.
+### Quick Setup (Basic)
+
+For a basic setup without role-based access control, use this SQL (idempotent—safe to run multiple times):
 
 ```sql
 -- Required extension for gen_random_uuid
@@ -84,6 +129,26 @@ create policy if not exists "Authenticated can full access magazines"
 ```
 
 > Why this works: Public pages fetch only `is_published = true` rows. Admin actions run while authenticated (after login) and the policy permits full access.
+
+### Production Setup (Recommended)
+
+For production environments with proper role-based access control, use the migration system:
+
+**See `supabase/migrations/` directory for:**
+- `20241120000000_enable_rls_and_create_policies.sql` - Complete RLS setup with user roles
+- `README.md` - Migration documentation
+- `DEPLOYMENT_GUIDE.md` - Step-by-step deployment instructions
+
+The production migration provides:
+- `user_profiles` table for role management (admin/user)
+- Proper RLS policies that verify admin role from database
+- Automatic profile creation for new users
+- Enhanced security with principle of least privilege
+
+**To apply the production migration:**
+1. Follow the instructions in `supabase/DEPLOYMENT_GUIDE.md`
+2. Update at least one user to have admin role
+3. The application code is already configured to use the role-based system
 
 ---
 
@@ -184,29 +249,312 @@ This project uses a simple “authenticated = admin” model by default for ease
 
 ## 6) How the Code Uses Supabase
 
-Key locations:
+### Supabase Client Implementation
 
-- `src/lib/supabase/server.ts`
-  - Creates a server-side Supabase client and binds Next.js cookies.
-- `src/lib/supabase/client.ts`
-  - Creates a browser client for authenticated admin actions (uploading to Storage).
-- `src/lib/magazines.ts`
-  - `getPublishedMagazines()` fetches `is_published = true` magazines for the homepage.
-- `src/app/dergi/[sayi]/page.tsx`
-  - Fetches a magazine by `issue_number` and lists `magazines` bucket images from `/<issue>/pages` as the flipbook.
-- `src/app/admin/login/actions.ts`
-  - Implements email/password login with Supabase Auth.
-- `src/app/admin/actions.ts`
-  - Inserts/updates/deletes rows in `public.magazines`.
-  - Moves/deletes Storage objects when renaming/deleting issues.
-  - Writes upload logs to `magazines/logs/<issue>/...txt`.
-- `src/app/admin/UploadDialog.tsx`
-  - Client-side PDF -> images conversion and upload to Storage.
-  - Calls server action to upsert the `magazines` row.
+The application uses three different Supabase client configurations depending on the context:
+
+#### Client-Side Browser Client (`src/lib/supabase/client.ts`)
+
+```typescript
+import { createBrowserClient } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { env } from '@/lib/env'
+
+/**
+ * Creates a Supabase client for browser/client-side usage
+ * Used in React components for authenticated operations
+ */
+export function createClient(): SupabaseClient {
+  return createBrowserClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
+}
+```
+
+**Usage:** Admin panel file uploads, client-side authenticated operations
+
+#### Server-Side Clients (`src/lib/supabase/server.ts`)
+
+The server module provides three client creation functions:
+
+**1. Public Client (No Cookies)**
+```typescript
+/**
+ * Creates a simple Supabase client for public data access without cookies
+ * Use this for cached operations that don't require authentication
+ */
+export function createPublicClient(): SupabaseClient {
+  return createSupabaseClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
+}
+```
+
+**Usage:** Cached public data fetching (homepage magazines list)
+
+**2. Server Client (With Cookies)**
+```typescript
+/**
+ * Creates a Supabase client for server-side usage with cookie management
+ * Handles session state across requests
+ */
+export async function createClient(): Promise<SupabaseClient> {
+  const cookieStore = await cookies()
+
+  return createServerClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value, ...options })
+          } catch {
+            // Ignore errors in read-only contexts
+          }
+        },
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: '', ...options })
+          } catch {
+            // Ignore errors in read-only contexts
+          }
+        },
+      },
+    }
+  )
+}
+```
+
+**Usage:** Server actions, API routes, server components that need session
+
+**3. Authenticated Client (With Auth Check)**
+```typescript
+/**
+ * Creates a Supabase client with authentication check
+ * Redirects to /admin/login if user is not authenticated
+ */
+export async function getAuthenticatedClient(): Promise<SupabaseClient> {
+  const supabase = await createClient()
+  
+  const { data: { session }, error } = await supabase.auth.getSession()
+  
+  if (error || !session) {
+    redirect('/admin/login')
+  }
+  
+  return supabase
+}
+```
+
+**Usage:** Protected admin routes and server actions
+
+### Authentication Middleware (`middleware.ts`)
+
+The root middleware handles authentication and session management for all `/admin` routes:
+
+```typescript
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
+import { env } from '@/lib/env'
+
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
+
+  const supabase = createServerClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({ name, value, ...options })
+          response = NextResponse.next({
+            request: { headers: request.headers },
+          })
+          response.cookies.set({ name, value, ...options })
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({ name, value: '', ...options })
+          response = NextResponse.next({
+            request: { headers: request.headers },
+          })
+          response.cookies.set({ name, value: '', ...options })
+        },
+      },
+    }
+  )
+
+  const { data: { session } } = await supabase.auth.getSession()
+  const { pathname } = request.nextUrl
+
+  // Automatic session refresh (within 5 minutes of expiration)
+  if (session?.expires_at) {
+    const now = Math.floor(Date.now() / 1000)
+    const timeUntilExpiry = session.expires_at - now
+    const fiveMinutes = 5 * 60
+    
+    if (timeUntilExpiry < fiveMinutes && timeUntilExpiry > 0) {
+      await supabase.auth.refreshSession()
+    }
+  }
+
+  // Redirect logic
+  if (!session && pathname.startsWith('/admin') && pathname !== '/admin/login') {
+    return NextResponse.redirect(new URL('/admin/login', request.url))
+  }
+
+  if (session && pathname === '/admin/login') {
+    return NextResponse.redirect(new URL('/admin', request.url))
+  }
+
+  return response
+}
+
+export const config = {
+  matcher: ['/admin/:path*'],
+}
+```
+
+**Features:**
+- Automatic session refresh when within 5 minutes of expiration
+- Redirects unauthenticated users to login page
+- Redirects authenticated users away from login page
+- Cookie management for session persistence
+
+### Key Application Locations
+
+- **`src/lib/magazines.ts`**
+  - `getPublishedMagazines()` fetches `is_published = true` magazines for the homepage
+  - Uses `createPublicClient()` for cached public data
+
+- **`src/app/dergi/[sayi]/page.tsx`**
+  - Fetches a magazine by `issue_number`
+  - Lists `magazines` bucket images from `/<issue>/pages` as the flipbook
+
+- **`src/app/admin/login/actions.ts`**
+  - Implements email/password login with Supabase Auth
+  - Uses server client with cookie management
+
+- **`src/app/admin/actions.ts`**
+  - Inserts/updates/deletes rows in `public.magazines`
+  - Moves/deletes Storage objects when renaming/deleting issues
+  - Writes upload logs to `magazines/logs/<issue>/...txt`
+  - Uses `getAuthenticatedClient()` for protected operations
+
+- **`src/app/admin/UploadDialog.tsx`**
+  - Client-side PDF → images conversion and upload to Storage
+  - Uses browser client for file uploads
+  - Calls server action to upsert the `magazines` row
 
 ---
 
-## 7) Verification Checklist
+## 7) Complete Implementation Reference
+
+### When to Use Each Client
+
+| Client Type | Function | Use Case | Authentication |
+|------------|----------|----------|----------------|
+| Browser Client | `createClient()` from `client.ts` | Client-side uploads, authenticated UI operations | Required |
+| Public Client | `createPublicClient()` from `server.ts` | Cached public data, no session needed | Not required |
+| Server Client | `createClient()` from `server.ts` | Server actions, API routes with session | Optional |
+| Authenticated Client | `getAuthenticatedClient()` from `server.ts` | Protected admin operations | Required (redirects if missing) |
+
+### Client Selection Guide
+
+```typescript
+// ✅ For public cached data (homepage)
+import { createPublicClient } from '@/lib/supabase/server'
+const supabase = createPublicClient()
+const { data } = await supabase.from('magazines').select('*').eq('is_published', true)
+
+// ✅ For server actions that need session
+import { createClient } from '@/lib/supabase/server'
+const supabase = await createClient()
+const { data: { session } } = await supabase.auth.getSession()
+
+// ✅ For protected admin operations (auto-redirects if not authenticated)
+import { getAuthenticatedClient } from '@/lib/supabase/server'
+const supabase = await getAuthenticatedClient()
+await supabase.from('magazines').insert({ ... })
+
+// ✅ For client-side file uploads
+import { createClient } from '@/lib/supabase/client'
+const supabase = createClient()
+await supabase.storage.from('magazines').upload(path, file)
+```
+
+### Environment Variable Access
+
+Always import validated environment variables from `@/lib/env`:
+
+```typescript
+import { env } from '@/lib/env'
+
+// ✅ Type-safe and validated
+const url = env.NEXT_PUBLIC_SUPABASE_URL
+
+// ❌ Don't access process.env directly
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL // Not type-safe
+```
+
+### Session Management Flow
+
+1. **User logs in** → `src/app/admin/login/actions.ts`
+   - Calls `supabase.auth.signInWithPassword()`
+   - Session stored in cookies
+
+2. **User navigates to /admin** → `middleware.ts`
+   - Checks session validity
+   - Refreshes if within 5 minutes of expiration
+   - Redirects to login if no session
+
+3. **User performs admin action** → `src/app/admin/actions.ts`
+   - Uses `getAuthenticatedClient()` which verifies session
+   - Performs database/storage operations
+   - RLS policies enforce permissions
+
+4. **Session expires** → `middleware.ts`
+   - Automatic refresh attempt
+   - Redirect to login if refresh fails
+
+### Error Handling
+
+All Supabase clients handle errors gracefully:
+
+```typescript
+// Server client ignores cookie errors in read-only contexts
+set(name: string, value: string, options: CookieOptions) {
+  try {
+    cookieStore.set({ name, value, ...options })
+  } catch {
+    // Ignore errors in read-only contexts (e.g., static generation)
+  }
+}
+```
+
+### Security Best Practices
+
+1. **Never expose service role key** - Only use anon key in client code
+2. **Rely on RLS policies** - All data access is governed by database policies
+3. **Use authenticated client** - For admin operations, always use `getAuthenticatedClient()`
+4. **Validate environment** - Application validates all env vars at startup
+5. **Session refresh** - Middleware automatically refreshes expiring sessions
+
+---
+
+## 8) Verification Checklist
 
 - Anonymous user
   - Home (`/`) shows only published magazines.
@@ -221,7 +569,7 @@ Key locations:
 
 ---
 
-## Running the SQL
+## 9) Running the SQL
 
 You can:
 
@@ -236,3 +584,105 @@ npm run dev
 ```
 
 Then open http://localhost:3000.
+
+---
+
+## 10) Troubleshooting
+
+### Environment Variable Errors
+
+**Error:** `Environment variable validation failed`
+
+**Solution:** Check your `.env.local` file:
+```bash
+# Ensure these are set correctly
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+```
+
+### Authentication Issues
+
+**Problem:** Redirected to login repeatedly
+
+**Solutions:**
+1. Check JWT expiry is set to 3600 seconds in Supabase dashboard
+2. Clear browser cookies and try again
+3. Verify RLS policies allow authenticated users
+4. Check middleware is not blocking the route
+
+**Problem:** Session expires too quickly
+
+**Solution:** Ensure JWT expiry is configured to 1 hour (3600 seconds) in Supabase Auth settings
+
+### Storage Access Issues
+
+**Problem:** Cannot view images on public pages
+
+**Solution:** Verify storage policy allows anonymous reads:
+```sql
+create policy if not exists "Anon can read magazine images"
+  on storage.objects
+  for select
+  to anon
+  using (bucket_id = 'magazines');
+```
+
+**Problem:** Cannot upload files in admin panel
+
+**Solution:** 
+1. Verify you're logged in
+2. Check storage policy allows authenticated writes
+3. Ensure bucket exists: `magazines`
+
+### Database Access Issues
+
+**Problem:** Cannot see published magazines on homepage
+
+**Solution:** Verify RLS policy:
+```sql
+create policy if not exists "Anon can select published magazines"
+  on public.magazines
+  for select
+  to anon
+  using (is_published = true);
+```
+
+**Problem:** Admin cannot create/update magazines
+
+**Solution:** 
+1. Verify you're authenticated
+2. Check RLS policy allows authenticated full access
+3. For production setup, verify user has admin role in `user_profiles` table
+
+### Client Selection Issues
+
+**Problem:** "Cannot read cookies in static generation"
+
+**Solution:** Use `createPublicClient()` instead of `createClient()` for cached/static data:
+```typescript
+// ✅ For cached public data
+import { createPublicClient } from '@/lib/supabase/server'
+const supabase = createPublicClient()
+
+// ❌ Don't use cookie-based client for static data
+import { createClient } from '@/lib/supabase/server'
+const supabase = await createClient() // May fail in static contexts
+```
+
+### Migration Issues
+
+**Problem:** Migration fails to apply
+
+**Solution:**
+1. Check SQL syntax in migration file
+2. Verify you have necessary permissions
+3. Run migrations in order (check version numbers)
+4. Use Supabase SQL Editor to run manually if needed
+
+### Common Gotchas
+
+1. **Anon key vs Service key:** Never use service role key in client code
+2. **RLS must be enabled:** All tables need RLS enabled for security
+3. **Cookie errors are normal:** Server client ignores cookie errors in read-only contexts
+4. **Session refresh timing:** Middleware refreshes 5 minutes before expiration
+5. **Public client for caching:** Use `createPublicClient()` for `unstable_cache` operations

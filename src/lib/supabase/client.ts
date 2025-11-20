@@ -1,6 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { supabaseConfig } from '@/lib/config/env'
+import { env } from '@/lib/env'
 
 /**
  * Creates a Supabase client for browser/client-side usage
@@ -9,8 +9,8 @@ import { supabaseConfig } from '@/lib/config/env'
  */
 export function createClient(): SupabaseClient {
   return createBrowserClient(
-    supabaseConfig.url,
-    supabaseConfig.anonKey
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   )
 }
 

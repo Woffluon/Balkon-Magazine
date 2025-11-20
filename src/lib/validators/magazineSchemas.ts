@@ -1,17 +1,18 @@
 import { z } from 'zod'
 import { ERROR_MESSAGES } from '@/lib/constants/errorMessages'
+import { MagazineSchema, UUIDSchema } from './schemas'
 
 /**
  * Zod schema for creating a new magazine
  * Validates all required fields for magazine creation
+ * 
+ * Requirements:
+ * - 4.1: Validate magazine metadata against Zod schema
+ * - 4.2: Title 1-200 chars, alphanumeric + spaces/hyphens/punctuation
+ * - 4.3: Issue number positive integer, max 9999
+ * - 4.4: Publication date in ISO 8601 format (YYYY-MM-DD)
  */
-export const createMagazineSchema = z.object({
-  title: z.string().min(1, ERROR_MESSAGES.VALIDATION.MISSING_FIELDS),
-  issue_number: z.number().int().positive(ERROR_MESSAGES.VALIDATION.INVALID_ISSUE_NUMBER),
-  publication_date: z.string().regex(
-    /^\d{4}-\d{2}-\d{2}$/,
-    ERROR_MESSAGES.VALIDATION.INVALID_DATE
-  ),
+export const createMagazineSchema = MagazineSchema.extend({
   cover_image_url: z.string().url().optional().or(z.literal('')),
   pdf_url: z.string().url().optional().or(z.literal('')),
   page_count: z.number().int().positive().optional(),
@@ -21,11 +22,14 @@ export const createMagazineSchema = z.object({
 /**
  * Zod schema for updating an existing magazine
  * All fields are optional to allow partial updates
+ * 
+ * Requirements:
+ * - 4.1: Validate magazine metadata against Zod schema
+ * - 4.2: Title 1-200 chars, alphanumeric + spaces/hyphens/punctuation
+ * - 4.3: Issue number positive integer, max 9999
+ * - 4.4: Publication date in ISO 8601 format (YYYY-MM-DD)
  */
-export const updateMagazineSchema = z.object({
-  title: z.string().min(1).optional(),
-  issue_number: z.number().int().positive().optional(),
-  publication_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+export const updateMagazineSchema = MagazineSchema.partial().extend({
   cover_image_url: z.string().url().optional().or(z.literal('')),
   pdf_url: z.string().url().optional().or(z.literal('')),
   page_count: z.number().int().positive().optional(),
@@ -35,18 +39,26 @@ export const updateMagazineSchema = z.object({
 /**
  * Zod schema for deleting a magazine
  * Requires both ID and issue number for safety
+ * 
+ * Requirements:
+ * - 5.1: Validate delete operation IDs as proper UUIDs
+ * - 5.2: Reject operations with invalid UUIDs
  */
 export const deleteMagazineSchema = z.object({
-  id: z.string().uuid(ERROR_MESSAGES.VALIDATION.INVALID_ID),
+  id: UUIDSchema,
   issue_number: z.number().int().positive()
 })
 
 /**
  * Zod schema for renaming/moving a magazine
  * Handles both issue number change and title update
+ * 
+ * Requirements:
+ * - 5.1: Validate update operation IDs as proper UUIDs
+ * - 5.2: Reject operations with invalid UUIDs
  */
 export const renameMagazineSchema = z.object({
-  id: z.string().uuid(ERROR_MESSAGES.VALIDATION.INVALID_ID),
+  id: UUIDSchema,
   old_issue: z.number().int().positive(),
   new_issue: z.number().int().positive(),
   new_title: z.string().min(1).optional()
