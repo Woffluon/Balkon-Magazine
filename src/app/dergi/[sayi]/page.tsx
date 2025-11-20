@@ -7,6 +7,7 @@ import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageSe
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 
 export const dynamic = 'force-static'
+export const revalidate = 3600 // Revalidate every hour (ISR)
 
 export default async function DergiPage({ params }: { params: Promise<{ sayi: string }> }) {
   const supabase = await createClient()
@@ -18,36 +19,37 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
   const storageService = new SupabaseStorageService(supabase)
   const magazineService = new MagazineService(magazineRepository, storageService)
 
-  const magazine = await magazineService.getMagazineByIssue(sayi)
+  // Parallel fetch: magazine metadata and file list simultaneously
+  const [magazine, filesResult] = await Promise.all([
+    magazineService.getMagazineByIssue(sayi),
+    (async () => {
+      try {
+        const pagesPath = STORAGE_PATHS.getPagesPath(sayi)
+        return await storageService.list(pagesPath)
+      } catch (error) {
+        console.error('Error listing page files:', error)
+        return []
+      }
+    })()
+  ])
 
   if (!magazine) return notFound()
 
-  // Use StorageService to list page images
+  // Process files to generate image URLs
   let imageUrls: string[] = []
   
-  try {
-    const pagesPath = STORAGE_PATHS.getPagesPath(sayi)
-    const files = await storageService.list(pagesPath)
+  if (filesResult.length > 0) {
+    // Sort files by page number
+    const sorted = [...filesResult].sort((a, b) => {
+      const na = parseInt(a.name.replace(/\D/g, ''), 10) || 0
+      const nb = parseInt(b.name.replace(/\D/g, ''), 10) || 0
+      return na - nb
+    })
     
-    if (files.length > 0) {
-      // Sort files by page number
-      const sorted = [...files].sort((a, b) => {
-        const na = parseInt(a.name.replace(/\D/g, ''), 10) || 0
-        const nb = parseInt(b.name.replace(/\D/g, ''), 10) || 0
-        return na - nb
-      })
-      
-      imageUrls = sorted.map((f) => storageService.getPublicUrl(`${sayi}/pages/${f.name}`))
-    } else if (!magazine.pdf_url && magazine.cover_image_url) {
-      // Fallback to cover image if no pages found
-      imageUrls = [magazine.cover_image_url]
-    }
-  } catch (error) {
-    console.error('Error listing page files:', error)
-    // Fallback to cover image on error
-    if (magazine.cover_image_url) {
-      imageUrls = [magazine.cover_image_url]
-    }
+    imageUrls = sorted.map((f) => storageService.getPublicUrl(`${sayi}/pages/${f.name}`))
+  } else if (!magazine.pdf_url && magazine.cover_image_url) {
+    // Fallback to cover image if no pages found
+    imageUrls = [magazine.cover_image_url]
   }
 
   return (

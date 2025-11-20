@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useRouter } from 'next/navigation'
@@ -19,6 +19,7 @@ import { useSupabaseClient } from '@/hooks/useSupabaseClient'
 export default function UploadDialog() {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [wakeLock, setWakeLock] = useState<WakeLockSentinel | null>(null)
   const router = useRouter()
   
   // Custom hooks for separation of concerns
@@ -28,11 +29,62 @@ export default function UploadDialog() {
   const storageService = useStorageService()
   const supabase = useSupabaseClient()
 
+  /**
+   * Consolidated wake lock release function
+   * 
+   * Handles wake lock cleanup with proper error handling.
+   * Uses useCallback to prevent unnecessary effect re-runs.
+   * 
+   * Dependencies: [wakeLock] - Re-creates when wakeLock changes
+   */
+  const releaseWakeLock = useCallback(async () => {
+    if (wakeLock) {
+      try {
+        await wakeLock.release()
+      } catch (error) {
+        console.warn('Wake lock release failed:', error)
+      } finally {
+        setWakeLock(null)
+      }
+    }
+  }, [wakeLock])
+
+  /**
+   * Consolidated localStorage cleanup function
+   * 
+   * Clears all upload-related localStorage entries.
+   * Uses useCallback with empty deps since it has no external dependencies.
+   * 
+   * Dependencies: [] - Function never changes
+   */
+  const clearUploadState = useCallback(() => {
+    try {
+      localStorage.removeItem('uploadState')
+      localStorage.removeItem('uploadProgress')
+      localStorage.removeItem('uploadLogs')
+    } catch (error) {
+      console.warn('Failed to clear upload state:', error)
+    }
+  }, [])
+
   function reset() {
     resetForm()
     resetProgress()
     resetLogs()
+    clearUploadState()
   }
+
+  /**
+   * Cleanup on unmount
+   * 
+   * Ensures wake lock is released when component unmounts.
+   * Dependencies: [releaseWakeLock] - Re-runs when cleanup function changes
+   */
+  useEffect(() => {
+    return () => {
+      releaseWakeLock()
+    }
+  }, [releaseWakeLock])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -46,6 +98,18 @@ export default function UploadDialog() {
     
     try {
       setBusy(true)
+      
+      // Request wake lock to prevent screen sleep during upload
+      try {
+        if ('wakeLock' in navigator) {
+          const lock = await navigator.wakeLock.request('screen')
+          setWakeLock(lock)
+          addLog('🔒 Ekran kilidi aktif')
+        }
+      } catch (error) {
+        console.warn('Wake lock request failed:', error)
+      }
+      
       addLog('📤 Yükleme işlemi başlatılıyor...')
       addLog('📄 PDF dosyası hazırlanıyor...')
 
@@ -87,6 +151,9 @@ export default function UploadDialog() {
 
       addLog('🎉 Dergi başarıyla yüklendi!')
       
+      // Clear upload state on success
+      clearUploadState()
+      
       // Wait a bit to show success message
       await new Promise(resolve => setTimeout(resolve, 1500))
       
@@ -98,15 +165,36 @@ export default function UploadDialog() {
       addLog(`HATA: ${errorMessage}`)
       console.error('Upload error:', err)
       
+      // Clear upload state on error
+      clearUploadState()
+      
       // Don't close dialog on error so user can see logs
       alert(`Yükleme başarısız: ${errorMessage}\n\nDetaylar için günlüklere bakın.`)
     } finally {
       setBusy(false)
+      // Release wake lock
+      await releaseWakeLock()
     }
   }
 
+  /**
+   * Dialog close handler with cleanup
+   * 
+   * Clears upload state when dialog closes (unless upload is in progress).
+   * Uses useCallback to prevent unnecessary re-renders of Dialog component.
+   * 
+   * Dependencies: [busy, clearUploadState] - Re-creates when busy state or cleanup function changes
+   */
+  const handleDialogClose = useCallback((isOpen: boolean) => {
+    if (!isOpen && !busy) {
+      // Clear upload state when dialog closes (if not uploading)
+      clearUploadState()
+    }
+    setOpen(isOpen)
+  }, [busy, clearUploadState])
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleDialogClose}>
       <DialogTrigger asChild>
         <Button type="button" variant="default" className="w-full sm:w-auto text-sm sm:text-base px-3 sm:px-4 py-2">
           <span className="hidden sm:inline">Yeni Dergi Ekle</span>
@@ -143,7 +231,7 @@ export default function UploadDialog() {
             <Button 
               type="button" 
               variant="ghost" 
-              onClick={() => setOpen(false)} 
+              onClick={() => handleDialogClose(false)} 
               disabled={busy} 
               className="w-full sm:w-auto order-2 sm:order-1"
             >
