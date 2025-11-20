@@ -60,7 +60,7 @@ type TimelineContentProps<T extends keyof HTMLElementTagNameMap> = {
   once?: boolean
 } & HTMLMotionProps<T>
 
-export const TimelineContent = React.memo(<T extends keyof HTMLElementTagNameMap = "div">({
+const TimelineContentComponent = <T extends keyof HTMLElementTagNameMap = "div">({
   children,
   animationNum,
   timelineRef,
@@ -110,4 +110,8 @@ export const TimelineContent = React.memo(<T extends keyof HTMLElementTagNameMap
       {children}
     </MotionComponent>
   )
-}) as <T extends keyof HTMLElementTagNameMap = "div">(props: TimelineContentProps<T>) => React.ReactElement
+}
+
+TimelineContentComponent.displayName = "TimelineContent"
+
+export const TimelineContent = React.memo(TimelineContentComponent) as <T extends keyof HTMLElementTagNameMap = "div">(props: TimelineContentProps<T>) => React.ReactElement
