@@ -13,6 +13,8 @@ import { MagazineService } from '@/lib/services/MagazineService'
 import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
 import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
+import { rateLimiter } from '@/lib/services/rateLimiting'
+import { verifyCSRFOrigin, requireAdmin } from '@/lib/services/authorization'
 
 /**
  * Service factory helper function
@@ -31,12 +33,30 @@ async function createMagazineService(): Promise<MagazineService> {
  * Uses upsert logic based on issue_number
  */
 export async function addMagazineRecord(formData: FormData) {
-  await requireAuth()
+  // Require admin role
+  const authContext = await requireAdmin()
+  const userId = authContext.userId
+  
+  // Verify CSRF origin
+  await verifyCSRFOrigin()
+  
+  // Check upload rate limit
+  if (!rateLimiter.checkUploadLimit(userId)) {
+    const resetTime = rateLimiter.getUploadResetTime(userId)
+    const minutesRemaining = resetTime ? Math.ceil(resetTime / 60000) : 60
+    
+    throw new Error(
+      `Upload limit exceeded. Maximum 10 uploads per hour. Please try again in ${minutesRemaining} minutes.`
+    )
+  }
   
   const data = parseFormDataWithZod(formData, createMagazineSchema)
   
   const magazineService = await createMagazineService()
   await magazineService.createMagazine(data)
+  
+  // Record successful upload attempt
+  rateLimiter.recordUploadAttempt(userId)
   
   revalidatePath('/admin')
 }
@@ -45,7 +65,11 @@ export async function addMagazineRecord(formData: FormData) {
  * Deletes a magazine and all its associated storage files
  */
 export async function deleteMagazine(formData: FormData) {
-  await requireAuth()
+  // Require admin role
+  await requireAdmin()
+  
+  // Verify CSRF origin
+  await verifyCSRFOrigin()
   
   const data = parseFormDataWithZod(formData, deleteMagazineSchema)
   
@@ -60,7 +84,11 @@ export async function deleteMagazine(formData: FormData) {
  * Moves all associated storage files to new paths
  */
 export async function renameMagazine(formData: FormData) {
-  await requireAuth()
+  // Require admin role
+  await requireAdmin()
+  
+  // Verify CSRF origin
+  await verifyCSRFOrigin()
   
   const data = parseFormDataWithZod(formData, renameMagazineSchema)
   

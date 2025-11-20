@@ -1,3 +1,5 @@
+import { env } from '@/lib/env'
+
 /**
  * Upload Configuration Constants
  * 
@@ -26,8 +28,8 @@ export const PDF_CONFIG = {
   /** Target height in pixels for PDF page rendering */
   TARGET_HEIGHT: 1200,
   
-  /** PDF.js worker source URL - configurable via environment variable */
-  WORKER_SRC: (process.env.NEXT_PUBLIC_PDFJS_WORKER_URL || '/pdf.worker.min.mjs') as string,
+  /** PDF.js worker source URL - uses pre-validated environment variable */
+  WORKER_SRC: env.NEXT_PUBLIC_PDFJS_WORKER_URL,
   
   /** Canvas rendering context type */
   CONTEXT_TYPE: '2d' as const,

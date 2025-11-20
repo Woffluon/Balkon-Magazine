@@ -1,34 +1,21 @@
+import { env } from '@/lib/env'
+
 /**
  * Environment Configuration
  * 
- * Validates and provides type-safe access to environment variables.
- * Throws descriptive errors if required variables are missing.
+ * Provides type-safe access to validated environment variables.
+ * All environment variables are pre-validated at application startup via the env module.
  */
-
-/**
- * Validates that a required environment variable exists
- * 
- * @param key - The environment variable key
- * @param value - The environment variable value
- * @returns The validated value
- * @throws {Error} If the value is undefined or empty
- */
-function requireEnv(key: string, value: string | undefined): string {
-  if (!value || value.trim() === '') {
-    throw new Error(
-      `Missing required environment variable: ${key}\n` +
-      `Please ensure ${key} is set in your .env.local file.`
-    )
-  }
-  return value
-}
 
 /**
  * Validated Supabase configuration
+ * 
+ * Uses pre-validated environment variables from the env module.
+ * No need for non-null assertions since validation happens at startup.
  */
 export const supabaseConfig = {
-  url: requireEnv('NEXT_PUBLIC_SUPABASE_URL', process.env.NEXT_PUBLIC_SUPABASE_URL),
-  anonKey: requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+  url: env.NEXT_PUBLIC_SUPABASE_URL,
+  anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 } as const
 
 /**
