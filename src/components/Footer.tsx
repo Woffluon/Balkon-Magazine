@@ -110,9 +110,17 @@ export function Footer() {
               </li>
               <li>
                 <button
+                  type="button"
                   onClick={() => {
                     const magazineSection = document.querySelector('[data-magazine-grid]');
                     magazineSection?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  onKeyDown={(e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      const magazineSection = document.querySelector('[data-magazine-grid]');
+                      magazineSection?.scrollIntoView({ behavior: 'smooth' });
+                    }
                   }}
                   className="text-gray-600 hover:text-red-500 transition-colors"
                 >

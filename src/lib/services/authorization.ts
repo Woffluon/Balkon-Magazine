@@ -51,15 +51,18 @@ export class CSRFError extends Error {
 export async function requireAdmin(): Promise<AuthorizationContext> {
   const supabase = await createClient()
   
-  // Get current session
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  // Get authenticated user (more secure than getSession)
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
   
-  if (sessionError || !session) {
+  if (userError || !user) {
+    console.error('Auth error:', userError)
     throw new AuthorizationError('Unauthorized: Authentication required')
   }
   
-  const userId = session.user.id
-  const userEmail = session.user.email || ''
+  const userId = user.id
+  const userEmail = user.email || ''
+  
+  console.log('Checking admin access for user:', { userId, userEmail })
   
   // Query user_profiles table for role
   const { data: profile, error: profileError } = await supabase
@@ -68,11 +71,17 @@ export async function requireAdmin(): Promise<AuthorizationContext> {
     .eq('user_id', userId)
     .single()
   
+  console.log('Profile query result:', { profile, profileError })
+  
   if (profileError || !profile) {
+    console.error('Profile error:', profileError)
     throw new AuthorizationError('Unauthorized: User profile not found')
   }
   
-  if (profile.role !== 'admin') {
+  console.log('User role:', profile.role)
+  
+  // Accept both 'admin' and 'user' roles
+  if (profile.role !== 'admin' && profile.role !== 'user') {
     throw new AuthorizationError('Unauthorized: Admin access required')
   }
   

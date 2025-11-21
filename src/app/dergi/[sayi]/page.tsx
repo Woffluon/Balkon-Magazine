@@ -1,4 +1,5 @@
-import FlipbookViewer from '@/components/FlipbookViewer'
+import dynamic from 'next/dynamic'
+import FlipbookViewerSkeleton from '@/components/FlipbookViewerSkeleton'
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
@@ -6,7 +7,10 @@ import { MagazineService } from '@/lib/services/MagazineService'
 import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 
-export const dynamic = 'force-static'
+const FlipbookViewer = dynamic(() => import('@/components/FlipbookViewer'), {
+  loading: () => <FlipbookViewerSkeleton />,
+})
+
 export const revalidate = 3600 // Revalidate every hour (ISR)
 
 export default async function DergiPage({ params }: { params: Promise<{ sayi: string }> }) {

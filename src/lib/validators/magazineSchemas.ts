@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { ERROR_MESSAGES } from '@/lib/constants/errorMessages'
 import { MagazineSchema, UUIDSchema } from './schemas'
 
 /**
@@ -69,8 +68,14 @@ export const renameMagazineSchema = z.object({
  * These ensure runtime validation matches compile-time types
  */
 export const loginSchema = z.object({
-  email: z.string().email('Geçerli bir e-posta adresi giriniz'),
-  password: z.string().min(1, 'Şifre gereklidir')
+  email: z
+    .string()
+    .min(1, 'E-posta adresi gereklidir')
+    .email('Geçerli bir e-posta adresi girin'),
+  password: z
+    .string()
+    .min(1, 'Şifre gereklidir')
+    .min(6, 'Şifre en az 6 karakter olmalıdır')
 })
 
 export const passwordChangeSchema = z.object({

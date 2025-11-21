@@ -58,15 +58,15 @@ export function UploadLogs({ logs }: UploadLogsProps) {
   
   return (
     <div className="space-y-2">
-      <label className="text-xs sm:text-sm font-medium text-gray-700">
+      <label className="text-[10px] sm:text-xs font-medium text-gray-700">
         İşlem Günlükleri
       </label>
       <div 
         id="upload-logs" 
-        className="rounded-lg border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-3 sm:p-4 h-32 sm:h-40 md:h-56 overflow-y-auto shadow-inner"
+        className="rounded-lg border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-3 sm:p-4 h-32 sm:h-40 md:h-48 overflow-y-auto shadow-inner"
       >
         {parsedLogs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+          <div className="flex items-center justify-center h-full text-gray-400 text-[10px] sm:text-xs">
             <Info className="w-4 h-4 mr-2" />
             <span>İşlem günlükleri burada görünecek</span>
           </div>
@@ -87,7 +87,7 @@ export function UploadLogs({ logs }: UploadLogsProps) {
               >
                 <LogIcon type={log.type} />
                 <div className="flex-1 min-w-0">
-                  <p className={`text-xs sm:text-sm leading-relaxed ${
+                  <p className={`text-[10px] sm:text-xs leading-relaxed ${
                     log.type === 'error' 
                       ? 'text-red-800 font-medium' 
                       : log.type === 'success'

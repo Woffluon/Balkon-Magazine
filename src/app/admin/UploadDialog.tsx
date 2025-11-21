@@ -15,11 +15,14 @@ import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineR
 import { FileProcessorFactory } from '@/lib/processors/FileProcessorFactory'
 import { saveUploadLog } from './actions'
 import { useSupabaseClient } from '@/hooks/useSupabaseClient'
+import { categorizeError, showError, showSuccess } from '@/lib/utils/uploadErrors'
+import type { Magazine } from '@/types/magazine'
 
 export default function UploadDialog() {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [wakeLock, setWakeLock] = useState<WakeLockSentinel | null>(null)
+  const [existingMagazines, setExistingMagazines] = useState<Magazine[]>([])
   const router = useRouter()
   
   // Custom hooks for separation of concerns
@@ -73,6 +76,29 @@ export default function UploadDialog() {
     resetLogs()
     clearUploadState()
   }
+
+  /**
+   * Fetch existing magazines when dialog opens
+   * 
+   * Loads all magazines to check for duplicate issue numbers.
+   * Dependencies: [open, supabase] - Re-runs when dialog opens or supabase client changes
+   */
+  useEffect(() => {
+    if (open) {
+      const fetchMagazines = async () => {
+        try {
+          const magazineRepository = new SupabaseMagazineRepository(supabase)
+          const magazines = await magazineRepository.findAll()
+          setExistingMagazines(magazines)
+        } catch (error) {
+          console.error('Failed to fetch magazines:', error)
+          // Don't block the dialog if fetching fails
+          setExistingMagazines([])
+        }
+      }
+      fetchMagazines()
+    }
+  }, [open, supabase])
 
   /**
    * Cleanup on unmount
@@ -154,6 +180,11 @@ export default function UploadDialog() {
       // Clear upload state on success
       clearUploadState()
       
+      // Show success toast
+      showSuccess(formState.title, issueNumber, () => {
+        router.push(`/dergi/${issueNumber}`)
+      })
+      
       // Wait a bit to show success message
       await new Promise(resolve => setTimeout(resolve, 1500))
       
@@ -168,8 +199,31 @@ export default function UploadDialog() {
       // Clear upload state on error
       clearUploadState()
       
+      // Categorize error and show user-friendly toast
+      const categorizedError = categorizeError(err)
+      showError(categorizedError, () => {
+        // Retry by resubmitting the form
+        const syntheticEvent = {
+          preventDefault: () => {},
+          stopPropagation: () => {},
+          nativeEvent: new Event('submit'),
+          currentTarget: document.createElement('form'),
+          target: document.createElement('form'),
+          bubbles: false,
+          cancelable: false,
+          defaultPrevented: false,
+          eventPhase: 0,
+          isTrusted: false,
+          timeStamp: Date.now(),
+          type: 'submit',
+          isDefaultPrevented: () => false,
+          isPropagationStopped: () => false,
+          persist: () => {},
+        } as React.FormEvent<HTMLFormElement>
+        handleSubmit(syntheticEvent)
+      })
+      
       // Don't close dialog on error so user can see logs
-      alert(`Yükleme başarısız: ${errorMessage}\n\nDetaylar için günlüklere bakın.`)
     } finally {
       setBusy(false)
       // Release wake lock
@@ -201,7 +255,7 @@ export default function UploadDialog() {
           <span className="sm:hidden">+ Ekle</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="w-[95vw] max-w-xl mx-auto max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[92vw] sm:w-[90vw] max-w-xl mx-auto max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg sm:text-xl text-gray-900 font-semibold">
             Yeni Dergi Ekle
@@ -220,6 +274,9 @@ export default function UploadDialog() {
             pagesPct={progress.pagesProgress}
             overall={getOverallProgress()}
             busy={busy}
+            pagesDone={progress.pagesDone}
+            totalPages={progress.totalPages}
+            existingMagazines={existingMagazines}
             onTitleChange={(value) => updateField('title', value)}
             onIssueChange={(value) => updateField('issue', value)}
             onDateChange={(value) => updateField('date', value)}

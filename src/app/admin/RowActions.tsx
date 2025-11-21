@@ -29,7 +29,7 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
           <DropdownMenuItem asChild>
             <Dialog open={openRename} onOpenChange={setOpenRename}>
               <DialogTrigger asChild>
-                <button className="w-full text-left text-xs sm:text-sm px-2 py-1">Yeniden Adlandır</button>
+                <button type="button" className="w-full text-left text-xs sm:text-sm px-2 py-1">Yeniden Adlandır</button>
               </DialogTrigger>
               <DialogContent className="w-[95vw] max-w-md mx-auto">
                 <DialogHeader>
@@ -91,7 +91,7 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
           <DropdownMenuItem asChild>
             <Dialog open={openDelete} onOpenChange={setOpenDelete}>
               <DialogTrigger asChild>
-                <button className="w-full text-left text-red-600 hover:text-red-700 text-xs sm:text-sm px-2 py-1">Sil</button>
+                <button type="button" className="w-full text-left text-red-600 hover:text-red-700 text-xs sm:text-sm px-2 py-1">Sil</button>
               </DialogTrigger>
               <DialogContent className="w-[95vw] max-w-sm mx-auto">
                 <DialogHeader>
