@@ -1,6 +1,7 @@
 import { PostgrestError } from '@supabase/supabase-js'
 import { AppError, DatabaseError, StorageError } from './AppError'
 import { ERROR_MESSAGES } from '@/lib/constants/errorMessages'
+import { categorizeError, showError } from '@/lib/utils/uploadErrors'
 
 /**
  * Handles Supabase database errors and converts them to typed DatabaseError
@@ -74,22 +75,19 @@ export function handleUnknownError(error: unknown): never {
  * Used in upload dialogs to provide feedback to users
  * @param error - The error that occurred during upload
  * @param logger - Function to log messages to the UI
+ * @param onRetry - Optional retry callback
  */
-export function handleUploadError(error: unknown, logger: (msg: string) => void): void {
+export function handleUploadError(
+  error: unknown, 
+  logger: (msg: string) => void,
+  onRetry?: () => void
+): void {
   const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.GENERAL.UNKNOWN_ERROR
   logger(`Hata: ${errorMessage}`)
   
-  // Check for HTML error responses (indicates server error, possibly due to large file)
-  if (errorMessage.includes('Unexpected token') && errorMessage.includes('<html')) {
-    logger('Sunucu HTML hatası döndürdü - büyük dosya problemi olabilir')
-    alert('Yükleme hatası oluştu. Lütfen dosya boyutunu kontrol edin ve tekrar deneyin.')
-  } else if (error instanceof AppError) {
-    // For typed errors, show the user-friendly message
-    alert(error.message)
-  } else {
-    // For unknown errors, show generic message
-    alert(errorMessage)
-  }
+  // Categorize error and show user-friendly toast notification
+  const categorizedError = categorizeError(error)
+  showError(categorizedError, onRetry)
 }
 
 /**

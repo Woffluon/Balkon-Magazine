@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
+import { Toaster } from "@/components/ui/toaster";
 import { env } from "@/lib/env";
 import "./globals.css";
 
@@ -265,6 +266,7 @@ export default function RootLayout({
             __html: escapeJsonLd(structuredData)
           }}
         />
+        <Toaster />
         <AppShell>{children}</AppShell>
       </body>
     </html>

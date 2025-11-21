@@ -77,64 +77,68 @@ export default function MagazineTable({ magazines }: Props) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-auto px-0 text-left font-medium"
-                  onClick={() => toggleSort('issue_number')}
-                  aria-label="Sayı numarasına göre sırala"
-                >
-                  Sayı No
-                  <ArrowUpDown className="ml-1 size-4 opacity-70" />
-                </Button>
-              </TableHead>
-              <TableHead>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-auto px-0 text-left font-medium"
-                  onClick={() => toggleSort('title')}
-                  aria-label="Başlığa göre sırala"
-                >
-                  Başlık
-                  <ArrowUpDown className="ml-1 size-4 opacity-70" />
-                </Button>
-              </TableHead>
-              <TableHead>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-auto px-0 text-left font-medium"
-                  onClick={() => toggleSort('publication_date')}
-                  aria-label="Yayın tarihine göre sırala"
-                >
-                  Yayın Tarihi
-                  <ArrowUpDown className="ml-1 size-4 opacity-70" />
-                </Button>
-              </TableHead>
-              <TableHead>İşlemler</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((mag) => (
-              <TableRow key={String(mag.id)}>
-                <TableCell className="text-xs sm:text-sm">{mag.issue_number}</TableCell>
-                <TableCell className="text-xs sm:text-sm max-w-[260px] truncate">{mag.title}</TableCell>
-                <TableCell className="text-xs sm:text-sm">
-                  {mag.publication_date ? new Date(mag.publication_date).toLocaleDateString('tr-TR') : '-'}
-                </TableCell>
-                <TableCell>
-                  <RowActions id={String(mag.id)} issue={mag.issue_number} title={mag.title} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <div className="inline-block min-w-full align-middle">
+          <div className="overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-auto px-0 text-left font-medium"
+                      onClick={() => toggleSort('issue_number')}
+                      aria-label="Sayı numarasına göre sırala"
+                    >
+                      Sayı No
+                      <ArrowUpDown className="ml-1 size-4 opacity-70" />
+                    </Button>
+                  </TableHead>
+                  <TableHead className="whitespace-nowrap">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-auto px-0 text-left font-medium"
+                      onClick={() => toggleSort('title')}
+                      aria-label="Başlığa göre sırala"
+                    >
+                      Başlık
+                      <ArrowUpDown className="ml-1 size-4 opacity-70" />
+                    </Button>
+                  </TableHead>
+                  <TableHead className="whitespace-nowrap">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-auto px-0 text-left font-medium"
+                      onClick={() => toggleSort('publication_date')}
+                      aria-label="Yayın tarihine göre sırala"
+                    >
+                      Yayın Tarihi
+                      <ArrowUpDown className="ml-1 size-4 opacity-70" />
+                    </Button>
+                  </TableHead>
+                  <TableHead className="whitespace-nowrap">İşlemler</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((mag) => (
+                  <TableRow key={String(mag.id)}>
+                    <TableCell className="text-xs sm:text-sm whitespace-nowrap">{mag.issue_number}</TableCell>
+                    <TableCell className="text-xs sm:text-sm min-w-[200px] max-w-[260px] truncate">{mag.title}</TableCell>
+                    <TableCell className="text-xs sm:text-sm whitespace-nowrap">
+                      {mag.publication_date ? new Date(mag.publication_date).toLocaleDateString('tr-TR') : '-'}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <RowActions id={String(mag.id)} issue={mag.issue_number} title={mag.title} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       </div>
     </div>
   )

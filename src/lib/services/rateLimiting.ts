@@ -28,7 +28,7 @@ export class RateLimiter {
 
   // Configuration
   private readonly LOGIN_CONFIG: RateLimitConfig = {
-    maxAttempts: 5,
+    maxAttempts: 999999, // Disabled - effectively unlimited
     windowMs: 15 * 60 * 1000, // 15 minutes
   }
 

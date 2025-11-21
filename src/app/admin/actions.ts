@@ -58,7 +58,10 @@ export async function addMagazineRecord(formData: FormData) {
   // Record successful upload attempt
   rateLimiter.recordUploadAttempt(userId)
   
+  // Revalidate admin and home page
   revalidatePath('/admin')
+  revalidatePath('/')
+  revalidatePath(`/dergi/${data.issue_number}`)
 }
 
 /**
@@ -76,7 +79,10 @@ export async function deleteMagazine(formData: FormData) {
   const magazineService = await createMagazineService()
   await magazineService.deleteMagazine(data.id, data.issue_number)
   
+  // Revalidate both admin page and home page
   revalidatePath('/admin')
+  revalidatePath('/')
+  revalidatePath(`/dergi/${data.issue_number}`)
 }
 
 /**
@@ -100,7 +106,11 @@ export async function renameMagazine(formData: FormData) {
     data.new_title
   )
   
+  // Revalidate admin, home, and both old and new magazine pages
   revalidatePath('/admin')
+  revalidatePath('/')
+  revalidatePath(`/dergi/${data.old_issue}`)
+  revalidatePath(`/dergi/${data.new_issue}`)
 }
 
 /**

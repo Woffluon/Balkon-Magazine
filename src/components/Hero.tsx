@@ -233,10 +233,18 @@ export function Hero({
                 animationNum={15}
                 timelineRef={heroRef}
                 customVariants={revealVariants}
+                type="button"
                 className="bg-neutral-900 hover:bg-neutral-950 shadow-lg shadow-neutral-900 border border-neutral-700 flex w-fit ml-auto gap-2 hover:gap-4 transition-all duration-300 ease-in-out text-white px-5 py-3 rounded-lg cursor-pointer font-semibold"
                 onClick={() => {
                   const magazineSection = document.querySelector('[data-magazine-grid]');
                   magazineSection?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    const magazineSection = document.querySelector('[data-magazine-grid]');
+                    magazineSection?.scrollIntoView({ behavior: 'smooth' });
+                  }
                 }}
               >
                 SAYILARI KEŞFET <ArrowRight className="" />

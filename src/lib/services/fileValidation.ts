@@ -72,7 +72,7 @@ export async function validatePDF(file: File): Promise<FileValidationResult> {
     }
     
     return { valid: true }
-  } catch (error) {
+  } catch {
     return {
       valid: false,
       error: 'Failed to read file',
@@ -119,7 +119,7 @@ export async function validateImage(file: File): Promise<FileValidationResult> {
       valid: false,
       error: 'Invalid image file format',
     }
-  } catch (error) {
+  } catch {
     return {
       valid: false,
       error: 'Failed to read file',

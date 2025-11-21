@@ -13,6 +13,7 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props
       key={magazine.id} 
       href={`/dergi/${magazine.issue_number}`} 
       className="group block w-full"
+      aria-label={`Sayı ${magazine.issue_number} dergisini oku`}
     >
       {/* Card Container */}
       <div className="relative overflow-hidden rounded-xl bg-white aspect-[3/4] w-full transition-all duration-500 group-hover:shadow-xl">
@@ -22,23 +23,26 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props
             <>
               <Image
                 src={magazine.cover_image_url}
-                alt={magazine.title}
+                alt={`${magazine.title} kapak görseli - Sayı ${magazine.issue_number}`}
                 fill
                 className="object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
                 style={{ willChange: 'transform' }}
                 sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
+                placeholder="blur"
+                blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YzZjRmNiIvPjwvc3ZnPg=="
+                loading="lazy"
               />
               {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               
               {/* Artistic frame effect */}
-              <div className="absolute inset-2 border-2 border-white/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="absolute inset-2 border-2 border-white/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               
               {/* Corner decorations */}
-              <div className="absolute top-2 left-2 w-4 h-4 border-l-2 border-t-2 border-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <div className="absolute top-2 right-2 w-4 h-4 border-r-2 border-t-2 border-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <div className="absolute bottom-2 left-2 w-4 h-4 border-l-2 border-b-2 border-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <div className="absolute bottom-2 right-2 w-4 h-4 border-r-2 border-b-2 border-white/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="absolute top-2 left-2 w-4 h-4 border-l-2 border-t-2 border-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="absolute top-2 right-2 w-4 h-4 border-r-2 border-t-2 border-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="absolute bottom-2 left-2 w-4 h-4 border-l-2 border-b-2 border-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="absolute bottom-2 right-2 w-4 h-4 border-r-2 border-b-2 border-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             </>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 text-gray-400 border border-gray-200 rounded-xl">
@@ -87,6 +91,7 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props
                 fill="none" 
                 stroke="currentColor" 
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
