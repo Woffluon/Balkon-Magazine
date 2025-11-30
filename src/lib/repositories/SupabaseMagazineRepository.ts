@@ -4,6 +4,7 @@ import type { CreateMagazineDto, UpdateMagazineDto } from '@/types/dtos'
 import type { IMagazineRepository } from './IMagazineRepository'
 import { DatabaseError } from '@/lib/errors/AppError'
 import { assertMagazine, assertMagazineArray } from '@/lib/guards'
+import { withRetry } from '@/lib/utils/retry'
 
 /**
  * Supabase implementation of the Magazine Repository
@@ -23,74 +24,115 @@ export class SupabaseMagazineRepository implements IMagazineRepository {
 
   /**
    * Retrieves all magazines ordered by issue number (descending)
+   * 
+   * Implements retry logic (Requirements 7.1-7.5):
+   * - Retries up to 3 times on network failures
+   * - Uses exponential backoff (1s, 2s, 4s)
    */
   async findAll(): Promise<Magazine[]> {
-    const { data, error } = await this.client
-      .from('magazines')
-      .select('*')
-      .order('issue_number', { ascending: false })
+    return await withRetry(
+      async () => {
+        const { data, error } = await this.client
+          .from('magazines')
+          .select('*')
+          .order('issue_number', { ascending: false })
 
-    if (error) {
-      throw new DatabaseError(
-        `Failed to fetch magazines: ${error.message}`,
-        { code: error.code, details: error.details }
-      )
-    }
+        if (error) {
+          throw new DatabaseError(
+            `Failed to fetch magazines: ${error.message}`,
+            { code: error.code, details: error.details }
+          )
+        }
 
-    // Validate data with runtime type guard
-    return assertMagazineArray(data ?? [])
+        // Validate data with runtime type guard
+        return assertMagazineArray(data ?? [])
+      },
+      {
+        maxRetries: 3,
+        delay: 1000,
+        backoff: 'exponential'
+      }
+    )
   }
 
   /**
    * Finds a magazine by its issue number
    * Returns null if not found instead of throwing an error
+   * 
+   * Implements retry logic (Requirements 7.1-7.5):
+   * - Retries up to 3 times on network failures
+   * - Uses exponential backoff (1s, 2s, 4s)
+   * - Does not retry on "not found" errors (PGRST116)
    */
   async findByIssue(issueNumber: number): Promise<Magazine | null> {
-    const { data, error } = await this.client
-      .from('magazines')
-      .select('*')
-      .eq('issue_number', issueNumber)
-      .single()
+    return await withRetry(
+      async () => {
+        const { data, error } = await this.client
+          .from('magazines')
+          .select('*')
+          .eq('issue_number', issueNumber)
+          .single()
 
-    if (error) {
-      // PGRST116 is the "not found" error code from PostgREST
-      if (error.code === 'PGRST116') {
-        return null
+        if (error) {
+          // PGRST116 is the "not found" error code from PostgREST
+          if (error.code === 'PGRST116') {
+            return null
+          }
+          throw new DatabaseError(
+            `Failed to fetch magazine by issue ${issueNumber}: ${error.message}`,
+            { code: error.code, details: error.details }
+          )
+        }
+
+        // Validate data with runtime type guard
+        return data ? assertMagazine(data) : null
+      },
+      {
+        maxRetries: 3,
+        delay: 1000,
+        backoff: 'exponential'
       }
-      throw new DatabaseError(
-        `Failed to fetch magazine by issue ${issueNumber}: ${error.message}`,
-        { code: error.code, details: error.details }
-      )
-    }
-
-    // Validate data with runtime type guard
-    return data ? assertMagazine(data) : null
+    )
   }
 
   /**
    * Finds a magazine by its unique ID
    * Returns null if not found instead of throwing an error
+   * 
+   * Implements retry logic (Requirements 7.1-7.5):
+   * - Retries up to 3 times on network failures
+   * - Uses exponential backoff (1s, 2s, 4s)
+   * - Does not retry on "not found" errors (PGRST116)
    */
   async findById(id: string): Promise<Magazine | null> {
-    const { data, error } = await this.client
-      .from('magazines')
-      .select('*')
-      .eq('id', id)
-      .single()
+    return await withRetry(
+      async () => {
+        const { data, error } = await this.client
+          .from('magazines')
+          .select('*')
+          .eq('id', id)
+          .single()
 
-    if (error) {
-      // PGRST116 is the "not found" error code from PostgREST
-      if (error.code === 'PGRST116') {
-        return null
+        if (error) {
+          // PGRST116 is the "not found" error code from PostgREST
+          if (error.code === 'PGRST116') {
+            return null
+          }
+          throw new DatabaseError(
+            `Failed to fetch magazine by id ${id}: ${error.message}`,
+            { code: error.code, details: error.details }
+          )
+        }
+
+        // Validate data with runtime type guard
+        return data ? assertMagazine(data) : null
+      },
+      {
+        maxRetries: 3,
+        delay: 1000,
+        backoff: 'exponential'
       }
-      throw new DatabaseError(
-        `Failed to fetch magazine by id ${id}: ${error.message}`,
-        { code: error.code, details: error.details }
-      )
-    }
-
-    // Validate data with runtime type guard
-    return data ? assertMagazine(data) : null
+    )
   }
 
   /**

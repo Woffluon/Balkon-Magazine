@@ -6,75 +6,49 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { useRouter } from 'next/navigation'
 import { useUploadForm } from '@/hooks/useUploadForm'
 import { useUploadProgress } from '@/hooks/useUploadProgress'
-import { useUploadLogs } from '@/hooks/useUploadLogs'
-import { useStorageService } from '@/hooks/useStorageService'
+import { useFileUpload } from '@/hooks/useFileUpload'
+import { usePDFProcessor } from '@/hooks/usePDFProcessor'
+import { useWakeLock } from '@/hooks/useWakeLock'
+import { useUploadPersistence } from '@/hooks/useUploadPersistence'
 import { UploadForm } from './components/UploadForm'
 import { UploadLogs } from './components/UploadLogs'
-import { UploadService } from '@/lib/services/UploadService'
 import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
-import { FileProcessorFactory } from '@/lib/processors/FileProcessorFactory'
 import { saveUploadLog } from './actions'
 import { useSupabaseClient } from '@/hooks/useSupabaseClient'
 import { categorizeError, showError, showSuccess } from '@/lib/utils/uploadErrors'
 import type { Magazine } from '@/types/magazine'
+import type { UploadState } from '@/hooks/useUploadPersistence'
 
 export default function UploadDialog() {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [wakeLock, setWakeLock] = useState<WakeLockSentinel | null>(null)
   const [existingMagazines, setExistingMagazines] = useState<Magazine[]>([])
   const router = useRouter()
   
   // Custom hooks for separation of concerns
   const { formState, updateField, reset: resetForm, validate } = useUploadForm()
-  const { progress, updateCoverProgress, updatePagesProgress, reset: resetProgress, getOverallProgress } = useUploadProgress()
-  const { logs, addLog, reset: resetLogs, getLogsAsString } = useUploadLogs()
-  const storageService = useStorageService()
+  const { 
+    progress, 
+    logs,
+    updateCoverProgress, 
+    updatePagesProgress, 
+    addLog,
+    reset: resetProgress, 
+    getOverallProgress,
+    getLogsAsString 
+  } = useUploadProgress()
   const supabase = useSupabaseClient()
-
-  /**
-   * Consolidated wake lock release function
-   * 
-   * Handles wake lock cleanup with proper error handling.
-   * Uses useCallback to prevent unnecessary effect re-runs.
-   * 
-   * Dependencies: [wakeLock] - Re-creates when wakeLock changes
-   */
-  const releaseWakeLock = useCallback(async () => {
-    if (wakeLock) {
-      try {
-        await wakeLock.release()
-      } catch (error) {
-        console.warn('Wake lock release failed:', error)
-      } finally {
-        setWakeLock(null)
-      }
-    }
-  }, [wakeLock])
-
-  /**
-   * Consolidated localStorage cleanup function
-   * 
-   * Clears all upload-related localStorage entries.
-   * Uses useCallback with empty deps since it has no external dependencies.
-   * 
-   * Dependencies: [] - Function never changes
-   */
-  const clearUploadState = useCallback(() => {
-    try {
-      localStorage.removeItem('uploadState')
-      localStorage.removeItem('uploadProgress')
-      localStorage.removeItem('uploadLogs')
-    } catch (error) {
-      console.warn('Failed to clear upload state:', error)
-    }
-  }, [])
+  
+  // New custom hooks
+  const { isActive: wakeLockActive, request: requestWakeLock, release: releaseWakeLock } = useWakeLock(false)
+  const { processPDF } = usePDFProcessor()
+  const { uploadFile: uploadToStorage } = useFileUpload() // Now uses server actions
+  const { saveState, loadState, clearState } = useUploadPersistence(busy)
 
   function reset() {
     resetForm()
     resetProgress()
-    resetLogs()
-    clearUploadState()
+    clearState()
   }
 
   /**
@@ -101,16 +75,50 @@ export default function UploadDialog() {
   }, [open, supabase])
 
   /**
-   * Cleanup on unmount
+   * Load persisted upload state on mount
    * 
-   * Ensures wake lock is released when component unmounts.
-   * Dependencies: [releaseWakeLock] - Re-runs when cleanup function changes
+   * Restores upload state if user refreshed during upload.
+   * Dependencies: [loadState, updateField, updateCoverProgress] - All are stable functions from custom hooks
    */
   useEffect(() => {
-    return () => {
-      releaseWakeLock()
+    const savedState = loadState()
+    if (savedState && savedState.isActive) {
+      updateField('title', savedState.title)
+      updateField('issue', savedState.issue)
+      updateField('date', savedState.date)
+      updateCoverProgress(savedState.coverProgress)
+      // Note: We can't restore file objects from localStorage
+      // User will need to re-select files
     }
-  }, [releaseWakeLock])
+  }, [loadState, updateField, updateCoverProgress])
+
+  /**
+   * Auto-save upload state when visibility changes
+   * 
+   * Saves state when user switches tabs to prevent data loss
+   */
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && busy) {
+        const state: UploadState = {
+          title: formState.title,
+          issue: typeof formState.issue === 'number' ? formState.issue : 0,
+          date: formState.date,
+          coverProgress: progress.coverProgress,
+          pagesProgress: progress.pagesProgress,
+          logs,
+          isActive: busy,
+          startTime: Date.now()
+        }
+        saveState(state)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [busy, formState, progress, logs, saveState])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -126,14 +134,9 @@ export default function UploadDialog() {
       setBusy(true)
       
       // Request wake lock to prevent screen sleep during upload
-      try {
-        if ('wakeLock' in navigator) {
-          const lock = await navigator.wakeLock.request('screen')
-          setWakeLock(lock)
-          addLog('🔒 Ekran kilidi aktif')
-        }
-      } catch (error) {
-        console.warn('Wake lock request failed:', error)
+      await requestWakeLock()
+      if (wakeLockActive) {
+        addLog('🔒 Ekran kilidi aktif')
       }
       
       addLog('📤 Yükleme işlemi başlatılıyor...')
@@ -141,30 +144,48 @@ export default function UploadDialog() {
 
       issueNumber = typeof formState.issue === 'number' ? formState.issue : 0
       
-      // Create and use upload service
-      const magazineRepository = new SupabaseMagazineRepository(supabase)
-      const uploadService = new UploadService(storageService, magazineRepository, new FileProcessorFactory())
-
-      await uploadService.uploadMagazine({
-        pdf: formState.pdf!,
-        cover: formState.cover,
-        title: formState.title,
-        issueNumber,
-        publicationDate: formState.date,
-        onPdfProcessing: (current, total) => {
+      // Process PDF using custom hook
+      const { pages, totalPages } = await processPDF(formState.pdf!, {
+        onProgress: (current, total) => {
           addLog(`🔄 Sayfa ${current}/${total} işleniyor...`)
-        },
-        onPageProgress: (done, total) => {
-          updatePagesProgress(done, total)
-          addLog(`✅ Sayfa ${done}/${total} başarıyla yüklendi`)
-        },
-        onCoverProgress: (percent) => {
-          updateCoverProgress(percent, percent === 100)
-          if (percent === 100) addLog('🖼️ Kapak görseli yükleme tamamlandı')
         }
       })
 
+      addLog(`✅ PDF işleme tamamlandı: ${totalPages} sayfa`)
+
+      // Upload cover if provided
+      if (formState.cover) {
+        addLog('🖼️ Kapak görseli yükleniyor...')
+        const coverPath = `${issueNumber}/cover.webp`
+        
+        await uploadToStorage(coverPath, formState.cover)
+        updateCoverProgress(100, true)
+        addLog('🖼️ Kapak görseli yükleme tamamlandı')
+      }
+
+      // Upload pages
+      addLog(`📄 ${totalPages} sayfa yükleniyor...`)
+      for (let i = 0; i < pages.length; i++) {
+        const pagePath = `${issueNumber}/pages/page-${String(i + 1).padStart(3, '0')}.webp`
+        await uploadToStorage(pagePath, pages[i])
+        
+        updatePagesProgress(i + 1, totalPages)
+        addLog(`✅ Sayfa ${i + 1}/${totalPages} başarıyla yüklendi`)
+      }
+
+      // Create database record
       addLog('💾 Veritabanı kaydı oluşturuluyor...')
+      const magazineRepository = new SupabaseMagazineRepository(supabase)
+      
+      await magazineRepository.create({
+        title: formState.title,
+        issue_number: issueNumber,
+        publication_date: formState.date,
+        is_published: true,
+        cover_image_url: formState.cover ? `${issueNumber}/cover.webp` : undefined,
+        page_count: totalPages
+      })
+      
       addLog('✨ Veritabanı kaydı başarıyla tamamlandı')
 
       // Save logs
@@ -178,7 +199,7 @@ export default function UploadDialog() {
       addLog('🎉 Dergi başarıyla yüklendi!')
       
       // Clear upload state on success
-      clearUploadState()
+      clearState()
       
       // Show success toast
       showSuccess(formState.title, issueNumber, () => {
@@ -197,7 +218,7 @@ export default function UploadDialog() {
       console.error('Upload error:', err)
       
       // Clear upload state on error
-      clearUploadState()
+      clearState()
       
       // Categorize error and show user-friendly toast
       const categorizedError = categorizeError(err)
@@ -237,15 +258,15 @@ export default function UploadDialog() {
    * Clears upload state when dialog closes (unless upload is in progress).
    * Uses useCallback to prevent unnecessary re-renders of Dialog component.
    * 
-   * Dependencies: [busy, clearUploadState] - Re-creates when busy state or cleanup function changes
+   * Dependencies: [busy, clearState] - Re-creates when busy state or cleanup function changes
    */
   const handleDialogClose = useCallback((isOpen: boolean) => {
     if (!isOpen && !busy) {
       // Clear upload state when dialog closes (if not uploading)
-      clearUploadState()
+      clearState()
     }
     setOpen(isOpen)
-  }, [busy, clearUploadState])
+  }, [busy, clearState])
 
   return (
     <Dialog open={open} onOpenChange={handleDialogClose}>

@@ -31,7 +31,7 @@ export const STORAGE_PATHS = {
    * @returns Path to the cover image
    */
   getCoverPath: (issueNumber: number): string => {
-    return `${issueNumber}/kapak.webp`
+    return `${issueNumber}/cover.webp`
   },
   
   /**

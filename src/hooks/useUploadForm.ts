@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 
 /**
  * Upload form state interface
@@ -50,17 +50,17 @@ export function useUploadForm() {
    * @param field - The field name to update
    * @param value - The new value for the field
    */
-  const updateField = <K extends keyof UploadFormState>(
+  const updateField = useCallback(<K extends keyof UploadFormState>(
     field: K,
     value: UploadFormState[K]
   ) => {
     setFormState(prev => ({ ...prev, [field]: value }))
-  }
+  }, [])
 
   /**
    * Resets all form fields to initial empty state
    */
-  const reset = () => {
+  const reset = useCallback(() => {
     setFormState({
       title: '',
       issue: '',
@@ -68,21 +68,21 @@ export function useUploadForm() {
       pdf: null,
       cover: null
     })
-  }
+  }, [])
 
   /**
    * Validates that all required fields are filled
    * 
    * @returns true if form is valid, false otherwise
    */
-  const validate = (): boolean => {
+  const validate = useCallback((): boolean => {
     return !!(
       formState.title &&
       formState.issue &&
       formState.date &&
       formState.pdf
     )
-  }
+  }, [formState.title, formState.issue, formState.date, formState.pdf])
 
   return { formState, updateField, reset, validate }
 }
