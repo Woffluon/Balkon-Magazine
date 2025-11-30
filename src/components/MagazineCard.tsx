@@ -2,12 +2,15 @@ import Link from 'next/link'
 import Image from 'next/image'
 import React from 'react'
 import type { Magazine } from '@/types/magazine'
+import { getMagazineCoverUrl } from '@/lib/utils/storage'
 
 type Props = {
   magazine: Magazine
 }
 
 export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props) {
+  const coverUrl = getMagazineCoverUrl(magazine.cover_image_url)
+  
   return (
     <Link 
       key={magazine.id} 
@@ -19,10 +22,10 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props
       <div className="relative overflow-hidden rounded-xl bg-white aspect-[3/4] w-full transition-all duration-500 group-hover:shadow-xl">
         {/* Cover Image */}
         <div className="relative w-full h-full overflow-hidden rounded-xl">
-          {magazine.cover_image_url ? (
+          {coverUrl ? (
             <>
               <Image
-                src={magazine.cover_image_url}
+                src={coverUrl}
                 alt={`${magazine.title} kapak görseli - Sayı ${magazine.issue_number}`}
                 fill
                 className="object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"

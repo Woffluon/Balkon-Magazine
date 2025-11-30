@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.magazines (
   cover_image_url TEXT,
   pdf_url TEXT,
   page_count INT,
-  is_published BOOLEAN NOT NULL DEFAULT FALSE,
+  is_published BOOLEAN NOT NULL DEFAULT TRUE,
   CONSTRAINT magazines_issue_number_unique UNIQUE (issue_number)
 );
 

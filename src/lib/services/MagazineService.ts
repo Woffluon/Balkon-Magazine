@@ -141,16 +141,21 @@ export class MagazineService {
     const pagesPath = STORAGE_PATHS.getPagesPath(oldIssue)
     const pages = await this.storageService.list(pagesPath)
     
-    // Move cover image
+    // Move cover image (if it exists)
     const oldCoverPath = STORAGE_PATHS.getCoverPath(oldIssue)
     const newCoverPath = STORAGE_PATHS.getCoverPath(newIssue)
     
     try {
       await this.storageService.move(oldCoverPath, newCoverPath)
-    } catch {
+    } catch (moveError) {
       // Fallback to copy + delete if move fails
-      await this.storageService.copy(oldCoverPath, newCoverPath)
-      await this.storageService.delete([oldCoverPath])
+      try {
+        await this.storageService.copy(oldCoverPath, newCoverPath)
+        await this.storageService.delete([oldCoverPath])
+      } catch {
+        // Ignore if cover doesn't exist (it's optional)
+        console.warn(`Cover image not found for issue ${oldIssue}, skipping`)
+      }
     }
     
     // Move all page files

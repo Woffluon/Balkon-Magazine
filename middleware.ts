@@ -101,6 +101,14 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
+/**
+ * Middleware configuration
+ * 
+ * Note: Route groups like (admin) are ignored in URLs, so /admin/:path* 
+ * still matches routes in src/app/(admin)/admin/
+ * 
+ * Requirements: 15.4
+ */
 export const config = {
   matcher: ['/admin/:path*'],
 }

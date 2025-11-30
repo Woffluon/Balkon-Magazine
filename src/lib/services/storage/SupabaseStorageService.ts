@@ -4,6 +4,7 @@ import type { StorageFile, UploadOptions, ListOptions } from '@/types/storage'
 import { StorageError } from '@/lib/errors/AppError'
 import { STORAGE_CONFIG } from '@/lib/constants/storage'
 import { assertStorageFileArray } from '@/lib/guards'
+import { withRetry } from '@/lib/utils/retry'
 
 /**
  * Supabase Storage Service Implementation
@@ -117,31 +118,44 @@ export class SupabaseStorageService implements IStorageService {
   /**
    * Lists files in a storage directory with pagination support
    * 
+   * Implements retry logic (Requirements 7.1-7.5):
+   * - Retries up to 3 times on network failures
+   * - Uses exponential backoff (1s, 2s, 4s)
+   * 
    * @param prefix - The directory prefix to list
    * @param options - Optional listing configuration (pagination)
    * @returns Array of storage files
-   * @throws {StorageError} If listing fails
+   * @throws {StorageError} If listing fails after all retries
    */
   async list(prefix: string, options?: ListOptions): Promise<StorageFile[]> {
-    const { data, error } = await this.client.storage
-      .from(this.bucketName)
-      .list(prefix, {
-        limit: options?.limit ?? 1000,
-        offset: options?.offset ?? 0
-      })
+    return await withRetry(
+      async () => {
+        const { data, error } = await this.client.storage
+          .from(this.bucketName)
+          .list(prefix, {
+            limit: options?.limit ?? 1000,
+            offset: options?.offset ?? 0
+          })
 
-    if (error) {
-      throw new StorageError(`Failed to list files in ${prefix}: ${error.message}`, error)
-    }
+        if (error) {
+          throw new StorageError(`Failed to list files in ${prefix}: ${error.message}`, error)
+        }
 
-    const files = (data ?? []).map(item => ({
-      name: item.name,
-      id: item.id ?? null,
-      path: prefix ? `${prefix}/${item.name}` : item.name
-    }))
+        const files = (data ?? []).map(item => ({
+          name: item.name,
+          id: item.id ?? null,
+          path: prefix ? `${prefix}/${item.name}` : item.name
+        }))
 
-    // Validate data with runtime type guard
-    return assertStorageFileArray(files)
+        // Validate data with runtime type guard
+        return assertStorageFileArray(files)
+      },
+      {
+        maxRetries: 3,
+        delay: 1000,
+        backoff: 'exponential'
+      }
+    )
   }
 
   /**

@@ -58,7 +58,8 @@ export async function addMagazineRecord(formData: FormData) {
   // Record successful upload attempt
   rateLimiter.recordUploadAttempt(userId)
   
-  // Revalidate admin and home page
+  // Revalidate cache and paths (Requirements 8.2, 8.4)
+  revalidateTag('magazines') // Invalidate magazines cache
   revalidatePath('/admin')
   revalidatePath('/')
   revalidatePath(`/dergi/${data.issue_number}`)
@@ -79,7 +80,8 @@ export async function deleteMagazine(formData: FormData) {
   const magazineService = await createMagazineService()
   await magazineService.deleteMagazine(data.id, data.issue_number)
   
-  // Revalidate both admin page and home page
+  // Revalidate cache and paths (Requirements 8.2, 8.4)
+  revalidateTag('magazines') // Invalidate magazines cache
   revalidatePath('/admin')
   revalidatePath('/')
   revalidatePath(`/dergi/${data.issue_number}`)
@@ -106,7 +108,8 @@ export async function renameMagazine(formData: FormData) {
     data.new_title
   )
   
-  // Revalidate admin, home, and both old and new magazine pages
+  // Revalidate cache and paths (Requirements 8.2, 8.4)
+  revalidateTag('magazines') // Invalidate magazines cache
   revalidatePath('/admin')
   revalidatePath('/')
   revalidatePath(`/dergi/${data.old_issue}`)
@@ -162,5 +165,57 @@ export async function revalidateMagazines() {
   revalidatePath('/') // Also revalidate home page
   
   return { success: true, revalidated: 'magazines tag' }
+}
+
+/**
+ * Uploads a file to storage using server-side Supabase client
+ * 
+ * This server action handles file uploads securely on the server side,
+ * preventing API keys from being exposed to the client.
+ * 
+ * Requirements 14.1-14.5:
+ * - 14.1: Server action for file uploads instead of client-side calls
+ * - 14.2: Marked with "use server" directive
+ * - 14.3: Accepts ArrayBuffer from client (converted from File)
+ * - 14.4: Uses server-side Supabase client with proper authentication
+ * - 14.5: Returns success/error status to client
+ * 
+ * @param path - The storage path for the file
+ * @param fileData - The file data as ArrayBuffer
+ * @param contentType - The MIME type of the file
+ * @returns Promise resolving to success status
+ * @throws {Error} If upload fails
+ */
+export async function uploadFileToStorage(
+  path: string,
+  fileData: ArrayBuffer,
+  contentType: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Require admin role for file uploads
+    await requireAdmin()
+    
+    // Verify CSRF origin
+    await verifyCSRFOrigin()
+    
+    // Create storage service with server-side Supabase client
+    const supabase = await createClient()
+    const storageService = new SupabaseStorageService(supabase)
+    
+    // Convert ArrayBuffer to Blob for upload
+    const blob = new Blob([fileData], { type: contentType })
+    
+    // Upload file to storage
+    await storageService.upload(path, blob, {
+      upsert: true,
+      contentType
+    })
+    
+    return { success: true }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Upload failed'
+    console.error('Server-side upload error:', errorMessage)
+    return { success: false, error: errorMessage }
+  }
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 
 /**
  * Upload progress state interface
@@ -13,25 +13,43 @@ interface UploadProgressState {
 }
 
 /**
- * Custom hook for managing upload progress tracking
+ * Custom hook for managing upload progress tracking and log entries
  * 
  * Provides separate progress tracking for cover and page uploads,
- * with methods to update progress and calculate overall completion.
+ * with methods to update progress, calculate overall completion,
+ * and manage log entries with automatic timestamping.
  * 
- * @returns Progress state and control methods
+ * Satisfies Requirement 2.3: Manages both log entries and progress state
+ * 
+ * @returns Progress state, log state, and control methods
  * 
  * @example
  * ```tsx
  * function UploadDialog() {
- *   const { progress, updateCoverProgress, updatePagesProgress, getOverallProgress } = useUploadProgress()
+ *   const { 
+ *     progress, 
+ *     logs,
+ *     updateCoverProgress, 
+ *     updatePagesProgress, 
+ *     addLog,
+ *     getOverallProgress,
+ *     getLogsAsString
+ *   } = useUploadProgress()
  *   
  *   const uploadCover = async () => {
+ *     addLog('Starting cover upload...')
  *     updateCoverProgress(50)
  *     // ... upload logic
  *     updateCoverProgress(100, true)
+ *     addLog('Cover upload complete!')
  *   }
  *   
- *   return <div>Overall: {getOverallProgress()}%</div>
+ *   return (
+ *     <div>
+ *       <div>Overall: {getOverallProgress()}%</div>
+ *       <div>{logs.map((log, i) => <div key={i}>{log}</div>)}</div>
+ *     </div>
+ *   )
  * }
  * ```
  */
@@ -44,19 +62,21 @@ export function useUploadProgress() {
     totalPages: 0
   })
 
+  const [logs, setLogs] = useState<string[]>([])
+
   /**
    * Updates cover upload progress
    * 
    * @param percent - Progress percentage (0-100)
    * @param done - Whether cover upload is complete
    */
-  const updateCoverProgress = (percent: number, done: boolean = false) => {
+  const updateCoverProgress = useCallback((percent: number, done: boolean = false) => {
     setProgress(prev => ({
       ...prev,
       coverProgress: percent,
       coverDone: done
     }))
-  }
+  }, [])
 
   /**
    * Updates page upload progress
@@ -64,7 +84,7 @@ export function useUploadProgress() {
    * @param pagesDone - Number of pages uploaded
    * @param totalPages - Total number of pages to upload
    */
-  const updatePagesProgress = (pagesDone: number, totalPages: number) => {
+  const updatePagesProgress = useCallback((pagesDone: number, totalPages: number) => {
     const percent = totalPages > 0 ? (pagesDone / totalPages) * 100 : 0
     setProgress(prev => ({
       ...prev,
@@ -72,12 +92,44 @@ export function useUploadProgress() {
       pagesDone,
       totalPages
     }))
-  }
+  }, [])
 
   /**
-   * Resets all progress tracking to initial state
+   * Adds a new log entry with automatic timestamp
+   * 
+   * Automatically scrolls the log container to the bottom
+   * to keep the latest entry visible.
+   * 
+   * @param message - The log message to add
    */
-  const reset = () => {
+  const addLog = useCallback((message: string) => {
+    const timestamp = new Date().toLocaleTimeString('tr-TR')
+    const logEntry = `${timestamp} - ${message}`
+
+    setLogs(prev => {
+      const updated = [...prev, logEntry]
+
+      // Auto-scroll to bottom after state update
+      queueMicrotask(() => {
+        const el = document.getElementById('upload-logs')
+        if (el) {
+          el.scrollTop = el.scrollHeight
+        }
+      })
+
+      return updated
+    })
+  }, [])
+
+  /**
+   * Clears all log entries
+   */
+  const clearLogs = useCallback(() => setLogs([]), [])
+
+  /**
+   * Resets all progress tracking and logs to initial state
+   */
+  const reset = useCallback(() => {
     setProgress({
       coverProgress: 0,
       coverDone: false,
@@ -85,7 +137,8 @@ export function useUploadProgress() {
       pagesDone: 0,
       totalPages: 0
     })
-  }
+    setLogs([])
+  }, [])
 
   /**
    * Calculates overall upload progress
@@ -95,20 +148,32 @@ export function useUploadProgress() {
    * 
    * @returns Overall progress percentage (0-100)
    */
-  const getOverallProgress = (): number => {
+  const getOverallProgress = useCallback((): number => {
     if (progress.totalPages > 0) {
       const units = progress.totalPages + 1
       const doneUnits = progress.pagesDone + (progress.coverDone ? 1 : 0)
       return Math.round((doneUnits / units) * 100)
     }
     return progress.coverDone ? 100 : 0
-  }
+  }, [progress.totalPages, progress.pagesDone, progress.coverDone])
+
+  /**
+   * Returns all logs as a single string (newline-separated)
+   * Useful for saving logs to a file
+   * 
+   * @returns All logs joined with newlines
+   */
+  const getLogsAsString = useCallback((): string => logs.join('\n'), [logs])
 
   return {
     progress,
+    logs,
     updateCoverProgress,
     updatePagesProgress,
+    addLog,
+    clearLogs,
     reset,
-    getOverallProgress
+    getOverallProgress,
+    getLogsAsString
   }
 }

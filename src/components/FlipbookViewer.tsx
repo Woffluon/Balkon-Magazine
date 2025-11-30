@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useResponsiveDimensions } from '@/hooks/useResponsiveDimensions'
 
 type PageFlipAPI = { flipNext: () => void; flipPrev: () => void; getCurrentPageIndex: () => number }
 type PageFlipHandle = { pageFlip: () => PageFlipAPI }
@@ -34,50 +35,14 @@ const ASPECT_H = 1200
 
 export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
   const pages = useMemo(() => (imageUrls ?? []).filter(Boolean), [imageUrls])
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const bookRef = useRef<PageFlipHandle | null>(null)
-  const [dims, setDims] = useState<{ w: number; h: number }>({ w: 500, h: 700 })
   const [currentPage, setCurrentPage] = useState(0)
   const [preloadedPages, setPreloadedPages] = useState<Set<number>>(new Set())
   const [pageAnnouncement, setPageAnnouncement] = useState('')
 
-  useEffect(() => {
-    function updateSize() {
-      const el = containerRef.current
-      const maxW = Math.max(300, Math.min(900, el?.clientWidth || 500))
-      
-      // Use visualViewport API for mobile keyboard detection
-      const visualViewport = typeof window !== 'undefined' && 'visualViewport' in window ? window.visualViewport : null
-      const viewportH = visualViewport ? visualViewport.height : (typeof window !== 'undefined' ? window.innerHeight : 900)
-      
-      const maxH = Math.floor(viewportH * 0.85)
-      const hFromW = Math.floor(maxW * ASPECT_H / ASPECT_W)
-      if (hFromW > maxH) {
-        const wFromH = Math.floor(maxH * ASPECT_W / ASPECT_H)
-        setDims({ w: wFromH, h: maxH })
-      } else {
-        setDims({ w: maxW, h: hFromW })
-      }
-    }
-    updateSize()
-    
-    // ResizeObserver for container changes
-    const ro = new ResizeObserver(() => updateSize())
-    if (containerRef.current) ro.observe(containerRef.current)
-    
-    // visualViewport listener for mobile keyboard
-    const visualViewport = typeof window !== 'undefined' && 'visualViewport' in window ? window.visualViewport : null
-    if (visualViewport) {
-      visualViewport.addEventListener('resize', updateSize)
-    }
-    
-    return () => {
-      ro.disconnect()
-      if (visualViewport) {
-        visualViewport.removeEventListener('resize', updateSize)
-      }
-    }
-  }, [])
+  // Use custom hook for responsive dimensions (Requirements: 4.1, 4.2, 4.3, 4.4, 4.5)
+  const dims = useResponsiveDimensions(containerRef, { w: ASPECT_W, h: ASPECT_H })
 
   // Image preload with AbortController
   useEffect(() => {
