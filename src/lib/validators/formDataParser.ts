@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ValidationError } from '@/lib/errors/AppError'
+import { getErrorEntry } from '@/lib/constants/errorCatalog'
 
 /**
  * Parses and validates FormData using a Zod schema
@@ -70,10 +71,24 @@ export function parseFormDataWithZod<T>(
       // Extract the first error message for user-friendly feedback
       const firstError = error.issues[0]
       const fieldName = firstError.path.join('.')
-      const message = firstError.message
+      const zodMessage = firstError.message
+      
+      // Get field-specific error message from catalog if available
+      const errorEntry = getErrorEntry('VALIDATION_INVALID_FORMAT')
+      
+      // Use Zod's custom message if provided (already in Turkish), otherwise use catalog
+      const userMessage = zodMessage || errorEntry.userMessage
+      
+      // Create technical message with field context
+      const technicalMessage = fieldName 
+        ? `Validation failed for field '${fieldName}': ${firstError.code} - ${zodMessage}`
+        : `Validation failed: ${firstError.code} - ${zodMessage}`
       
       throw new ValidationError(
-        fieldName ? `${fieldName}: ${message}` : message,
+        technicalMessage,
+        fieldName || 'unknown',
+        firstError.code,
+        userMessage,
         { zodError: error.issues }
       )
     }

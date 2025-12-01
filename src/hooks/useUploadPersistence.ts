@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react'
+import { logger } from '@/lib/services/Logger'
 
 /**
  * Upload state interface for persistence
@@ -79,7 +80,10 @@ export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn 
       localStorage.setItem(UPLOAD_STATE_KEY, serialized)
     } catch (error) {
       // Handle localStorage errors (quota exceeded, private browsing, etc.)
-      console.error('Failed to save upload state:', error)
+      logger.error('Failed to save upload state', {
+        error,
+        operation: 'upload_state_save'
+      })
     }
   }, [])
 
@@ -100,7 +104,10 @@ export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn 
       return JSON.parse(serialized) as UploadState
     } catch (error) {
       // Handle JSON parse errors or localStorage access errors
-      console.error('Failed to load upload state:', error)
+      logger.error('Failed to load upload state', {
+        error,
+        operation: 'upload_state_load'
+      })
       return null
     }
   }, [])
@@ -115,7 +122,10 @@ export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn 
     try {
       localStorage.removeItem(UPLOAD_STATE_KEY)
     } catch (error) {
-      console.error('Failed to clear upload state:', error)
+      logger.error('Failed to clear upload state', {
+        error,
+        operation: 'upload_state_clear'
+      })
     }
   }, [])
 
@@ -128,11 +138,19 @@ export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn 
    */
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden && busy) {
-        // Page is being hidden and upload is in progress
-        // The parent component should provide the current state
-        // This is handled by the parent calling saveState directly
-        // This effect just ensures the listener is set up
+      try {
+        if (document.hidden && busy) {
+          // Page is being hidden and upload is in progress
+          // The parent component should provide the current state
+          // This is handled by the parent calling saveState directly
+          // This effect just ensures the listener is set up
+        }
+      } catch (error) {
+        // Handle any unexpected errors during visibility change
+        logger.error('Error in visibility change handler', {
+          error,
+          operation: 'visibility_change_handler'
+        })
       }
     }
 

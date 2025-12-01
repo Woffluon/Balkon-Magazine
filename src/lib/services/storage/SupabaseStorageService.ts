@@ -29,27 +29,43 @@ export class SupabaseStorageService implements IStorageService {
   /**
    * Uploads a file to Supabase Storage
    * 
+   * Implements performance tracking (Requirements 7.4):
+   * - Tracks operation timing
+   * - Logs slow operations (> 1s)
+   * 
    * @param path - The storage path for the file
    * @param file - The file or blob to upload
    * @param options - Optional upload configuration
    * @throws {StorageError} If upload fails
    */
   async upload(path: string, file: File | Blob, options?: UploadOptions): Promise<void> {
-    const { error } = await this.client.storage
-      .from(this.bucketName)
-      .upload(path, file, {
-        upsert: options?.upsert ?? STORAGE_CONFIG.DEFAULT_UPSERT,
-        contentType: options?.contentType,
-        cacheControl: options?.cacheControl ?? STORAGE_CONFIG.CACHE_CONTROL
-      })
+    const { logger } = await import('@/lib/services/Logger')
+    const endTimer = logger.startTimer('storage.upload')
+    
+    try {
+      const { error } = await this.client.storage
+        .from(this.bucketName)
+        .upload(path, file, {
+          upsert: options?.upsert ?? STORAGE_CONFIG.DEFAULT_UPSERT,
+          contentType: options?.contentType,
+          cacheControl: options?.cacheControl ?? STORAGE_CONFIG.CACHE_CONTROL
+        })
 
-    if (error) {
-      throw new StorageError(`Failed to upload file to ${path}: ${error.message}`, error)
+      if (error) {
+        const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+        throw ErrorHandler.handleStorageError(error, 'upload', path)
+      }
+    } finally {
+      endTimer()
     }
   }
 
   /**
    * Deletes multiple files from Supabase Storage
+   * 
+   * Implements performance tracking (Requirements 7.4):
+   * - Tracks operation timing
+   * - Logs slow operations (> 1s)
    * 
    * @param paths - Array of file paths to delete
    * @throws {StorageError} If deletion fails
@@ -59,13 +75,63 @@ export class SupabaseStorageService implements IStorageService {
       return
     }
 
-    const { error } = await this.client.storage
-      .from(this.bucketName)
-      .remove(paths)
+    const { logger } = await import('@/lib/services/Logger')
+    const endTimer = logger.startTimer('storage.delete')
+    
+    try {
+      const { error } = await this.client.storage
+        .from(this.bucketName)
+        .remove(paths)
 
-    if (error) {
-      throw new StorageError(`Failed to delete files: ${error.message}`, error)
+      if (error) {
+        const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+        // For multiple files, use the first path as context
+        const contextPath = paths.length > 0 ? paths[0] : undefined
+        throw ErrorHandler.handleStorageError(error, 'delete', contextPath)
+      }
+    } finally {
+      endTimer()
     }
+  }
+
+  /**
+   * Deletes multiple files with partial retry support
+   * 
+   * Implements Requirement 6.3: Partial storage failures retry selectively
+   * - Tracks successful vs failed operations
+   * - Only retries failed operations
+   * - Preserves successful operation results
+   * - Returns combined results
+   * 
+   * @param paths - Array of file paths to delete
+   * @param config - Optional retry configuration
+   * @returns Promise resolving to batch operation results
+   */
+  async deleteWithPartialRetry(
+    paths: string[],
+    config?: Partial<import('@/lib/utils/retry').RetryConfig>
+  ): Promise<import('@/lib/utils/retry').BatchOperationResult<string>> {
+    const { withPartialRetry } = await import('@/lib/utils/retry')
+    
+    if (paths.length === 0) {
+      return { successes: [], failures: [] }
+    }
+
+    // Delete each file individually to track partial failures
+    return await withPartialRetry(
+      paths,
+      async (path) => {
+        const { error } = await this.client.storage
+          .from(this.bucketName)
+          .remove([path])
+
+        if (error) {
+          const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+          throw ErrorHandler.handleStorageError(error, 'delete', path)
+        }
+      },
+      config
+    )
   }
 
   /**
@@ -86,10 +152,12 @@ export class SupabaseStorageService implements IStorageService {
       try {
         await this.copy(fromPath, toPath)
         await this.delete([fromPath])
-      } catch {
-        throw new StorageError(
-          `Failed to move file from ${fromPath} to ${toPath}: ${error.message}`,
-          error
+      } catch (fallbackError) {
+        const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+        throw ErrorHandler.handleStorageError(
+          fallbackError instanceof Error ? fallbackError : error,
+          'move',
+          fromPath
         )
       }
     }
@@ -108,10 +176,8 @@ export class SupabaseStorageService implements IStorageService {
       .copy(fromPath, toPath)
 
     if (error) {
-      throw new StorageError(
-        `Failed to copy file from ${fromPath} to ${toPath}: ${error.message}`,
-        error
-      )
+      const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+      throw ErrorHandler.handleStorageError(error, 'move', fromPath)
     }
   }
 
@@ -122,40 +188,52 @@ export class SupabaseStorageService implements IStorageService {
    * - Retries up to 3 times on network failures
    * - Uses exponential backoff (1s, 2s, 4s)
    * 
+   * Implements performance tracking (Requirements 7.4):
+   * - Tracks operation timing
+   * - Logs slow operations (> 1s)
+   * 
    * @param prefix - The directory prefix to list
    * @param options - Optional listing configuration (pagination)
    * @returns Array of storage files
    * @throws {StorageError} If listing fails after all retries
    */
   async list(prefix: string, options?: ListOptions): Promise<StorageFile[]> {
-    return await withRetry(
-      async () => {
-        const { data, error } = await this.client.storage
-          .from(this.bucketName)
-          .list(prefix, {
-            limit: options?.limit ?? 1000,
-            offset: options?.offset ?? 0
-          })
+    const { logger } = await import('@/lib/services/Logger')
+    const endTimer = logger.startTimer('storage.list')
+    
+    try {
+      return await withRetry(
+        async () => {
+          const { data, error } = await this.client.storage
+            .from(this.bucketName)
+            .list(prefix, {
+              limit: options?.limit ?? 1000,
+              offset: options?.offset ?? 0
+            })
 
-        if (error) {
-          throw new StorageError(`Failed to list files in ${prefix}: ${error.message}`, error)
+          if (error) {
+            const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+            throw ErrorHandler.handleStorageError(error, 'list', prefix)
+          }
+
+          const files = (data ?? []).map(item => ({
+            name: item.name,
+            id: item.id ?? null,
+            path: prefix ? `${prefix}/${item.name}` : item.name
+          }))
+
+          // Validate data with runtime type guard
+          return assertStorageFileArray(files)
+        },
+        {
+          maxAttempts: 3,
+          initialDelay: 1000,
+          backoffMultiplier: 2
         }
-
-        const files = (data ?? []).map(item => ({
-          name: item.name,
-          id: item.id ?? null,
-          path: prefix ? `${prefix}/${item.name}` : item.name
-        }))
-
-        // Validate data with runtime type guard
-        return assertStorageFileArray(files)
-      },
-      {
-        maxRetries: 3,
-        delay: 1000,
-        backoff: 'exponential'
-      }
-    )
+      )
+    } finally {
+      endTimer()
+    }
   }
 
   /**

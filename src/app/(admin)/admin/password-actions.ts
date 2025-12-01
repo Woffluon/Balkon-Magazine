@@ -35,7 +35,14 @@ export async function changePassword(
     const { data: { user }, error: userError } = await supabase.auth.getUser()
 
     if (userError || !user?.email) {
-      throw new AuthenticationError('Oturum bulunamadı. Lütfen tekrar giriş yapın.')
+      // Use error catalog for consistent session error messaging
+      const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
+      const errorEntry = getErrorEntry('AUTH_SESSION_EXPIRED')
+      throw new AuthenticationError(
+        'Session not found',
+        'session_expired',
+        errorEntry.userMessage
+      )
     }
 
     // Verify current password by attempting to sign in
@@ -45,9 +52,13 @@ export async function changePassword(
     })
 
     if (signInError) {
+      // Use generic error message from catalog to avoid revealing security details
+      // Don't expose whether the current password was wrong
+      const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
+      const errorEntry = getErrorEntry('AUTH_INVALID_CREDENTIALS')
       return {
         success: false,
-        error: 'Mevcut şifre hatalı'
+        error: errorEntry.userMessage
       }
     }
 
@@ -57,9 +68,12 @@ export async function changePassword(
     })
 
     if (updateError) {
+      // Use error catalog for consistent error messaging
+      const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
+      const errorEntry = getErrorEntry('GENERAL_OPERATION_FAILED')
       return {
         success: false,
-        error: 'Şifre güncellenirken bir hata oluştu. Lütfen tekrar deneyin.'
+        error: errorEntry.userMessage
       }
     }
 
@@ -70,12 +84,15 @@ export async function changePassword(
     if (error instanceof ValidationError || error instanceof AuthenticationError) {
       return {
         success: false,
-        error: error.message
+        error: error.userMessage
       }
     }
+    // Use error catalog for unexpected errors
+    const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
+    const errorEntry = getErrorEntry('GENERAL_OPERATION_FAILED')
     return {
       success: false,
-      error: 'Şifre güncellenirken bir hata oluştu. Lütfen tekrar deneyin.'
+      error: errorEntry.userMessage
     }
   }
 }

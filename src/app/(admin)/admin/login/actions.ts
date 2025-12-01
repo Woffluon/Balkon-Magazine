@@ -8,6 +8,7 @@ import { parseFormDataWithZod } from '@/lib/validators/formDataParser'
 import { loginSchema } from '@/lib/validators/magazineSchemas'
 import { ValidationError } from '@/lib/errors/AppError'
 import { rateLimiter } from '@/lib/services/rateLimiting'
+import { getErrorEntry } from '@/lib/constants/errorCatalog'
 
 export type LoginState = {
   error?: string
@@ -61,7 +62,11 @@ export async function login(
     if (error) {
       // Record failed login attempt
       rateLimiter.recordLoginAttempt(clientIP)
-      return { error: 'E-posta veya şifre hatalı.' }
+      
+      // Use generic error message from catalog to avoid revealing security details
+      // Don't expose whether email or password was wrong
+      const errorEntry = getErrorEntry('AUTH_INVALID_CREDENTIALS')
+      return { error: errorEntry.userMessage }
     }
 
     // Reset login attempts on successful login
@@ -70,9 +75,12 @@ export async function login(
     revalidatePath('/', 'layout')
   } catch (error) {
     if (error instanceof ValidationError) {
-      return { error: error.message }
+      return { error: error.userMessage }
     }
-    return { error: 'Giriş yapılırken bir hata oluştu.' }
+    
+    // Use generic error message from catalog for unexpected errors
+    const errorEntry = getErrorEntry('GENERAL_OPERATION_FAILED')
+    return { error: errorEntry.userMessage }
   }
   
   // Redirect outside of try-catch because Next.js redirect throws an error by design
@@ -80,8 +88,31 @@ export async function login(
 }
 
 export async function logout(): Promise<void> {
-  const supabase = await getServerClient()
-  await supabase.auth.signOut()
+  try {
+    const supabase = await getServerClient()
+    const { error } = await supabase.auth.signOut()
+    
+    if (error) {
+      // Log the error but continue with redirect
+      const { logger } = await import('@/lib/services/Logger')
+      logger.error('Logout sign-out failed', {
+        operation: 'logout',
+        error: error.message,
+        errorCode: error.status,
+      })
+    }
+  } catch (error) {
+    // Log unexpected errors but ensure we still redirect
+    const { logger } = await import('@/lib/services/Logger')
+    logger.error('Logout operation failed', {
+      operation: 'logout',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+  }
+  
+  // Always redirect to login, even if sign-out failed
+  // This ensures session cleanup on the client side
   redirect('/admin/login')
 }
 

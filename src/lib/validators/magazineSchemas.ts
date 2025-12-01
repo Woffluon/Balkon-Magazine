@@ -12,9 +12,9 @@ import { MagazineSchema, UUIDSchema } from './schemas'
  * - 4.4: Publication date in ISO 8601 format (YYYY-MM-DD)
  */
 export const createMagazineSchema = MagazineSchema.extend({
-  cover_image_url: z.string().url().optional().or(z.literal('')),
-  pdf_url: z.string().url().optional().or(z.literal('')),
-  page_count: z.number().int().positive().optional(),
+  cover_image_url: z.string().url('Kapak resmi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional().or(z.literal('')),
+  pdf_url: z.string().url('PDF adresi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional().or(z.literal('')),
+  page_count: z.number().int('Sayfa sayısı tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.').positive('Sayfa sayısı pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.').optional(),
   is_published: z.boolean().default(true)
 })
 
@@ -29,9 +29,9 @@ export const createMagazineSchema = MagazineSchema.extend({
  * - 4.4: Publication date in ISO 8601 format (YYYY-MM-DD)
  */
 export const updateMagazineSchema = MagazineSchema.partial().extend({
-  cover_image_url: z.string().url().optional().or(z.literal('')),
-  pdf_url: z.string().url().optional().or(z.literal('')),
-  page_count: z.number().int().positive().optional(),
+  cover_image_url: z.string().url('Kapak resmi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional().or(z.literal('')),
+  pdf_url: z.string().url('PDF adresi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional().or(z.literal('')),
+  page_count: z.number().int('Sayfa sayısı tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.').positive('Sayfa sayısı pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.').optional(),
   is_published: z.boolean().optional()
 })
 
@@ -45,7 +45,7 @@ export const updateMagazineSchema = MagazineSchema.partial().extend({
  */
 export const deleteMagazineSchema = z.object({
   id: UUIDSchema,
-  issue_number: z.number().int().positive()
+  issue_number: z.number().int('Sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.').positive('Sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.')
 })
 
 /**
@@ -58,9 +58,9 @@ export const deleteMagazineSchema = z.object({
  */
 export const renameMagazineSchema = z.object({
   id: UUIDSchema,
-  old_issue: z.number().int().positive(),
-  new_issue: z.number().int().positive(),
-  new_title: z.string().min(1).optional()
+  old_issue: z.number().int('Eski sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.').positive('Eski sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.'),
+  new_issue: z.number().int('Yeni sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.').positive('Yeni sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.'),
+  new_title: z.string().min(1, 'Yeni başlık boş olamaz. Lütfen bir başlık girin.').optional()
 })
 
 /**

@@ -32,6 +32,7 @@ You should not need to reference the individual implementation files unless you'
 8. [Verification Checklist](#8-verification-checklist) - Testing your setup
 9. [Running the SQL](#9-running-the-sql) - Setup instructions
 10. [Troubleshooting](#10-troubleshooting) - Common issues and solutions
+11. [Monitoring and Alerts](#11-monitoring-and-alerts) - Sentry error tracking
 
 **Quick Start:**
 1. Set up `.env.local` with Supabase credentials
@@ -686,3 +687,85 @@ const supabase = await createClient() // May fail in static contexts
 3. **Cookie errors are normal:** Server client ignores cookie errors in read-only contexts
 4. **Session refresh timing:** Middleware refreshes 5 minutes before expiration
 5. **Public client for caching:** Use `createPublicClient()` for `unstable_cache` operations
+
+---
+
+## 11) Monitoring and Alerts
+
+The application includes comprehensive error tracking and monitoring using Sentry. This helps identify and resolve issues quickly in production.
+
+### Sentry Integration
+
+Sentry is configured for:
+- Client-side error tracking
+- Server-side error tracking
+- Edge runtime error tracking
+- Performance monitoring
+- Session replay for debugging
+
+**Configuration files:**
+- `sentry.client.config.ts` - Browser error tracking
+- `sentry.server.config.ts` - Server error tracking
+- `sentry.edge.config.ts` - Edge runtime tracking
+
+### Alert Configuration
+
+The platform includes pre-configured alert rules for:
+
+1. **Critical Errors** - Immediate notification for fatal errors
+2. **High Error Rate** - Alert when errors exceed 10/minute
+3. **Performance Degradation** - Alert when P95 response time > 5s
+4. **User-Impacting Errors** - Alert when 5+ users affected
+5. **Database Issues** - Alert for connection failures
+6. **Storage Issues** - Alert for quota or upload failures
+7. **Authentication Issues** - Alert for high failure rates
+
+### Setup Instructions
+
+**Quick Start:**
+1. Review [Sentry Alert Configuration Guide](./SENTRY_ALERTS.md)
+2. Follow [Sentry Setup Checklist](./SENTRY_SETUP_CHECKLIST.md)
+3. Configure alerts using [sentry-alerts.config.json](../sentry-alerts.config.json)
+4. Test alerts with `npm run test-alerts`
+
+**Documentation:**
+- [SENTRY_ALERTS.md](./SENTRY_ALERTS.md) - Comprehensive alert configuration guide
+- [SENTRY_SETUP_CHECKLIST.md](./SENTRY_SETUP_CHECKLIST.md) - Step-by-step setup checklist
+- [sentry-alerts.config.json](../sentry-alerts.config.json) - Alert configuration reference
+- [scripts/test-sentry-alerts.ts](../scripts/test-sentry-alerts.ts) - Alert testing script
+
+### Testing Alerts
+
+Test your alert configuration:
+
+```bash
+# Test all alerts
+npm run test-alerts -- --type=all
+
+# Test specific alert types
+npm run test-alerts -- --type=critical
+npm run test-alerts -- --type=error-rate
+npm run test-alerts -- --type=performance
+```
+
+### Environment Variables for Sentry
+
+Add to your `.env.local`:
+
+```bash
+# Sentry Configuration (Production)
+SENTRY_DSN=your-server-sentry-dsn
+NEXT_PUBLIC_SENTRY_DSN=your-client-sentry-dsn
+```
+
+**Note:** Sentry is only active in production. Development and staging environments use console logging.
+
+### Monitoring Best Practices
+
+1. **Regular Review:** Check Sentry dashboard weekly for error trends
+2. **Alert Tuning:** Adjust thresholds based on actual traffic patterns
+3. **PII Protection:** All sensitive data is automatically scrubbed before sending to Sentry
+4. **Performance Tracking:** Monitor P95 response times for degradation
+5. **User Impact:** Prioritize errors affecting multiple users
+
+For detailed information on error handling and logging, see the [Error Handling Specification](.kiro/specs/error-handling-logging/).

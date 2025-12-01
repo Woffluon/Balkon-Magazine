@@ -13,8 +13,9 @@ export {
   AuthenticationError
 } from './AppError'
 
-// Error handler utilities
+// Error handler class and utilities
 export {
+  ErrorHandler,
   handleSupabaseError,
   handleStorageError,
   handleUnknownError,
@@ -23,5 +24,33 @@ export {
   isErrorType
 } from './errorHandler'
 
+// Result types
+export type {
+  Result,
+  SuccessResponse,
+  ErrorResponse,
+  ErrorSeverity
+} from './errorHandler'
+
 // Error messages
 export { ERROR_MESSAGES } from '@/lib/constants/errorMessages'
+
+// Error catalog
+export {
+  ERROR_CATALOG,
+  getErrorEntry,
+  getErrorCodesByCategory,
+  getRetryableErrorCodes,
+  getErrorCodesBySeverity
+} from '@/lib/constants/errorCatalog'
+
+export type {
+  ErrorMessageEntry,
+  ErrorMessageCatalog
+} from '@/lib/constants/errorCatalog'
+
+// Global error handler
+export {
+  GlobalErrorHandler,
+  globalErrorHandler
+} from './GlobalErrorHandler'

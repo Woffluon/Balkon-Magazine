@@ -193,7 +193,7 @@ export function useFileUpload(
 
         // Check result from server action
         if (!result.success) {
-          throw new Error(result.error || 'Upload failed')
+          throw new Error(result.error?.userMessage || result.error?.message || 'Upload failed')
         }
 
         // Report completion

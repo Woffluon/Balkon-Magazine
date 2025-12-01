@@ -25,6 +25,33 @@ export type {
   PasswordChangeDto
 } from './magazineSchemas'
 
+// Export error schemas
+export {
+  ErrorObjectSchema,
+  ErrorResponseSchema,
+  SuccessResponseSchema,
+  ResultSchema,
+  VoidResultSchema,
+  StringResultSchema,
+  NumberResultSchema,
+  BooleanResultSchema,
+  validateErrorResponse,
+  validateResult,
+  isSuccessResponse,
+  isErrorResponse,
+  unwrapResult,
+  unwrapResultOrUndefined,
+  unwrapResultOr
+} from './errorSchemas'
+
+// Export error types
+export type {
+  ErrorObject,
+  ErrorResponse,
+  SuccessResponse,
+  Result
+} from './errorSchemas'
+
 // Export utilities
 export {
   parseFormDataWithZod,

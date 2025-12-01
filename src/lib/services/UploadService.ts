@@ -14,6 +14,7 @@ import {
   FILE_SIZE_LIMITS,
   ALLOWED_MIME_TYPES
 } from '@/lib/services/fileValidation'
+import { logger } from '@/lib/services/Logger'
 
 /**
  * Upload Service
@@ -264,14 +265,21 @@ export class UploadService {
                 error: result.value.error || new Error('Unknown upload error'),
                 attempts: 3 // Max retry attempts
               })
-              console.error(
-                `Page ${result.value.pageNumber} upload failed after retries:`,
-                result.value.error
+              logger.error(
+                `Page ${result.value.pageNumber} upload failed after retries`,
+                {
+                  pageNumber: result.value.pageNumber,
+                  error: result.value.error,
+                  operation: 'page_upload_retry'
+                }
               )
             }
           } else {
             // Handle rejected promises (shouldn't happen with try-catch, but just in case)
-            console.error('Unexpected batch promise rejection:', result.reason)
+            logger.error('Unexpected batch promise rejection', {
+              reason: result.reason,
+              operation: 'batch_upload'
+            })
             failedUploads.push({
               pageNumber: 0, // Unknown page number
               error: result.reason instanceof Error ? result.reason : new Error('Batch promise rejected'),
@@ -281,7 +289,12 @@ export class UploadService {
         }
       } catch (batchError) {
         // Catch any unexpected errors during batch processing
-        console.error(`Batch ${batchIndex + 1}/${batches.length} processing error:`, batchError)
+        logger.error(`Batch ${batchIndex + 1}/${batches.length} processing error`, {
+          batchIndex: batchIndex + 1,
+          totalBatches: batches.length,
+          error: batchError,
+          operation: 'batch_processing'
+        })
         
         // Continue processing remaining batches
         batch.forEach(page => {
@@ -294,7 +307,7 @@ export class UploadService {
       }
     }
     
-    // Comprehensive error reporting for failed uploads
+    // Comprehensive error reporting for failed uploads with progress indication
     if (failedUploads.length > 0) {
       const errorDetails = failedUploads
         .map(f => {
@@ -303,14 +316,22 @@ export class UploadService {
         })
         .join('\n  - ')
       
-      const errorMessage = `${failedUploads.length}/${totalPages} sayfa yüklenemedi:\n  - ${errorDetails}`
+      // Include progress indication in error message (Requirement 4.7)
+      const progressInfo = `(${completedPages}/${totalPages} tamamlandı)`
+      const errorMessage = `Yükleme kısmen tamamlandı. ${completedPages} sayfa yüklendi, ${failedUploads.length} sayfa yüklenemedi. ${progressInfo}\n  - ${errorDetails}`
       
       // Log comprehensive error report
-      console.error('Upload batch failures:', {
+      logger.error('Upload batch failures', {
         totalPages,
         failedCount: failedUploads.length,
+        operation: 'upload_batch_summary',
         successCount: completedPages,
-        failures: failedUploads
+        failures: failedUploads,
+        progress: {
+          total: totalPages,
+          completed: completedPages,
+          failed: failedUploads.length
+        }
       })
       
       throw new Error(errorMessage)
@@ -328,6 +349,12 @@ export class UploadService {
    * 
    * This exponential backoff helps handle temporary network issues
    * and server rate limiting without overwhelming the system.
+   * 
+   * Implements storage error handling (Requirements 1.3):
+   * - Wraps storage operations in try-catch
+   * - Transforms errors to StorageError
+   * - Provides retry logic with exponential backoff
+   * - Logs errors with context
    * 
    * @param page - The processed page to upload
    * @param maxRetries - Maximum number of retry attempts (default: 3)
@@ -348,6 +375,7 @@ export class UploadService {
         // Success - exit retry loop
         return
       } catch (error) {
+        // Storage service already throws StorageError, so we can use it directly
         lastError = error instanceof Error ? error : new Error('Unknown error')
         
         // If this was the last attempt, throw the error
@@ -362,12 +390,18 @@ export class UploadService {
     }
     
     // If we get here, all retries failed
+    // The error is already a StorageError from the storage service
     throw lastError
   }
 
   /**
    * Handles cover image upload - uses custom cover if provided,
    * otherwise uses the first page of the PDF
+   * 
+   * Implements storage error handling (Requirements 1.3):
+   * - Wraps storage operations in try-catch
+   * - Storage service already throws StorageError with proper context
+   * - Errors propagate with operation context (upload)
    * 
    * @param customCover - Optional custom cover image file
    * @param firstPage - The first page from PDF processing (fallback)
@@ -390,37 +424,43 @@ export class UploadService {
       onProgress(0)
     }
     
-    if (customCover) {
-      // Process custom cover image
-      const processor = await this.fileProcessorFactory.getProcessor(customCover)
-      const result = await processor.process(customCover, {
-        quality: UPLOAD_CONFIG.IMAGE.WEBP_QUALITY
-      })
-      
-      // Report processing complete
-      if (onProgress) {
-        onProgress(50)
+    try {
+      if (customCover) {
+        // Process custom cover image
+        const processor = await this.fileProcessorFactory.getProcessor(customCover)
+        const result = await processor.process(customCover, {
+          quality: UPLOAD_CONFIG.IMAGE.WEBP_QUALITY
+        })
+        
+        // Report processing complete
+        if (onProgress) {
+          onProgress(50)
+        }
+        
+        // Upload custom cover - storage service throws StorageError on failure
+        await this.storageService.upload(coverPath, result.blob, {
+          contentType: UPLOAD_CONFIG.IMAGE.FORMAT,
+          upsert: true
+        })
+      } else {
+        // Use first page as cover - storage service throws StorageError on failure
+        await this.storageService.upload(coverPath, firstPage.blob, {
+          contentType: UPLOAD_CONFIG.IMAGE.FORMAT,
+          upsert: true
+        })
       }
       
-      // Upload custom cover
-      await this.storageService.upload(coverPath, result.blob, {
-        contentType: UPLOAD_CONFIG.IMAGE.FORMAT,
-        upsert: true
-      })
-    } else {
-      // Use first page as cover
-      await this.storageService.upload(coverPath, firstPage.blob, {
-        contentType: UPLOAD_CONFIG.IMAGE.FORMAT,
-        upsert: true
-      })
+      // Report upload complete
+      if (onProgress) {
+        onProgress(100)
+      }
+      
+      // Return public URL for the cover
+      return this.storageService.getPublicUrl(coverPath)
+    } catch (error) {
+      // Storage service already throws StorageError with proper context
+      // Just re-throw to propagate up the call stack
+      throw error
     }
-    
-    // Report upload complete
-    if (onProgress) {
-      onProgress(100)
-    }
-    
-    // Return public URL for the cover
-    return this.storageService.getPublicUrl(coverPath)
   }
 }

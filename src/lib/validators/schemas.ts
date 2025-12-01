@@ -12,29 +12,29 @@ import { z } from 'zod';
 export const MagazineSchema = z.object({
   title: z
     .string()
-    .min(1, 'Title is required')
-    .max(200, 'Title must not exceed 200 characters')
+    .min(1, 'Başlık alanı zorunludur. Lütfen bir başlık girin.')
+    .max(200, 'Başlık en fazla 200 karakter olabilir. Lütfen daha kısa bir başlık girin.')
     .regex(
       /^[a-zA-Z0-9\s\-.,!?]+$/,
-      'Title can only contain alphanumeric characters, spaces, hyphens, periods, commas, exclamation marks, and question marks'
+      'Başlık sadece harf, rakam, boşluk ve şu işaretleri içerebilir: - . , ! ? Lütfen özel karakterleri kaldırın.'
     ),
   issue_number: z
     .number()
-    .int('Issue number must be an integer')
-    .positive('Issue number must be positive')
-    .max(9999, 'Issue number must not exceed 9999'),
+    .int('Sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.')
+    .positive('Sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.')
+    .max(9999, 'Sayı numarası en fazla 9999 olabilir. Lütfen daha küçük bir sayı girin.'),
   publication_date: z
     .string()
     .regex(
       /^\d{4}-\d{2}-\d{2}$/,
-      'Publication date must be in YYYY-MM-DD format'
+      'Yayın tarihi YYYY-AA-GG formatında olmalıdır (örnek: 2024-01-15). Lütfen doğru formatta girin.'
     )
     .refine(
       (date) => {
         const parsed = new Date(date);
         return !isNaN(parsed.getTime());
       },
-      'Publication date must be a valid date'
+      'Yayın tarihi geçerli bir tarih olmalıdır. Lütfen var olan bir tarih girin.'
     ),
 });
 
@@ -50,7 +50,7 @@ export type MagazineInput = z.infer<typeof MagazineSchema>;
  */
 export const UUIDSchema = z
   .string()
-  .uuid('Invalid UUID format');
+  .uuid('Geçersiz ID formatı. ID otomatik olarak oluşturulur, lütfen değiştirmeyin.');
 
 /**
  * Issue number validation schema for file path validation
@@ -62,9 +62,9 @@ export const UUIDSchema = z
  */
 export const IssueNumberSchema = z
   .number()
-  .int('Issue number must be an integer')
-  .positive('Issue number must be positive')
-  .max(9999, 'Issue number must not exceed 9999');
+  .int('Sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.')
+  .positive('Sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.')
+  .max(9999, 'Sayı numarası en fazla 9999 olabilir. Lütfen daha küçük bir sayı girin.');
 
 /**
  * String-based issue number schema for path sanitization
@@ -72,6 +72,6 @@ export const IssueNumberSchema = z
  */
 export const IssueNumberStringSchema = z
   .string()
-  .regex(/^\d+$/, 'Issue number must contain only digits')
+  .regex(/^\d+$/, 'Sayı numarası sadece rakamlardan oluşmalıdır. Lütfen harf veya özel karakter kullanmayın.')
   .transform((val) => parseInt(val, 10))
   .pipe(IssueNumberSchema);

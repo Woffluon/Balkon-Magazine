@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { logger } from '@/lib/services/Logger'
 
 /**
  * Wake lock return interface
@@ -65,7 +66,9 @@ export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
   const request = useCallback(async (): Promise<void> => {
     // Check if Wake Lock API is available
     if (!('wakeLock' in navigator)) {
-      console.warn('Wake Lock API not supported')
+      logger.warn('Wake Lock API not supported', {
+        operation: 'wake_lock_request'
+      })
       return
     }
 
@@ -79,7 +82,10 @@ export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
         setIsActive(false)
       })
     } catch (error) {
-      console.warn('Wake lock request failed:', error)
+      logger.warn('Wake lock request failed', {
+        error,
+        operation: 'wake_lock_request'
+      })
       setIsActive(false)
     }
   }, [])
@@ -95,7 +101,10 @@ export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
       try {
         await wakeLock.release()
       } catch (error) {
-        console.warn('Wake lock release failed:', error)
+        logger.warn('Wake lock release failed', {
+          error,
+          operation: 'wake_lock_release'
+        })
       } finally {
         setWakeLock(null)
         setIsActive(false)
@@ -126,7 +135,12 @@ export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
   useEffect(() => {
     return () => {
       if (wakeLock) {
-        wakeLock.release().catch(console.warn)
+        wakeLock.release().catch((error) => {
+          logger.warn('Wake lock cleanup failed', {
+            error,
+            operation: 'wake_lock_cleanup'
+          })
+        })
       }
     }
   }, [wakeLock])

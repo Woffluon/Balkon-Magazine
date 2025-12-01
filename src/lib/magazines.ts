@@ -2,43 +2,55 @@ import { unstable_cache } from 'next/cache'
 import { createPublicClient } from '@/lib/supabase/server'
 import { Magazine } from '@/types/magazine'
 import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
-import { withRetry } from '@/lib/utils/retry'
+import { ErrorHandler, Result } from '@/lib/errors/errorHandler'
+import { logger } from '@/lib/services/Logger'
 
 /**
  * Retrieves all published magazines with request-level caching
  * Uses the repository pattern to abstract database access
  * Cached for 1 hour with 'magazines' tag for on-demand revalidation
  * 
- * Implements retry logic (Requirements 7.1-7.5):
- * - Retries up to 3 times on network failures
+ * Implements retry logic (Requirements 6.2):
+ * - Repository layer handles retries automatically
+ * - Retries up to 3 times on transient failures
  * - Uses exponential backoff (1s, 2s, 4s)
  * - Returns data immediately on successful retry
  * 
- * Implements cache strategy (Requirements 8.1-8.5):
- * - Caches results for 3600 seconds (1 hour)
- * - Uses 'magazines' tag for granular invalidation
- * - Reduces database query count by ~80% for repeated requests
+ * Implements error handling (Requirement 1.2):
+ * - Wraps database operations in try-catch
+ * - Returns Result<Magazine[]> instead of throwing
+ * - Logs errors with function context
  * 
- * @returns Promise resolving to array of published magazines
- * @throws {DatabaseError} If database query fails after all retries
+ * @returns Promise resolving to Result containing array of published magazines or error
  */
 export const getPublishedMagazines = unstable_cache(
-  async (): Promise<Magazine[]> => {
-    const supabase = createPublicClient()
-    const repository = new SupabaseMagazineRepository(supabase)
-    
-    // Wrap repository call with retry logic (Requirements 7.1-7.5)
-    const allMagazines = await withRetry(
-      () => repository.findAll(),
-      {
-        maxRetries: 3,
-        delay: 1000,
-        backoff: 'exponential'
-      }
-    )
-    
-    // Filter for published magazines
-    return allMagazines.filter(magazine => magazine.is_published)
+  async (): Promise<Result<Magazine[]>> => {
+    try {
+      const supabase = createPublicClient()
+      const repository = new SupabaseMagazineRepository(supabase)
+      
+      // Repository already has retry logic built-in (Requirements 6.2)
+      const allMagazines = await repository.findAll()
+      
+      // Filter for published magazines
+      const publishedMagazines = allMagazines.filter(magazine => magazine.is_published)
+      
+      return ErrorHandler.success(publishedMagazines)
+    } catch (error) {
+      // Log error with function context (Requirement 1.2)
+      const appError = ErrorHandler.handleUnknownError(error)
+      logger.error('Failed to fetch published magazines', {
+        function: 'getPublishedMagazines',
+        operation: 'findAll',
+        error: {
+          code: appError.code,
+          message: appError.message,
+          stack: appError.stack,
+        },
+      })
+      
+      return ErrorHandler.failure(appError)
+    }
   },
   ['published-magazines'], // Cache key
   {
@@ -52,15 +64,11 @@ export const getPublishedMagazines = unstable_cache(
  * Uses the repository pattern to abstract database access
  * Cached for 1 hour with magazine-specific tag for granular invalidation
  * 
- * Implements retry logic (Requirements 7.1-7.5):
- * - Retries up to 3 times on network failures
+ * Implements retry logic (Requirements 6.2):
+ * - Repository layer handles retries automatically
+ * - Retries up to 3 times on transient failures
  * - Uses exponential backoff (1s, 2s, 4s)
  * - Returns data immediately on successful retry
- * 
- * Implements cache strategy (Requirements 8.1-8.5):
- * - Caches results for 3600 seconds (1 hour)
- * - Uses magazine-specific tag for granular invalidation
- * - Reduces database query count by ~80% for repeated requests
  * 
  * @param issueNumber - The issue number to retrieve
  * @returns Promise resolving to magazine or null if not found
@@ -72,15 +80,8 @@ export const getMagazineByIssue = (issueNumber: number) => {
       const supabase = createPublicClient()
       const repository = new SupabaseMagazineRepository(supabase)
       
-      // Wrap repository call with retry logic (Requirements 7.1-7.5)
-      return await withRetry(
-        () => repository.findByIssue(issueNumber),
-        {
-          maxRetries: 3,
-          delay: 1000,
-          backoff: 'exponential'
-        }
-      )
+      // Repository already has retry logic built-in (Requirements 6.2)
+      return await repository.findByIssue(issueNumber)
     },
     [`magazine-${issueNumber}`], // Cache key specific to issue
     {

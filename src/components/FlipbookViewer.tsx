@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useResponsiveDimensions } from '@/hooks/useResponsiveDimensions'
+import { logger } from '@/lib/services/Logger'
 
 type PageFlipAPI = { flipNext: () => void; flipPrev: () => void; getCurrentPageIndex: () => number }
 type PageFlipHandle = { pageFlip: () => PageFlipAPI }
@@ -39,28 +40,40 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
   const bookRef = useRef<PageFlipHandle | null>(null)
   const [currentPage, setCurrentPage] = useState(0)
   const [preloadedPages, setPreloadedPages] = useState<Set<number>>(new Set())
+  const [failedPages, setFailedPages] = useState<Set<number>>(new Set())
   const [pageAnnouncement, setPageAnnouncement] = useState('')
 
   // Use custom hook for responsive dimensions (Requirements: 4.1, 4.2, 4.3, 4.4, 4.5)
   const dims = useResponsiveDimensions(containerRef, { w: ASPECT_W, h: ASPECT_H })
 
   // Image preload with AbortController
+  // Handles image loading errors gracefully and prevents retry loops
+  // Requirements: 2.4 - Handle image loading errors gracefully
   useEffect(() => {
     const abortController = new AbortController()
     const { signal } = abortController
     
     const nextIndices = [currentPage + 1, currentPage + 2, currentPage + 3]
     nextIndices.forEach((idx) => {
-      if (idx < pages.length && !preloadedPages.has(idx)) {
+      // Skip if already preloaded or if it failed before (prevent retry loops)
+      if (idx < pages.length && !preloadedPages.has(idx) && !failedPages.has(idx)) {
         const img = new window.Image()
         img.onload = () => {
           if (!signal.aborted) {
             setPreloadedPages((prev) => new Set([...prev, idx]))
           }
         }
-        img.onerror = (error) => {
+        img.onerror = () => {
           if (!signal.aborted) {
-            console.warn(`Failed to preload page ${idx}:`, error)
+            // Mark page as failed to prevent retry loops
+            setFailedPages((prev) => new Set([...prev, idx]))
+            // Log the failure but don't throw - graceful degradation
+            if (typeof window !== 'undefined') {
+              logger.warn(`Failed to preload page ${idx}, will show placeholder`, {
+                pageIndex: idx,
+                operation: 'image_preload'
+              })
+            }
           }
         }
         img.src = pages[idx]
@@ -68,7 +81,7 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
     })
     
     return () => abortController.abort()
-  }, [currentPage, pages, preloadedPages])
+  }, [currentPage, pages, preloadedPages, failedPages])
 
   const onFlip = useCallback((e: { data: number }) => {
     setCurrentPage(e.data)
@@ -173,10 +186,30 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
         {pages.map((url, index) => {
           const shouldLoad = index === currentPage || index === currentPage - 1 || (index > currentPage && index <= currentPage + 3) || preloadedPages.has(index)
           const shouldPrioritize = index >= currentPage && index <= currentPage + 3
+          const hasFailed = failedPages.has(index)
           
           return (
             <div key={index} className="page overflow-hidden" style={{ width: dims.w, height: dims.h }}>
-              {shouldLoad ? (
+              {hasFailed ? (
+                // Show error placeholder for failed images
+                <div className="w-full h-full bg-neutral-100 flex flex-col items-center justify-center text-neutral-500">
+                  <svg
+                    className="w-16 h-16 mb-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <span className="text-sm">Sayfa yüklenemedi</span>
+                </div>
+              ) : shouldLoad ? (
                 <Image
                   src={url}
                   alt={`Dergi Sayfası ${index + 1}`}
@@ -184,6 +217,10 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
                   height={dims.h}
                   priority={shouldPrioritize}
                   style={{ objectFit: 'cover', width: '100%', height: '100%' }}
+                  onError={() => {
+                    // Mark as failed if Image component fails to load
+                    setFailedPages((prev) => new Set([...prev, index]))
+                  }}
                 />
               ) : (
                 <div aria-hidden className="w-full h-full bg-neutral-100" />

@@ -57,7 +57,9 @@ export class FileProcessorFactory {
     
     if (!processor) {
       throw new ProcessingError(
-        `No processor found for file type: ${file.type}. Supported types: PDF, images (JPEG, PNG, WebP, etc.)`
+        `No processor found for file type: ${file.type}. Supported types: PDF, images (JPEG, PNG, WebP, etc.)`,
+        'file_validation',
+        'Desteklenmeyen dosya türü'
       )
     }
     

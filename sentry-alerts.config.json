@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Sentry Alert Configuration for Balkon Dergisi Platform",
+  "version": "1.0.0",
+  "project": "balkon-dergisi",
+  "environment": "production",
+  "alerts": [
+    {
+      "id": "critical-errors-immediate",
+      "name": "Critical Errors - Immediate Notification",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_attribute.EventAttributeCondition",
+          "attribute": "level",
+          "match": "eq",
+          "value": "fatal"
+        },
+        {
+          "id": "sentry.rules.conditions.tagged_event.TaggedEventCondition",
+          "key": "severity",
+          "match": "eq",
+          "value": "critical"
+        }
+      ],
+      "filters": [
+        {
+          "id": "sentry.rules.filters.issue_occurrences.IssueOccurrencesFilter",
+          "value": 1
+        }
+      ],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        },
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "balkon-dergisi",
+          "channel": "#alerts-critical",
+          "tags": "severity,environment,level"
+        }
+      ],
+      "actionMatch": "any",
+      "frequency": 5,
+      "description": "Immediate notification for critical errors requiring urgent attention"
+    },
+    {
+      "id": "high-error-rate",
+      "name": "High Error Rate - 10+ errors/minute",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "value": 10,
+          "interval": "1m",
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        },
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "balkon-dergisi",
+          "channel": "#alerts-errors",
+          "tags": "environment,url"
+        }
+      ],
+      "actionMatch": "all",
+      "frequency": 15,
+      "description": "Alert when error rate exceeds 10 errors per minute"
+    },
+    {
+      "id": "medium-error-rate",
+      "name": "Medium Error Rate - 50+ errors/5min",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "value": 50,
+          "interval": "5m",
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        }
+      ],
+      "actionMatch": "all",
+      "frequency": 30,
+      "description": "Alert for medium-priority error rate spikes"
+    },
+    {
+      "id": "performance-degradation-p95",
+      "name": "Performance Degradation - P95 > 5s",
+      "type": "metric",
+      "enabled": true,
+      "environment": "production",
+      "dataset": "transactions",
+      "query": "",
+      "aggregate": "p95(transaction.duration)",
+      "timeWindow": 5,
+      "thresholdType": "above",
+      "resolveThreshold": 4000,
+      "triggers": [
+        {
+          "label": "critical",
+          "alertThreshold": 5000,
+          "actions": [
+            {
+              "type": "email",
+              "targetType": "team",
+              "targetIdentifier": "development-team"
+            },
+            {
+              "type": "slack",
+              "workspace": "balkon-dergisi",
+              "channel": "#alerts-performance"
+            }
+          ]
+        },
+        {
+          "label": "warning",
+          "alertThreshold": 4000,
+          "actions": [
+            {
+              "type": "email",
+              "targetType": "team",
+              "targetIdentifier": "development-team"
+            }
+          ]
+        }
+      ],
+      "description": "Alert when P95 transaction duration exceeds 5 seconds"
+    },
+    {
+      "id": "slow-database-queries",
+      "name": "Slow Database Queries - P95 > 2s",
+      "type": "metric",
+      "enabled": true,
+      "environment": "production",
+      "dataset": "transactions",
+      "query": "transaction.op:db.query",
+      "aggregate": "p95(transaction.duration)",
+      "timeWindow": 5,
+      "thresholdType": "above",
+      "resolveThreshold": 1500,
+      "triggers": [
+        {
+          "label": "critical",
+          "alertThreshold": 2000,
+          "actions": [
+            {
+              "type": "email",
+              "targetType": "team",
+              "targetIdentifier": "development-team"
+            },
+            {
+              "type": "slack",
+              "workspace": "balkon-dergisi",
+              "channel": "#alerts-performance"
+            }
+          ]
+        }
+      ],
+      "description": "Alert when database query P95 duration exceeds 2 seconds"
+    },
+    {
+      "id": "slow-api-responses",
+      "name": "Slow API Responses - P95 > 3s",
+      "type": "metric",
+      "enabled": true,
+      "environment": "production",
+      "dataset": "transactions",
+      "query": "transaction.op:http.server",
+      "aggregate": "p95(transaction.duration)",
+      "timeWindow": 5,
+      "thresholdType": "above",
+      "resolveThreshold": 2500,
+      "triggers": [
+        {
+          "label": "critical",
+          "alertThreshold": 3000,
+          "actions": [
+            {
+              "type": "email",
+              "targetType": "team",
+              "targetIdentifier": "development-team"
+            },
+            {
+              "type": "slack",
+              "workspace": "balkon-dergisi",
+              "channel": "#alerts-performance"
+            }
+          ]
+        }
+      ],
+      "description": "Alert when API response P95 duration exceeds 3 seconds"
+    },
+    {
+      "id": "new-error-types",
+      "name": "New Error Types - Daily Digest",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.first_seen_event.FirstSeenEventCondition"
+        }
+      ],
+      "filters": [],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        }
+      ],
+      "actionMatch": "all",
+      "frequency": 1440,
+      "description": "Daily digest of new error types appearing in production"
+    },
+    {
+      "id": "user-impacting-errors",
+      "name": "User-Impacting Errors - 5+ users affected",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventUniqueUserFrequencyCondition",
+          "value": 5,
+          "interval": "10m",
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        },
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "balkon-dergisi",
+          "channel": "#alerts-user-impact",
+          "tags": "environment,url,user"
+        }
+      ],
+      "actionMatch": "all",
+      "frequency": 10,
+      "description": "Alert when errors affect 5 or more unique users in 10 minutes"
+    },
+    {
+      "id": "authentication-failures",
+      "name": "Authentication Failures - High Rate",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.tagged_event.TaggedEventCondition",
+          "key": "error.type",
+          "match": "eq",
+          "value": "AuthenticationError"
+        },
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "value": 20,
+          "interval": "5m",
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        },
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "balkon-dergisi",
+          "channel": "#alerts-security",
+          "tags": "environment,url"
+        }
+      ],
+      "actionMatch": "all",
+      "frequency": 15,
+      "description": "Alert for high rate of authentication failures (potential security issue)"
+    },
+    {
+      "id": "storage-quota-exceeded",
+      "name": "Storage Quota Exceeded",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.tagged_event.TaggedEventCondition",
+          "key": "error.code",
+          "match": "eq",
+          "value": "STORAGE_QUOTA_EXCEEDED"
+        }
+      ],
+      "filters": [],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        },
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "balkon-dergisi",
+          "channel": "#alerts-critical",
+          "tags": "severity,environment"
+        }
+      ],
+      "actionMatch": "all",
+      "frequency": 5,
+      "description": "Critical alert for storage quota exceeded"
+    },
+    {
+      "id": "database-connection-failures",
+      "name": "Database Connection Failures",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.tagged_event.TaggedEventCondition",
+          "key": "error.type",
+          "match": "eq",
+          "value": "DatabaseError"
+        },
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "value": 5,
+          "interval": "5m",
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        },
+        {
+          "id": "sentry.integrations.slack.notify_action.SlackNotifyServiceAction",
+          "workspace": "balkon-dergisi",
+          "channel": "#alerts-critical",
+          "tags": "severity,environment,error.operation"
+        }
+      ],
+      "actionMatch": "all",
+      "frequency": 10,
+      "description": "Alert for database connection failures"
+    },
+    {
+      "id": "upload-failures",
+      "name": "Upload Failures - High Rate",
+      "type": "issue",
+      "enabled": true,
+      "environment": "production",
+      "conditions": [
+        {
+          "id": "sentry.rules.conditions.tagged_event.TaggedEventCondition",
+          "key": "operation",
+          "match": "eq",
+          "value": "upload"
+        },
+        {
+          "id": "sentry.rules.conditions.event_frequency.EventFrequencyCondition",
+          "value": 10,
+          "interval": "10m",
+          "comparisonType": "count"
+        }
+      ],
+      "filters": [],
+      "actions": [
+        {
+          "id": "sentry.mail.actions.NotifyEmailAction",
+          "targetType": "Team",
+          "targetIdentifier": "development-team"
+        }
+      ],
+      "actionMatch": "all",
+      "frequency": 20,
+      "description": "Alert for high rate of upload failures"
+    }
+  ],
+  "notificationSettings": {
+    "email": {
+      "enabled": true,
+      "teams": ["development-team"],
+      "digestSchedule": "daily"
+    },
+    "slack": {
+      "enabled": true,
+      "workspace": "balkon-dergisi",
+      "channels": {
+        "critical": "#alerts-critical",
+        "errors": "#alerts-errors",
+        "performance": "#alerts-performance",
+        "userImpact": "#alerts-user-impact",
+        "security": "#alerts-security"
+      }
+    },
+    "pagerduty": {
+      "enabled": false,
+      "serviceKey": "CONFIGURE_IF_NEEDED"
+    }
+  },
+  "thresholds": {
+    "errorRate": {
+      "critical": 10,
+      "high": 50,
+      "medium": 100
+    },
+    "performance": {
+      "transactionP95": 5000,
+      "databaseP95": 2000,
+      "apiP95": 3000
+    },
+    "userImpact": {
+      "affectedUsers": 5,
+      "timeWindow": "10m"
+    }
+  },
+  "environments": {
+    "production": {
+      "enabled": true,
+      "allAlertsActive": true
+    },
+    "staging": {
+      "enabled": true,
+      "allAlertsActive": false,
+      "testAlertsOnly": true
+    },
+    "development": {
+      "enabled": false,
+      "allAlertsActive": false
+    }
+  }
+}

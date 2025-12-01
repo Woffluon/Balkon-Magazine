@@ -1,10 +1,12 @@
 import dynamic from 'next/dynamic'
 import FlipbookViewerSkeleton from '@/components/FlipbookViewerSkeleton'
+import { FlipbookViewerErrorBoundary } from '@/components/FlipbookViewerErrorBoundary'
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { getMagazineByIssue } from '@/lib/magazines'
+import { logger } from '@/lib/services/Logger'
 
 const FlipbookViewer = dynamic(() => import('@/components/FlipbookViewer'), {
   loading: () => <FlipbookViewerSkeleton />,
@@ -21,13 +23,25 @@ export async function generateStaticParams() {
   const { getPublishedMagazines } = await import('@/lib/magazines')
   
   try {
-    const magazines = await getPublishedMagazines()
+    const result = await getPublishedMagazines()
     
-    return magazines.map((magazine) => ({
+    // Check if result is successful
+    if (!result.success) {
+      logger.error('Error generating static params', {
+        error: result.error,
+        operation: 'generate_static_params'
+      })
+      return []
+    }
+    
+    return result.data.map((magazine) => ({
       sayi: magazine.issue_number.toString(),
     }))
   } catch (error) {
-    console.error('Error generating static params:', error)
+    logger.error('Error generating static params', {
+      error,
+      operation: 'generate_static_params'
+    })
     // Return empty array to allow on-demand generation
     return []
   }
@@ -40,27 +54,57 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
 
   const storageService = new SupabaseStorageService(supabase)
 
-  // Parallel fetch: magazine metadata and file list simultaneously
-  // Both queries execute in parallel for improved TTFB (expected ~30% improvement vs sequential)
-  // Magazine data errors trigger error boundary (Requirements: 12.4, 12.5)
-  // File listing errors are handled gracefully with fallback to cover image
-  // Requirements: 6.1, 6.2, 6.3, 6.4
-  // Uses cached getMagazineByIssue for improved performance (Requirements 8.1-8.5)
-  const [magazine, filesResult] = await Promise.all([
-    getMagazineByIssue(sayi), // Throws error to trigger error boundary if magazine fetch fails
-    (async () => {
-      try {
-        const pagesPath = STORAGE_PATHS.getPagesPath(sayi)
-        return await storageService.list(pagesPath)
-      } catch (error) {
-        console.error('Error listing page files:', error)
-        // Return empty array - page files are optional, can fallback to cover
-        return []
-      }
-    })()
-  ])
+  // Fetch magazine metadata with error handling
+  // Requirements: 1.2 - Wrap database queries in try-catch and return typed error responses
+  let magazine: Awaited<ReturnType<typeof getMagazineByIssue>> | null = null
+  try {
+    magazine = await getMagazineByIssue(sayi)
+  } catch (error) {
+    const { logger } = await import('@/lib/services/Logger')
+    const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+    
+    const appError = ErrorHandler.handleUnknownError(error)
+    logger.error('Failed to fetch magazine by issue', {
+      operation: 'getMagazineByIssue',
+      issueNumber: sayi,
+      error: appError.message,
+      code: appError.code,
+    })
+    
+    // Re-throw to trigger error boundary
+    throw appError
+  }
 
   if (!magazine) return notFound()
+
+  // Fetch storage files with error handling
+  // Requirements: 1.3 - Wrap storage operations in try-catch and handle partial failures
+  let filesResult: Awaited<ReturnType<typeof storageService.list>> = []
+  try {
+    const pagesPath = STORAGE_PATHS.getPagesPath(sayi)
+    filesResult = await storageService.list(pagesPath)
+  } catch (error) {
+    const { logger } = await import('@/lib/services/Logger')
+    const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+    
+    const appError = ErrorHandler.handleStorageError(
+      error instanceof Error ? error : new Error(String(error)),
+      'list',
+      STORAGE_PATHS.getPagesPath(sayi)
+    )
+    
+    logger.warn('Failed to list page files, will fallback to cover image', {
+      operation: 'listPageFiles',
+      issueNumber: sayi,
+      path: STORAGE_PATHS.getPagesPath(sayi),
+      error: appError.message,
+      code: appError.code,
+    })
+    
+    // Don't throw - this is a partial failure
+    // Return empty array to fallback to cover image
+    filesResult = []
+  }
 
   // Process files to generate image URLs
   let imageUrls: string[] = []
@@ -125,7 +169,9 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
         {/* Magazine Viewer */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 sm:p-8">
           {imageUrls.length > 0 ? (
-            <FlipbookViewer imageUrls={imageUrls} />
+            <FlipbookViewerErrorBoundary issueNumber={sayi}>
+              <FlipbookViewer imageUrls={imageUrls} />
+            </FlipbookViewerErrorBoundary>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
               <div className="text-4xl mb-4">📚</div>
@@ -148,7 +194,25 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
   const sayi = Number(sayiStr)
   
   // Use cached getMagazineByIssue for improved performance (Requirements 8.1-8.5)
-  const magazine = await getMagazineByIssue(sayi)
+  // Requirements: 1.2 - Wrap database queries in try-catch
+  let magazine: Awaited<ReturnType<typeof getMagazineByIssue>> | null = null
+  try {
+    magazine = await getMagazineByIssue(sayi)
+  } catch (error) {
+    const { logger } = await import('@/lib/services/Logger')
+    const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+    
+    const appError = ErrorHandler.handleUnknownError(error)
+    logger.error('Failed to fetch magazine metadata', {
+      operation: 'generateMetadata',
+      issueNumber: sayi,
+      error: appError.message,
+      code: appError.code,
+    })
+    
+    // Return empty metadata on error
+    return {}
+  }
 
   if (!magazine) return {}
 

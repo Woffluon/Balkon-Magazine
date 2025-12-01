@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { env } from '@/lib/env'
+import { logger } from '@/lib/services/Logger'
 
 /**
  * Creates a simple Supabase client for public data access without cookies
@@ -37,15 +38,31 @@ export async function createClient(): Promise<SupabaseClient> {
         set(name: string, value: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value, ...options })
-          } catch {
-            // Ignore errors in read-only contexts
+          } catch (error) {
+            // Log cookie operation failures but don't throw (non-blocking)
+            logger.error('Cookie set operation failed', {
+              operation: 'cookie_set',
+              cookieName: name,
+              errorMessage: error instanceof Error ? error.message : String(error),
+              errorType: error instanceof Error ? error.constructor.name : typeof error,
+              component: 'supabase_server_client',
+              reason: 'read-only or restricted context',
+            })
           }
         },
         remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options })
-          } catch {
-            // Ignore errors in read-only contexts
+          } catch (error) {
+            // Log cookie operation failures but don't throw (non-blocking)
+            logger.error('Cookie remove operation failed', {
+              operation: 'cookie_remove',
+              cookieName: name,
+              errorMessage: error instanceof Error ? error.message : String(error),
+              errorType: error instanceof Error ? error.constructor.name : typeof error,
+              component: 'supabase_server_client',
+              reason: 'read-only or restricted context',
+            })
           }
         },
       },

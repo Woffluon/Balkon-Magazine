@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import { Toaster } from "@/components/ui/toaster";
+import { GlobalErrorHandlerProvider } from "@/components/GlobalErrorHandlerProvider";
 import { env } from "@/lib/env";
 import "./globals.css";
 
@@ -266,6 +267,8 @@ export default function RootLayout({
             __html: escapeJsonLd(structuredData)
           }}
         />
+        {/* Global error handler for uncaught errors and promise rejections */}
+        <GlobalErrorHandlerProvider />
         <Toaster />
         <AppShell>{children}</AppShell>
       </body>

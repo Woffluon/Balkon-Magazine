@@ -35,6 +35,24 @@ export interface IStorageService {
   delete(paths: string[]): Promise<void>
 
   /**
+   * Deletes multiple files with partial retry support
+   * 
+   * Implements Requirement 6.3: Partial storage failures retry selectively
+   * - Tracks successful vs failed operations
+   * - Only retries failed operations
+   * - Preserves successful operation results
+   * - Returns combined results
+   * 
+   * @param paths - Array of file paths to delete
+   * @param config - Optional retry configuration
+   * @returns Promise resolving to batch operation results
+   */
+  deleteWithPartialRetry(
+    paths: string[],
+    config?: Partial<import('@/lib/utils/retry').RetryConfig>
+  ): Promise<import('@/lib/utils/retry').BatchOperationResult<string>>
+
+  /**
    * Moves a file from one path to another
    * 
    * @param fromPath - Source file path

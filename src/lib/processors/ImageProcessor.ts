@@ -44,7 +44,11 @@ export class ImageProcessor implements IFileProcessor {
       // Get canvas context
       const ctx = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
       if (!ctx) {
-        throw new ProcessingError('Canvas context unavailable')
+        throw new ProcessingError(
+          'Canvas context unavailable',
+          'image_conversion',
+          'Görüntü işlenirken bir hata oluştu'
+        )
       }
       
       // Draw image to canvas
@@ -67,9 +71,21 @@ export class ImageProcessor implements IFileProcessor {
         throw error
       }
       if (error instanceof Error) {
-        throw new ProcessingError(`Image processing failed: ${error.message}`, error)
+        throw new ProcessingError(
+          `Image processing failed: ${error.message}`,
+          'image_conversion',
+          'Görüntü işlenirken bir hata oluştu',
+          false,
+          error
+        )
       }
-      throw new ProcessingError('Image processing failed: Unknown error', error)
+      throw new ProcessingError(
+        'Image processing failed: Unknown error',
+        'image_conversion',
+        'Görüntü işlenirken bir hata oluştu',
+        false,
+        error
+      )
     } finally {
       // Clean up object URL
       URL.revokeObjectURL(url)
@@ -88,7 +104,11 @@ export class ImageProcessor implements IFileProcessor {
       const img = new Image()
       
       img.onload = () => resolve(img)
-      img.onerror = () => reject(new ProcessingError('Failed to load image'))
+      img.onerror = () => reject(new ProcessingError(
+        'Failed to load image',
+        'image_conversion',
+        'Görüntü yüklenirken bir hata oluştu'
+      ))
       
       img.src = url
     })
@@ -108,7 +128,11 @@ export class ImageProcessor implements IFileProcessor {
           if (blob) {
             resolve(blob)
           } else {
-            reject(new ProcessingError('Failed to convert canvas to blob'))
+            reject(new ProcessingError(
+              'Failed to convert canvas to blob',
+              'image_conversion',
+              'Görüntü dönüştürülürken bir hata oluştu'
+            ))
           }
         },
         IMAGE_CONFIG.FORMAT,

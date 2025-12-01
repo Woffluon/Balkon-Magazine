@@ -15,6 +15,7 @@ import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageSe
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { rateLimiter } from '@/lib/services/rateLimiting'
 import { verifyCSRFOrigin, requireAdmin } from '@/lib/services/authorization'
+import type { Result } from '@/lib/errors/errorHandler'
 
 /**
  * Service factory helper function
@@ -31,112 +32,280 @@ async function createMagazineService(): Promise<MagazineService> {
 /**
  * Adds or updates a magazine record in the database
  * Uses upsert logic based on issue_number
+ * 
+ * Implements storage error handling (Requirements 1.3):
+ * - Wraps operations in try-catch
+ * - Returns Result<void> type
+ * - Logs errors with context
+ * 
+ * @returns Result<void> indicating success or failure
  */
-export async function addMagazineRecord(formData: FormData) {
-  // Require admin role
-  const authContext = await requireAdmin()
-  const userId = authContext.userId
+export async function addMagazineRecord(formData: FormData): Promise<Result<void>> {
+  const { logger } = await import('@/lib/services/Logger')
+  const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
-  // Verify CSRF origin
-  await verifyCSRFOrigin()
-  
-  // Check upload rate limit
-  if (!rateLimiter.checkUploadLimit(userId)) {
-    const resetTime = rateLimiter.getUploadResetTime(userId)
-    const minutesRemaining = resetTime ? Math.ceil(resetTime / 60000) : 60
+  try {
+    // Require admin role
+    const authContext = await requireAdmin()
+    const userId = authContext.userId
     
-    throw new Error(
-      `Upload limit exceeded. Maximum 10 uploads per hour. Please try again in ${minutesRemaining} minutes.`
-    )
+    logger.info('Add magazine record request received', {
+      operation: 'addMagazineRecord',
+      userId
+    })
+    
+    // Verify CSRF origin
+    await verifyCSRFOrigin()
+    
+    // Check upload rate limit
+    if (!rateLimiter.checkUploadLimit(userId)) {
+      const resetTime = rateLimiter.getUploadResetTime(userId)
+      const minutesRemaining = resetTime ? Math.ceil(resetTime / 60000) : 60
+      
+      const { ValidationError } = await import('@/lib/errors/AppError')
+      throw new ValidationError(
+        `Upload limit exceeded. Maximum 10 uploads per hour. Please try again in ${minutesRemaining} minutes.`,
+        'rate_limit',
+        'upload_limit',
+        `Yükleme limiti aşıldı. Lütfen ${minutesRemaining} dakika sonra tekrar deneyin.`
+      )
+    }
+    
+    const data = parseFormDataWithZod(formData, createMagazineSchema)
+    
+    logger.info('Validated add magazine request', {
+      operation: 'addMagazineRecord',
+      issueNumber: data.issue_number,
+      title: data.title,
+      userId
+    })
+    
+    const magazineService = await createMagazineService()
+    await magazineService.createMagazine(data)
+    
+    // Record successful upload attempt
+    rateLimiter.recordUploadAttempt(userId)
+    
+    logger.info('Magazine record added successfully', {
+      operation: 'addMagazineRecord',
+      issueNumber: data.issue_number,
+      userId
+    })
+    
+    // Revalidate cache and paths (Requirements 8.2, 8.4)
+    revalidateTag('magazines') // Invalidate magazines cache
+    revalidatePath('/admin')
+    revalidatePath('/')
+    revalidatePath(`/dergi/${data.issue_number}`)
+    
+    return ErrorHandler.success(undefined)
+  } catch (error) {
+    logger.error('Failed to add magazine record', {
+      operation: 'addMagazineRecord',
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
+    const appError = ErrorHandler.handleUnknownError(error)
+    return ErrorHandler.failure(appError)
   }
-  
-  const data = parseFormDataWithZod(formData, createMagazineSchema)
-  
-  const magazineService = await createMagazineService()
-  await magazineService.createMagazine(data)
-  
-  // Record successful upload attempt
-  rateLimiter.recordUploadAttempt(userId)
-  
-  // Revalidate cache and paths (Requirements 8.2, 8.4)
-  revalidateTag('magazines') // Invalidate magazines cache
-  revalidatePath('/admin')
-  revalidatePath('/')
-  revalidatePath(`/dergi/${data.issue_number}`)
 }
 
 /**
  * Deletes a magazine and all its associated storage files
+ * 
+ * Implements transactional consistency (Requirements 1.6, 6.4):
+ * - Returns Result<void> type for type-safe error handling
+ * - Logs all operations with context
+ * - Provides detailed error responses
+ * - Maintains transactional consistency (storage-first, database-second)
  */
-export async function deleteMagazine(formData: FormData) {
-  // Require admin role
-  await requireAdmin()
+export async function deleteMagazine(formData: FormData): Promise<Result<void>> {
+  const { logger } = await import('@/lib/services/Logger')
+  const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
-  // Verify CSRF origin
-  await verifyCSRFOrigin()
-  
-  const data = parseFormDataWithZod(formData, deleteMagazineSchema)
-  
-  const magazineService = await createMagazineService()
-  await magazineService.deleteMagazine(data.id, data.issue_number)
-  
-  // Revalidate cache and paths (Requirements 8.2, 8.4)
-  revalidateTag('magazines') // Invalidate magazines cache
-  revalidatePath('/admin')
-  revalidatePath('/')
-  revalidatePath(`/dergi/${data.issue_number}`)
+  try {
+    // Require admin role
+    const authContext = await requireAdmin()
+    
+    logger.info('Delete magazine request received', {
+      operation: 'deleteMagazine',
+      userId: authContext.userId
+    })
+    
+    // Verify CSRF origin
+    await verifyCSRFOrigin()
+    
+    const data = parseFormDataWithZod(formData, deleteMagazineSchema)
+    
+    logger.info('Validated delete magazine request', {
+      operation: 'deleteMagazine',
+      magazineId: data.id,
+      issueNumber: data.issue_number,
+      userId: authContext.userId
+    })
+    
+    const magazineService = await createMagazineService()
+    await magazineService.deleteMagazine(data.id, data.issue_number)
+    
+    logger.info('Magazine deleted successfully', {
+      operation: 'deleteMagazine',
+      magazineId: data.id,
+      issueNumber: data.issue_number,
+      userId: authContext.userId
+    })
+    
+    // Revalidate cache and paths (Requirements 8.2, 8.4)
+    revalidateTag('magazines') // Invalidate magazines cache
+    revalidatePath('/admin')
+    revalidatePath('/')
+    revalidatePath(`/dergi/${data.issue_number}`)
+    
+    return ErrorHandler.success(undefined)
+  } catch (error) {
+    logger.error('Failed to delete magazine', {
+      operation: 'deleteMagazine',
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
+    const appError = ErrorHandler.handleUnknownError(error)
+    return ErrorHandler.failure(appError)
+  }
 }
 
 /**
  * Renames a magazine by updating issue number and/or title
  * Moves all associated storage files to new paths
+ * 
+ * Implements comprehensive error handling (Requirements 1.7, 5.3, 6.5):
+ * - Wraps entire operation in try-catch
+ * - Tracks individual file operation results
+ * - Uses Promise.allSettled for parallel operations (in MagazineService)
+ * - Returns detailed failure reports
+ * - Implements partial success handling
+ * 
+ * @returns Result<void> with detailed error information on failure
  */
-export async function renameMagazine(formData: FormData) {
-  // Require admin role
-  await requireAdmin()
+export async function renameMagazine(formData: FormData): Promise<Result<void>> {
+  const { logger } = await import('@/lib/services/Logger')
+  const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
-  // Verify CSRF origin
-  await verifyCSRFOrigin()
-  
-  const data = parseFormDataWithZod(formData, renameMagazineSchema)
-  
-  const magazineService = await createMagazineService()
-  await magazineService.renameMagazine(
-    data.id,
-    data.old_issue,
-    data.new_issue,
-    data.new_title
-  )
-  
-  // Revalidate cache and paths (Requirements 8.2, 8.4)
-  revalidateTag('magazines') // Invalidate magazines cache
-  revalidatePath('/admin')
-  revalidatePath('/')
-  revalidatePath(`/dergi/${data.old_issue}`)
-  revalidatePath(`/dergi/${data.new_issue}`)
+  try {
+    // Require admin role
+    const authContext = await requireAdmin()
+    
+    logger.info('Rename magazine request received', {
+      operation: 'renameMagazine',
+      userId: authContext.userId
+    })
+    
+    // Verify CSRF origin
+    await verifyCSRFOrigin()
+    
+    const data = parseFormDataWithZod(formData, renameMagazineSchema)
+    
+    logger.info('Validated rename magazine request', {
+      operation: 'renameMagazine',
+      magazineId: data.id,
+      oldIssue: data.old_issue,
+      newIssue: data.new_issue,
+      newTitle: data.new_title,
+      userId: authContext.userId
+    })
+    
+    const magazineService = await createMagazineService()
+    await magazineService.renameMagazine(
+      data.id,
+      data.old_issue,
+      data.new_issue,
+      data.new_title
+    )
+    
+    logger.info('Magazine renamed successfully', {
+      operation: 'renameMagazine',
+      magazineId: data.id,
+      oldIssue: data.old_issue,
+      newIssue: data.new_issue,
+      userId: authContext.userId
+    })
+    
+    // Revalidate cache and paths (Requirements 8.2, 8.4)
+    revalidateTag('magazines') // Invalidate magazines cache
+    revalidatePath('/admin')
+    revalidatePath('/')
+    revalidatePath(`/dergi/${data.old_issue}`)
+    revalidatePath(`/dergi/${data.new_issue}`)
+    
+    return ErrorHandler.success(undefined)
+  } catch (error) {
+    logger.error('Failed to rename magazine', {
+      operation: 'renameMagazine',
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
+    const appError = ErrorHandler.handleUnknownError(error)
+    return ErrorHandler.failure(appError)
+  }
 }
 
 /**
  * Saves upload logs to storage
  * Uses SupabaseStorageService for consistent storage operations
+ * 
+ * Implements storage error handling (Requirements 1.3):
+ * - Wraps storage operations in try-catch
+ * - Transforms storage errors to StorageError
+ * - Returns Result<string> type
+ * - Logs errors with context
+ * 
+ * @returns Result<string> with log path on success or error details on failure
  */
-export async function saveUploadLog(issue: string, content: string) {
-  const supabase = await createClient()
-  const storageService = new SupabaseStorageService(supabase)
+export async function saveUploadLog(issue: string, content: string): Promise<Result<string>> {
+  const { logger } = await import('@/lib/services/Logger')
+  const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
-  const issueNumber = parseInt(issue, 10)
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const path = STORAGE_PATHS.getLogsPath(issueNumber, timestamp)
-  
-  const data = new TextEncoder().encode(content)
-  const blob = new Blob([data], { type: 'text/plain' })
-  
-  await storageService.upload(path, blob, {
-    contentType: 'text/plain',
-    upsert: true
-  })
-  
-  return path
+  try {
+    const supabase = await createClient()
+    const storageService = new SupabaseStorageService(supabase)
+    
+    const issueNumber = parseInt(issue, 10)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const path = STORAGE_PATHS.getLogsPath(issueNumber, timestamp)
+    
+    logger.debug('Saving upload log', {
+      operation: 'saveUploadLog',
+      issueNumber,
+      path
+    })
+    
+    const data = new TextEncoder().encode(content)
+    const blob = new Blob([data], { type: 'text/plain' })
+    
+    await storageService.upload(path, blob, {
+      contentType: 'text/plain',
+      upsert: true
+    })
+    
+    logger.info('Upload log saved successfully', {
+      operation: 'saveUploadLog',
+      issueNumber,
+      path
+    })
+    
+    return ErrorHandler.success(path)
+  } catch (error) {
+    logger.error('Failed to save upload log', {
+      operation: 'saveUploadLog',
+      issue,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
+    const appError = ErrorHandler.handleUnknownError(error)
+    return ErrorHandler.failure(appError)
+  }
 }
 
 /**
@@ -180,23 +349,38 @@ export async function revalidateMagazines() {
  * - 14.4: Uses server-side Supabase client with proper authentication
  * - 14.5: Returns success/error status to client
  * 
+ * Implements storage error handling (Requirements 1.3):
+ * - Wraps storage operations in try-catch
+ * - Transforms storage errors to StorageError
+ * - Returns Result<void> type
+ * - Logs errors with context
+ * 
  * @param path - The storage path for the file
  * @param fileData - The file data as ArrayBuffer
  * @param contentType - The MIME type of the file
- * @returns Promise resolving to success status
- * @throws {Error} If upload fails
+ * @returns Result<void> indicating success or failure
  */
 export async function uploadFileToStorage(
   path: string,
   fileData: ArrayBuffer,
   contentType: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<Result<void>> {
+  const { logger } = await import('@/lib/services/Logger')
+  const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+  
   try {
     // Require admin role for file uploads
     await requireAdmin()
     
     // Verify CSRF origin
     await verifyCSRFOrigin()
+    
+    logger.debug('Starting file upload', {
+      operation: 'uploadFileToStorage',
+      path,
+      contentType,
+      size: fileData.byteLength
+    })
     
     // Create storage service with server-side Supabase client
     const supabase = await createClient()
@@ -211,11 +395,24 @@ export async function uploadFileToStorage(
       contentType
     })
     
-    return { success: true }
+    logger.info('File uploaded successfully', {
+      operation: 'uploadFileToStorage',
+      path,
+      size: fileData.byteLength
+    })
+    
+    return ErrorHandler.success(undefined)
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Upload failed'
-    console.error('Server-side upload error:', errorMessage)
-    return { success: false, error: errorMessage }
+    logger.error('Server-side upload error', {
+      operation: 'uploadFileToStorage',
+      path,
+      contentType,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
+    const appError = ErrorHandler.handleUnknownError(error)
+    return ErrorHandler.failure(appError)
   }
 }
 

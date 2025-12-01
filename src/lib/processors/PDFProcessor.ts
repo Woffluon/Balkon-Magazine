@@ -75,9 +75,21 @@ export class PDFProcessor implements IFileProcessor {
       }
     } catch (error) {
       if (error instanceof Error) {
-        throw new ProcessingError(`PDF işleme başarısız: ${error.message}`, error)
+        throw new ProcessingError(
+          `PDF işleme başarısız: ${error.message}`,
+          'pdf_processing',
+          'PDF işlenirken bir hata oluştu',
+          false,
+          error
+        )
       }
-      throw new ProcessingError('PDF işleme başarısız: Bilinmeyen hata', error)
+      throw new ProcessingError(
+        'PDF işleme başarısız: Bilinmeyen hata',
+        'pdf_processing',
+        'PDF işlenirken bir hata oluştu',
+        false,
+        error
+      )
     } finally {
       // Always cleanup PDF document resources, even on error
       if (pdfDoc) {
@@ -105,7 +117,11 @@ export class PDFProcessor implements IFileProcessor {
     let ctx: CanvasRenderingContext2D | null = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
     
     if (!ctx) {
-      throw new ProcessingError('Canvas context unavailable')
+      throw new ProcessingError(
+        'Canvas context unavailable',
+        'pdf_processing',
+        'PDF işlenirken bir hata oluştu'
+      )
     }
     
     try {
@@ -152,7 +168,11 @@ export class PDFProcessor implements IFileProcessor {
           if (blob) {
             resolve(blob)
           } else {
-            reject(new ProcessingError('Failed to convert canvas to blob'))
+            reject(new ProcessingError(
+              'Failed to convert canvas to blob',
+              'pdf_processing',
+              'PDF dönüştürülürken bir hata oluştu'
+            ))
           }
         },
         IMAGE_CONFIG.FORMAT,

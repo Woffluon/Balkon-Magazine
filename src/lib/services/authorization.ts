@@ -10,6 +10,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { headers } from 'next/headers'
+import { logger } from '@/lib/services/Logger'
 
 /**
  * Authorization context returned after successful admin verification
@@ -50,19 +51,27 @@ export class CSRFError extends Error {
  */
 export async function requireAdmin(): Promise<AuthorizationContext> {
   const supabase = await createClient()
+  const { logger } = await import('@/lib/services/Logger')
+  const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
   
   // Get authenticated user (more secure than getSession)
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   
   if (userError || !user) {
-    console.error('Auth error:', userError)
-    throw new AuthorizationError('Unauthorized: Authentication required')
+    logger.error('Authentication required for admin access', {
+      operation: 'requireAdmin',
+      error: userError?.message,
+      errorCode: userError?.status,
+    })
+    // Use generic error message from catalog - don't expose security details
+    const errorEntry = getErrorEntry('AUTH_LOGIN_REQUIRED')
+    throw new AuthorizationError(errorEntry.userMessage)
   }
   
   const userId = user.id
   const userEmail = user.email || ''
   
-  console.log('Checking admin access for user:', { userId, userEmail })
+  logger.debug('Checking admin access for user', { userId, userEmail })
   
   // Query user_profiles table for role
   const { data: profile, error: profileError } = await supabase
@@ -71,18 +80,31 @@ export async function requireAdmin(): Promise<AuthorizationContext> {
     .eq('user_id', userId)
     .single()
   
-  console.log('Profile query result:', { profile, profileError })
-  
   if (profileError || !profile) {
-    console.error('Profile error:', profileError)
-    throw new AuthorizationError('Unauthorized: User profile not found')
+    logger.error('User profile not found during admin check', {
+      operation: 'requireAdmin',
+      userId,
+      error: profileError?.message,
+      errorCode: profileError?.code,
+    })
+    // Use generic error message from catalog - don't expose internal details
+    const errorEntry = getErrorEntry('AUTH_UNAUTHORIZED')
+    throw new AuthorizationError(errorEntry.userMessage)
   }
   
-  console.log('User role:', profile.role)
+  logger.debug('User role verified', { userId, role: profile.role })
   
   // Accept both 'admin' and 'user' roles
   if (profile.role !== 'admin' && profile.role !== 'user') {
-    throw new AuthorizationError('Unauthorized: Admin access required')
+    logger.warn('User attempted admin access without proper role', {
+      operation: 'requireAdmin',
+      userId,
+      userEmail,
+      role: profile.role,
+    })
+    // Use generic error message from catalog - don't expose role details
+    const errorEntry = getErrorEntry('AUTH_UNAUTHORIZED')
+    throw new AuthorizationError(errorEntry.userMessage)
   }
   
   return {
@@ -167,7 +189,10 @@ export async function refreshSessionIfNeeded(): Promise<boolean> {
     const { error: refreshError } = await supabase.auth.refreshSession()
     
     if (refreshError) {
-      console.error('Failed to refresh session:', refreshError)
+      logger.error('Failed to refresh session', {
+        error: refreshError,
+        operation: 'session_refresh'
+      })
       return false
     }
     

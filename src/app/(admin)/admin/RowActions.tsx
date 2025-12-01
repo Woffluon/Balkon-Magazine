@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Input } from '@/components/ui/input'
 import { deleteMagazine, renameMagazine } from './actions'
 import { Loader2, Trash2 } from 'lucide-react'
+import { handleServerActionResult } from '@/lib/utils/resultValidation'
+import { z } from 'zod'
 
 export function RowActions({ id, issue, title }: { id: string; issue: number; title: string }) {
   const [openRename, setOpenRename] = useState(false)
@@ -38,8 +40,20 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
                 <form
                   action={async (formData: FormData) => {
                     startTransition(async () => {
-                      await renameMagazine(formData)
-                      setOpenRename(false)
+                      await handleServerActionResult(
+                        await renameMagazine(formData),
+                        z.void(),
+                        {
+                          onSuccess: () => {
+                            setOpenRename(false)
+                          },
+                          onError: (error) => {
+                            // Show error to user with validated error response
+                            alert(error.userMessage || 'Dergi yeniden adlandırılırken bir hata oluştu')
+                          }
+                        },
+                        { operation: 'renameMagazine', magazineId: id, oldIssue: issue, newIssue }
+                      )
                     })
                   }}
                   className="space-y-3 sm:space-y-4"
@@ -101,8 +115,20 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
                 <form
                   action={async (formData: FormData) => {
                     startTransition(async () => {
-                      await deleteMagazine(formData)
-                      setOpenDelete(false)
+                      await handleServerActionResult(
+                        await deleteMagazine(formData),
+                        z.void(),
+                        {
+                          onSuccess: () => {
+                            setOpenDelete(false)
+                          },
+                          onError: (error) => {
+                            // Show error to user with validated error response
+                            alert(error.userMessage || 'Dergi silinirken bir hata oluştu')
+                          }
+                        },
+                        { operation: 'deleteMagazine', magazineId: id, issueNumber: issue }
+                      )
                     })
                   }}
                   className="mt-4"
