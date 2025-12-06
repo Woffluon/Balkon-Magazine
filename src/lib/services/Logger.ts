@@ -189,7 +189,7 @@ class LoggerService {
           slow: 'true',
         },
       })
-    } catch (error) {
+    } catch {
       // Silently fail if Sentry is not available
       // This prevents errors in development or if Sentry is not configured
     }
@@ -324,7 +324,7 @@ class LoggerService {
           },
         })
       }
-    } catch (error) {
+    } catch {
       // Silently fail if Sentry is not available
       // This prevents errors in development or if Sentry is not configured
     }

@@ -177,7 +177,6 @@ export function UploadForm({
   date,
   coverPct,
   pagesPct,
-  overall,
   busy,
   pagesDone = 0,
   totalPages = 0,

@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { IStorageService } from './IStorageService'
 import type { StorageFile, UploadOptions, ListOptions } from '@/types/storage'
-import { StorageError } from '@/lib/errors/AppError'
 import { STORAGE_CONFIG } from '@/lib/constants/storage'
 import { assertStorageFileArray } from '@/lib/guards'
 import { withRetry } from '@/lib/utils/retry'

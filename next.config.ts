@@ -18,6 +18,17 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   
+  webpack: (config, { isServer }) => {
+    // Suppress OpenTelemetry instrumentation warnings
+    if (isServer) {
+      config.ignoreWarnings = [
+        { module: /node_modules\/@opentelemetry\/instrumentation/ },
+        ...(config.ignoreWarnings || []),
+      ];
+    }
+    return config;
+  },
+  
   async headers() {
     // Extract Supabase domain from URL for CSP
     const supabaseUrl = new URL(env.NEXT_PUBLIC_SUPABASE_URL);
