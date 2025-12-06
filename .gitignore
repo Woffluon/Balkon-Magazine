@@ -13,6 +13,7 @@ package-lock.json
 /out/
 
 # Production
+com.txt
 .kiro
 package-lock.json
 /build

@@ -7,6 +7,9 @@ import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageSe
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { getMagazineByIssue } from '@/lib/magazines'
 import { logger } from '@/lib/services/Logger'
+import { env } from '@/lib/config/env'
+import { validatePageNumber } from '@/lib/validators/urlValidation'
+import { sortFilesByNumber } from '@/lib/utils/fileSort'
 
 const FlipbookViewer = dynamic(() => import('@/components/FlipbookViewer'), {
   loading: () => <FlipbookViewerSkeleton />,
@@ -50,7 +53,12 @@ export async function generateStaticParams() {
 export default async function DergiPage({ params }: { params: Promise<{ sayi: string }> }) {
   const supabase = await createClient()
   const { sayi: sayiStr } = await params
-  const sayi = Number(sayiStr)
+  
+  // Validate URL parameter
+  const sayi = validatePageNumber(sayiStr)
+  if (sayi === null) {
+    return notFound()
+  }
 
   const storageService = new SupabaseStorageService(supabase)
 
@@ -110,12 +118,9 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
   let imageUrls: string[] = []
   
   if (filesResult.length > 0) {
-    // Sort files by page number
-    const sorted = [...filesResult].sort((a, b) => {
-      const na = parseInt(a.name.replace(/\D/g, ''), 10) || 0
-      const nb = parseInt(b.name.replace(/\D/g, ''), 10) || 0
-      return na - nb
-    })
+    // Sort files by page number using utility function
+    // Requirements: 9.4, 9.5
+    const sorted = sortFilesByNumber(filesResult)
     
     imageUrls = sorted.map((f) => storageService.getPublicUrl(`${sayi}/pages/${f.name}`))
   } else if (!magazine.pdf_url && magazine.cover_image_url) {
@@ -191,7 +196,12 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
  */
 export async function generateMetadata({ params }: { params: Promise<{ sayi: string }> }) {
   const { sayi: sayiStr } = await params
-  const sayi = Number(sayiStr)
+  
+  // Validate URL parameter
+  const sayi = validatePageNumber(sayiStr)
+  if (sayi === null) {
+    return {}
+  }
   
   // Use cached getMagazineByIssue for improved performance (Requirements 8.1-8.5)
   // Requirements: 1.2 - Wrap database queries in try-catch
@@ -217,7 +227,7 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
   if (!magazine) return {}
 
   // Get base URL from environment or fallback to localhost
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const baseUrl = env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const canonicalUrl = `${baseUrl}/dergi/${sayi}`
   
   const title = `${magazine.title} - Balkon Dergisi`

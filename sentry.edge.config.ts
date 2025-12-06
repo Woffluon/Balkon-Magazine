@@ -99,11 +99,11 @@ if (env.NODE_ENV === 'production') {
           sensitiveHeaders.forEach((header) => {
             const lowerHeader = header.toLowerCase()
             // Check both lowercase and original case
-            if (event.request!.headers![header]) {
-              event.request!.headers![header] = '[REDACTED]'
+            if (event.request?.headers && header in event.request.headers) {
+              event.request.headers[header] = '[REDACTED]'
             }
-            if (event.request!.headers![lowerHeader]) {
-              event.request!.headers![lowerHeader] = '[REDACTED]'
+            if (event.request?.headers && lowerHeader in event.request.headers) {
+              event.request.headers[lowerHeader] = '[REDACTED]'
             }
           })
         }

@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { logger } from '@/lib/services/Logger'
-import { env } from '@/lib/env'
+import { env } from '@/lib/config/env'
 
 /**
  * Magazine Detail Error Boundary

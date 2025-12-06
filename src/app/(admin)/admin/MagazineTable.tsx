@@ -16,7 +16,7 @@ import type { Magazine } from '@/types/magazine'
 import { ArrowUpDown } from 'lucide-react'
 
 type Props = {
-  magazines: (Magazine & { publication_date?: string })[]
+  magazines: Magazine[]
 }
 
 type SortKey = 'issue_number' | 'title' | 'publication_date'

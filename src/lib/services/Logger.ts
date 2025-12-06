@@ -1,4 +1,4 @@
-import { env } from '@/lib/env'
+import { env } from '@/lib/config/env'
 
 /**
  * Log levels in order of severity

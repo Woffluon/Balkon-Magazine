@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { env } from '@/lib/env'
+import { env } from '@/lib/config/env'
 import { logger } from '@/lib/services/Logger'
 
 /**

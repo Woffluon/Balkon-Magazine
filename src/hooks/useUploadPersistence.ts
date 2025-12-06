@@ -1,20 +1,10 @@
 import { useEffect, useCallback } from 'react'
 import { logger } from '@/lib/services/Logger'
+import { loadValidatedState, UploadStateSchema } from '@/lib/utils/storageValidation'
+import type { UploadState } from '@/lib/utils/storageValidation'
 
-/**
- * Upload state interface for persistence
- * Contains all necessary information to restore an upload session
- */
-export interface UploadState {
-  title: string
-  issue: number
-  date: string
-  coverProgress: number
-  pagesProgress: number
-  logs: string[]
-  isActive: boolean
-  startTime: number
-}
+// Re-export UploadState type for backward compatibility
+export type { UploadState }
 
 /**
  * Return type for useUploadPersistence hook
@@ -88,28 +78,20 @@ export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn 
   }, [])
 
   /**
-   * Loads upload state from localStorage
+   * Loads upload state from localStorage with validation
    * 
-   * Deserializes the state object from JSON.
-   * Returns null if no state exists or if deserialization fails.
+   * Uses Zod schema validation to ensure data integrity.
+   * Returns null if no state exists, validation fails, or if deserialization fails.
+   * Automatically cleans up corrupted data.
    * 
-   * @returns The persisted upload state, or null if not found
+   * Satisfies Requirements 7.4, 7.5:
+   * - Uses loadValidatedState for type-safe access
+   * - Logs warnings for validation failures
+   * 
+   * @returns The persisted upload state, or null if not found or invalid
    */
   const loadState = useCallback((): UploadState | null => {
-    try {
-      const serialized = localStorage.getItem(UPLOAD_STATE_KEY)
-      if (!serialized) {
-        return null
-      }
-      return JSON.parse(serialized) as UploadState
-    } catch (error) {
-      // Handle JSON parse errors or localStorage access errors
-      logger.error('Failed to load upload state', {
-        error,
-        operation: 'upload_state_load'
-      })
-      return null
-    }
+    return loadValidatedState(UPLOAD_STATE_KEY, UploadStateSchema)
   }, [])
 
   /**

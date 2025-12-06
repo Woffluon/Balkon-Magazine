@@ -1,32 +1,93 @@
-import { env } from '@/lib/env'
+import { z } from 'zod'
 
 /**
- * Environment Configuration
+ * Environment Variable Validation
  * 
- * Provides type-safe access to validated environment variables.
- * All environment variables are pre-validated at application startup via the env module.
+ * Centralized validation for all environment variables using Zod schemas.
+ * Ensures type safety and catches configuration errors early at application startup.
+ * 
+ * @throws {Error} If any required environment variable is missing or invalid
  */
 
-/**
- * Validated Supabase configuration
- * 
- * Uses pre-validated environment variables from the env module.
- * No need for non-null assertions since validation happens at startup.
- */
-export const supabaseConfig = {
-  url: env.NEXT_PUBLIC_SUPABASE_URL,
-  anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-} as const
+// Define the environment variable schema
+const envSchema = z.object({
+  // Supabase configuration (required)
+  NEXT_PUBLIC_SUPABASE_URL: z
+    .string()
+    .url('NEXT_PUBLIC_SUPABASE_URL must be a valid URL'),
+  
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z
+    .string()
+    .min(1, 'NEXT_PUBLIC_SUPABASE_ANON_KEY cannot be empty'),
+  
+  // Node environment (required)
+  NODE_ENV: z
+    .enum(['development', 'production', 'test'])
+    .default('development'),
+  
+  // Site URL (optional)
+  NEXT_PUBLIC_SITE_URL: z
+    .string()
+    .url('NEXT_PUBLIC_SITE_URL must be a valid URL')
+    .optional(),
+  
+  // Google verification (optional)
+  NEXT_PUBLIC_GOOGLE_VERIFICATION: z
+    .string()
+    .optional(),
+  
+  // PDF.js worker URL (optional, has default)
+  NEXT_PUBLIC_PDFJS_WORKER_URL: z
+    .string()
+    .default('/pdf.worker.min.mjs'),
+})
+
+// Type for validated environment variables
+export type Env = z.infer<typeof envSchema>
 
 /**
- * Type guard to check if Supabase config is valid
+ * Validates and exports environment variables
  * 
- * @returns true if configuration is valid
+ * @throws {Error} If validation fails with detailed error messages
  */
-export function isSupabaseConfigValid(): boolean {
-  try {
-    return !!(supabaseConfig.url && supabaseConfig.anonKey)
-  } catch {
-    return false
+function validateEnv(): Env {
+  const envVars = {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+    NEXT_PUBLIC_GOOGLE_VERIFICATION: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION,
+    NEXT_PUBLIC_PDFJS_WORKER_URL: process.env.NEXT_PUBLIC_PDFJS_WORKER_URL,
   }
+
+  const result = envSchema.safeParse(envVars)
+
+  if (!result.success) {
+    const errors = result.error.issues
+      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
+      .join('\n')
+    
+    throw new Error(
+      `Environment variable validation failed:\n${errors}\n\n` +
+      `Please check your .env.local file and ensure all required variables are set correctly.`
+    )
+  }
+
+  return result.data
 }
+
+// Validate and export the environment variables
+export const env = validateEnv()
+
+/**
+ * Type-safe access to environment variables
+ * 
+ * Example usage:
+ * ```typescript
+ * import { env } from '@/lib/config/env'
+ * 
+ * const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL
+ * const siteUrl = env.NEXT_PUBLIC_SITE_URL
+ * ```
+ */
+export default env

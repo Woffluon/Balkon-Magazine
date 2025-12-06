@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { env } from '@/lib/env'
+import { env } from '@/lib/config/env'
 import { logger } from '@/lib/services/Logger'
 
 /**

@@ -6,26 +6,12 @@ import Image from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useResponsiveDimensions } from '@/hooks/useResponsiveDimensions'
 import { logger } from '@/lib/services/Logger'
+import type { PageFlipHandle, FlipEvent } from 'react-pageflip'
 
-type PageFlipAPI = { flipNext: () => void; flipPrev: () => void; getCurrentPageIndex: () => number }
-type PageFlipHandle = { pageFlip: () => PageFlipAPI }
-
-type FlipBookComponent = React.ComponentType<{
-  width?: number;
-  height?: number;
-  showCover?: boolean;
-  className?: string;
-  size?: 'fixed' | 'stretch';
-  maxShadowOpacity?: number;
-  drawShadow?: boolean;
-  usePortrait?: boolean;
-  mobileScrollSupport?: boolean;
-  onFlip?: (e: { data: number }) => void;
-} & { children?: React.ReactNode }>
 const SafeFlipBook = dynamic(() => import('react-pageflip'), {
   ssr: false,
   loading: () => <div className="h-[700px] flex items-center justify-center text-sm text-muted-foreground">Yükleniyor...</div>,
-}) as FlipBookComponent
+})
 
 interface FlipbookViewerProps {
   imageUrls: string[]
@@ -83,7 +69,7 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
     return () => abortController.abort()
   }, [currentPage, pages, preloadedPages, failedPages])
 
-  const onFlip = useCallback((e: { data: number }) => {
+  const onFlip = useCallback((e: FlipEvent) => {
     setCurrentPage(e.data)
     // Announce page change to screen readers
     setPageAnnouncement(`Sayfa ${e.data + 1} / ${pages.length}`)
@@ -181,7 +167,6 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
       </div>
 
       {/* Flipbook */}
-      {/* @ts-expect-error: react-pageflip type doesn't include ref but runtime supports it */}
       <SafeFlipBook ref={bookRef} width={dims.w} height={dims.h} showCover size="fixed" maxShadowOpacity={0} drawShadow={false} usePortrait mobileScrollSupport onFlip={onFlip}>
         {pages.map((url, index) => {
           const shouldLoad = index === currentPage || index === currentPage - 1 || (index > currentPage && index <= currentPage + 3) || preloadedPages.has(index)

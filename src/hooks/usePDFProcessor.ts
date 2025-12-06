@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import * as pdfjs from 'pdfjs-dist'
 import { PDF_CONFIG, IMAGE_CONFIG } from '@/lib/constants/upload'
+import { createRenderContext } from '@/types/pdfjs'
 
 /**
  * Processed PDF result interface
@@ -135,17 +136,18 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
         canvas.width = Math.ceil(scaledViewport.width)
         canvas.height = Math.ceil(scaledViewport.height)
         
-        // Render PDF page to canvas
-        const renderContext = {
-          canvasContext: ctx,
-          viewport: scaledViewport,
-          canvas: canvas
-        }
+        // Render PDF page to canvas using type-safe render context
+        const renderContext = createRenderContext(ctx, scaledViewport, canvas)
         await page.render(renderContext).promise
         
-        // Convert canvas to WebP blob
+        // Convert canvas to WebP blob with proper null handling
         return await new Promise<Blob>((resolve, reject) => {
-          canvas!.toBlob(
+          if (!canvas) {
+            reject(new Error('Canvas is null'))
+            return
+          }
+          
+          canvas.toBlob(
             (blob) => {
               if (blob) {
                 resolve(blob)

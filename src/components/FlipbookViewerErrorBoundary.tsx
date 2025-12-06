@@ -2,7 +2,7 @@
 
 import React, { Component, ReactNode } from 'react'
 import { logger } from '@/lib/services/Logger'
-import { env } from '@/lib/env'
+import { env } from '@/lib/config/env'
 
 interface FlipbookViewerErrorBoundaryProps {
   children: ReactNode

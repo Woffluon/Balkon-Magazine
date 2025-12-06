@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { logger } from '@/lib/services/Logger'
-import { env } from '@/lib/env'
+import { env } from '@/lib/config/env'
 
 /**
  * Root Error Boundary

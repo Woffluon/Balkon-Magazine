@@ -1,5 +1,5 @@
 import { getPublishedMagazines } from '@/lib/magazines'
-import { env } from '@/lib/env'
+import { env } from '@/lib/config/env'
 import { MetadataRoute } from 'next'
 import { logger } from '@/lib/services/Logger'
 

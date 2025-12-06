@@ -1,6 +1,7 @@
 import * as pdfjs from 'pdfjs-dist'
 import { ProcessingError } from '@/lib/errors'
 import { PDF_CONFIG, IMAGE_CONFIG } from '@/lib/constants/upload'
+import { createRenderContext } from '@/types/pdfjs'
 import type { IFileProcessor, ProcessOptions, ProcessResult, ProcessedPage } from './IFileProcessor'
 
 /**
@@ -133,12 +134,8 @@ export class PDFProcessor implements IFileProcessor {
       canvas.width = Math.ceil(scaledViewport.width)
       canvas.height = Math.ceil(scaledViewport.height)
       
-      // Render PDF page to canvas
-      const renderContext = {
-        canvasContext: ctx,
-        viewport: scaledViewport,
-        canvas: canvas
-      }
+      // Render PDF page to canvas using type-safe render context
+      const renderContext = createRenderContext(ctx, scaledViewport, canvas)
       await page.render(renderContext).promise
       
       // Convert canvas to WebP blob
@@ -155,14 +152,24 @@ export class PDFProcessor implements IFileProcessor {
   }
   
   /**
-   * Converts a canvas to a WebP blob
+   * Converts a canvas to a WebP blob with proper null handling
    * 
    * @param canvas - The canvas to convert
    * @param quality - WebP quality (0.0 - 1.0)
    * @returns Promise resolving to the WebP blob
+   * @throws {ProcessingError} If canvas is null or blob conversion fails
    */
-  private canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  private canvasToBlob(canvas: HTMLCanvasElement | null, quality: number): Promise<Blob> {
     return new Promise((resolve, reject) => {
+      if (!canvas) {
+        reject(new ProcessingError(
+          'Canvas is null',
+          'pdf_processing',
+          'PDF dönüştürülürken bir hata oluştu'
+        ))
+        return
+      }
+      
       canvas.toBlob(
         (blob) => {
           if (blob) {

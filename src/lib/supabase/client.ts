@@ -1,6 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { env } from '@/lib/env'
+import { env } from '@/lib/config/env'
 
 /**
  * Creates a Supabase client for browser/client-side usage

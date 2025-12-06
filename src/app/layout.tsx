@@ -4,7 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import { Toaster } from "@/components/ui/toaster";
 import { GlobalErrorHandlerProvider } from "@/components/GlobalErrorHandlerProvider";
-import { env } from "@/lib/env";
+import { env } from "@/lib/config/env";
 import "./globals.css";
 
 const geistSans = Geist({

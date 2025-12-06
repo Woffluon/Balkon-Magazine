@@ -5,10 +5,10 @@ import { createClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/middleware/authMiddleware'
 import { parseFormDataWithZod } from '@/lib/validators/formDataParser'
 import {
-  createMagazineSchema,
-  deleteMagazineSchema,
-  renameMagazineSchema
-} from '@/lib/validators/magazineSchemas'
+  MagazineFormSchema,
+  DeleteMagazineSchema,
+  RenameMagazineSchema
+} from '@/lib/validators/formDataSchemas'
 import { MagazineService } from '@/lib/services/MagazineService'
 import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
 import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
@@ -71,7 +71,7 @@ export async function addMagazineRecord(formData: FormData): Promise<Result<void
       )
     }
     
-    const data = parseFormDataWithZod(formData, createMagazineSchema)
+    const data = parseFormDataWithZod(formData, MagazineFormSchema)
     
     logger.info('Validated add magazine request', {
       operation: 'addMagazineRecord',
@@ -136,7 +136,7 @@ export async function deleteMagazine(formData: FormData): Promise<Result<void>> 
     // Verify CSRF origin
     await verifyCSRFOrigin()
     
-    const data = parseFormDataWithZod(formData, deleteMagazineSchema)
+    const data = parseFormDataWithZod(formData, DeleteMagazineSchema)
     
     logger.info('Validated delete magazine request', {
       operation: 'deleteMagazine',
@@ -203,7 +203,7 @@ export async function renameMagazine(formData: FormData): Promise<Result<void>> 
     // Verify CSRF origin
     await verifyCSRFOrigin()
     
-    const data = parseFormDataWithZod(formData, renameMagazineSchema)
+    const data = parseFormDataWithZod(formData, RenameMagazineSchema)
     
     logger.info('Validated rename magazine request', {
       operation: 'renameMagazine',

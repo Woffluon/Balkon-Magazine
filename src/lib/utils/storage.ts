@@ -1,9 +1,11 @@
+import { env } from '@/lib/config/env'
+
 /**
  * Storage URL utilities
  * Converts storage paths to public URLs
  */
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL
 const STORAGE_BUCKET = 'magazines'
 
 /**
