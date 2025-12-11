@@ -1,15 +1,16 @@
 -- ============================================================================
--- COMPLETE SUPABASE DATABASE SETUP
+-- BALKON DERGISI - MASTER DATABASE SETUP
 -- ============================================================================
--- This script sets up the entire database schema for the magazine application
--- Safe to run multiple times (idempotent)
+-- Bu dosya Balkon Dergisi projesinin tüm veritabanı kurulumunu içerir
+-- Yeni kurulumlar ve mevcut veritabanlarının güncellenmesi için kullanılabilir
+-- Güvenli şekilde birden fazla kez çalıştırılabilir (idempotent)
 -- ============================================================================
 
--- Required extension for gen_random_uuid
+-- Gerekli uzantıları etkinleştir
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
 -- ============================================================================
--- 1. MAGAZINES TABLE
+-- 1. MAGAZINES TABLE - Ana dergi tablosu
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.magazines (
@@ -22,19 +23,39 @@ CREATE TABLE IF NOT EXISTS public.magazines (
   pdf_url TEXT,
   page_count INT,
   is_published BOOLEAN NOT NULL DEFAULT TRUE,
+  version INTEGER NOT NULL DEFAULT 1,
   CONSTRAINT magazines_issue_number_unique UNIQUE (issue_number)
 );
 
--- Indexes for magazines table
+-- Version sütununu mevcut tabloya ekle (eğer yoksa)
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'magazines' 
+    AND column_name = 'version'
+  ) THEN
+    ALTER TABLE public.magazines 
+    ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+    
+    RAISE NOTICE 'Version sütunu magazines tablosuna eklendi';
+  ELSE
+    RAISE NOTICE 'Version sütunu zaten mevcut';
+  END IF;
+END $$;
+
+-- Performans için indeksler
 CREATE INDEX IF NOT EXISTS idx_magazines_issue_number ON public.magazines(issue_number);
 CREATE INDEX IF NOT EXISTS idx_magazines_is_published ON public.magazines(is_published);
 CREATE INDEX IF NOT EXISTS idx_magazines_created_at ON public.magazines(created_at);
+CREATE INDEX IF NOT EXISTS idx_magazines_version ON public.magazines(version);
 
--- Enable RLS on magazines
+-- RLS'yi etkinleştir
 ALTER TABLE public.magazines ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
--- 2. USER PROFILES TABLE (for role-based access control)
+-- 2. USER PROFILES TABLE - Kullanıcı rolleri için
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.user_profiles (
@@ -44,11 +65,11 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
   CONSTRAINT valid_role CHECK (role IN ('admin', 'user'))
 );
 
--- Enable RLS on user_profiles
+-- RLS'yi etkinleştir
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
--- 3. MAGAZINE PAGES TABLE (Optional - for page metadata)
+-- 3. MAGAZINE PAGES TABLE - Sayfa metadata'sı için (opsiyonel)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.magazine_pages (
@@ -59,33 +80,33 @@ CREATE TABLE IF NOT EXISTS public.magazine_pages (
   image_url TEXT NOT NULL
 );
 
--- Indexes for magazine_pages
+-- İndeksler
 CREATE INDEX IF NOT EXISTS idx_magazine_pages_magazine_id ON public.magazine_pages(magazine_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_magazine_pages_magazine_page ON public.magazine_pages(magazine_id, page_number);
 
--- Enable RLS on magazine_pages
+-- RLS'yi etkinleştir
 ALTER TABLE public.magazine_pages ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
--- 4. RLS POLICIES FOR MAGAZINES
+-- 4. RLS POLİCİES - MAGAZINES
 -- ============================================================================
 
--- Drop existing policies if they exist (to avoid conflicts)
+-- Mevcut policy'leri kaldır (çakışmayı önlemek için)
 DROP POLICY IF EXISTS "Anon can select published magazines" ON public.magazines;
 DROP POLICY IF EXISTS "Authenticated can full access magazines" ON public.magazines;
 DROP POLICY IF EXISTS "Admin can manage all magazines" ON public.magazines;
 DROP POLICY IF EXISTS "Authenticated can manage magazines" ON public.magazines;
 
--- Anonymous users can only read published magazines
+-- Anonim kullanıcılar sadece yayınlanmış dergileri okuyabilir
 CREATE POLICY "Anon can select published magazines"
   ON public.magazines
   FOR SELECT
   TO anon
   USING (is_published = TRUE);
 
--- Authenticated users can manage magazines
--- Note: Client-side operations need this simpler policy
--- Admin role is still enforced in server actions via requireAdmin()
+-- Kimlik doğrulaması yapılmış kullanıcılar dergileri yönetebilir
+-- Not: Client-side işlemler için basit policy gerekli
+-- Admin rolü server action'larda requireAdmin() ile kontrol ediliyor
 CREATE POLICY "Authenticated can manage magazines"
   ON public.magazines
   FOR ALL
@@ -94,20 +115,20 @@ CREATE POLICY "Authenticated can manage magazines"
   WITH CHECK (true);
 
 -- ============================================================================
--- 5. RLS POLICIES FOR USER PROFILES
+-- 5. RLS POLİCİES - USER PROFILES
 -- ============================================================================
 
 DROP POLICY IF EXISTS "Users can view their own profile" ON public.user_profiles;
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.user_profiles;
 
--- Users can view their own profile
+-- Kullanıcılar kendi profillerini görüntüleyebilir
 CREATE POLICY "Users can view their own profile"
   ON public.user_profiles
   FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
 
--- Users can update their own profile (but not role)
+-- Kullanıcılar kendi profillerini güncelleyebilir (rol hariç)
 CREATE POLICY "Users can update their own profile"
   ON public.user_profiles
   FOR UPDATE
@@ -116,13 +137,13 @@ CREATE POLICY "Users can update their own profile"
   WITH CHECK (user_id = auth.uid());
 
 -- ============================================================================
--- 6. RLS POLICIES FOR MAGAZINE PAGES
+-- 6. RLS POLİCİES - MAGAZINE PAGES
 -- ============================================================================
 
 DROP POLICY IF EXISTS "Anon can read pages of published magazines" ON public.magazine_pages;
 DROP POLICY IF EXISTS "Admin can manage all magazine pages" ON public.magazine_pages;
 
--- Anonymous users can read pages only for published magazines
+-- Anonim kullanıcılar sadece yayınlanmış dergilerin sayfalarını okuyabilir
 CREATE POLICY "Anon can read pages of published magazines"
   ON public.magazine_pages
   FOR SELECT
@@ -135,7 +156,7 @@ CREATE POLICY "Anon can read pages of published magazines"
     )
   );
 
--- Admins have full access to magazine pages
+-- Adminler tüm dergi sayfalarına tam erişime sahip
 CREATE POLICY "Admin can manage all magazine pages"
   ON public.magazine_pages
   FOR ALL
@@ -156,29 +177,29 @@ CREATE POLICY "Admin can manage all magazine pages"
   );
 
 -- ============================================================================
--- 7. STORAGE BUCKET SETUP
+-- 7. STORAGE BUCKET KURULUMU
 -- ============================================================================
 
--- Create magazines bucket (PUBLIC for image access)
+-- Magazines bucket'ını oluştur (görsel erişimi için PUBLIC)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('magazines', 'magazines', TRUE)
 ON CONFLICT (id) DO UPDATE SET public = TRUE;
 
--- Drop existing storage policies if they exist
+-- Mevcut storage policy'lerini kaldır
 DROP POLICY IF EXISTS "Anon can read magazine images" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated can manage magazine images" ON storage.objects;
 DROP POLICY IF EXISTS "Admin can manage magazine images" ON storage.objects;
 
--- Allow anonymous reads for magazine images
+-- Anonim kullanıcıların dergi görsellerini okumasına izin ver
 CREATE POLICY "Anon can read magazine images"
   ON storage.objects
   FOR SELECT
   TO anon
   USING (bucket_id = 'magazines');
 
--- Allow authenticated users to manage magazine images
--- Note: Client-side uploads need this simpler policy
--- Admin role is still enforced in server actions via requireAdmin()
+-- Kimlik doğrulaması yapılmış kullanıcıların dergi görsellerini yönetmesine izin ver
+-- Not: Client-side upload'lar için basit policy gerekli
+-- Admin rolü server action'larda requireAdmin() ile kontrol ediliyor
 CREATE POLICY "Authenticated can manage magazine images"
   ON storage.objects
   FOR ALL
@@ -187,10 +208,10 @@ CREATE POLICY "Authenticated can manage magazine images"
   WITH CHECK (bucket_id = 'magazines');
 
 -- ============================================================================
--- 8. AUTOMATIC USER PROFILE CREATION TRIGGER
+-- 8. OTOMATİK USER PROFILE OLUŞTURMA TRİGGER'I
 -- ============================================================================
 
--- Function to create user profile automatically
+-- Yeni kullanıcı profili otomatik oluşturma fonksiyonu
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -200,20 +221,72 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Drop existing trigger if it exists
+-- Mevcut trigger'ı kaldır
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 
--- Create trigger for new user registration
+-- Yeni kullanıcı kaydı için trigger oluştur
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================================
--- 9. MAKE EXISTING USERS ADMIN
+-- 9. MEVCUT KULLANICILARI ADMİN YAP
 -- ============================================================================
 
--- Insert admin profiles for all existing users
--- This will make all current users admins
+-- Tüm mevcut kullanıcılar için admin profilleri ekle
+-- Bu, mevcut tüm kullanıcıları admin yapar
 INSERT INTO public.user_profiles (user_id, role)
 SELECT id, 'admin' FROM auth.users
 ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
+
+-- ============================================================================
+-- 10. KURULUM DOĞRULAMA
+-- ============================================================================
+
+-- Kurulumun başarılı olduğunu doğrula
+DO $$
+DECLARE
+  magazine_count INTEGER;
+  profile_count INTEGER;
+  bucket_exists BOOLEAN;
+BEGIN
+  -- Tablo sayılarını kontrol et
+  SELECT COUNT(*) INTO magazine_count FROM public.magazines;
+  SELECT COUNT(*) INTO profile_count FROM public.user_profiles;
+  
+  -- Bucket varlığını kontrol et
+  SELECT EXISTS(SELECT 1 FROM storage.buckets WHERE id = 'magazines') INTO bucket_exists;
+  
+  RAISE NOTICE '=== KURULUM TAMAMLANDI ===';
+  RAISE NOTICE 'Magazines tablosu: % kayıt', magazine_count;
+  RAISE NOTICE 'User profiles tablosu: % kayıt', profile_count;
+  RAISE NOTICE 'Storage bucket: %', CASE WHEN bucket_exists THEN 'Oluşturuldu' ELSE 'HATA!' END;
+  RAISE NOTICE 'Version sütunu ve indeksler eklendi';
+  RAISE NOTICE 'RLS policy''leri yapılandırıldı';
+  RAISE NOTICE 'Trigger''lar aktif';
+  RAISE NOTICE '========================';
+END $$;
+
+-- ============================================================================
+-- 11. PERFORMANS VE GÜVENLİK KONTROLLERI
+-- ============================================================================
+
+-- Kritik indekslerin varlığını kontrol et
+DO $$
+BEGIN
+  -- Magazines tablosu indeksleri
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'magazines' AND indexname = 'idx_magazines_issue_number') THEN
+    RAISE WARNING 'idx_magazines_issue_number indeksi eksik!';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'magazines' AND indexname = 'idx_magazines_version') THEN
+    RAISE WARNING 'idx_magazines_version indeksi eksik!';
+  END IF;
+  
+  -- RLS kontrolü
+  IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'magazines' AND rowsecurity = true) THEN
+    RAISE WARNING 'Magazines tablosunda RLS aktif değil!';
+  END IF;
+  
+  RAISE NOTICE 'Güvenlik ve performans kontrolleri tamamlandı';
+END $$;

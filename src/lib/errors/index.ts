@@ -13,6 +13,12 @@ export {
   AuthenticationError
 } from './AppError'
 
+// Database API Error
+export {
+  DatabaseApiError,
+  ErrorType
+} from './DatabaseApiError'
+
 // Error handler class and utilities
 export {
   ErrorHandler,

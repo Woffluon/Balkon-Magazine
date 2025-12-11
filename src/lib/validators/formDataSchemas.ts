@@ -90,11 +90,13 @@ export const DeleteMagazineSchema = z.object({
 /**
  * FormData validation schema for magazine rename operations
  * Handles both issue number change and optional title update
+ * Includes version field for optimistic locking
  * 
  * Requirements:
  * - 2.1: Validate all FormData fields using Zod schemas before processing
  * - 2.2: Return descriptive error messages for validation failures
  * - 2.4: Handle optional fields correctly (undefined and null values)
+ * - 4.1: Use optimistic locking with version fields to detect conflicts
  */
 export const RenameMagazineSchema = z.object({
   id: z
@@ -126,7 +128,13 @@ export const RenameMagazineSchema = z.object({
           'Başlık sadece harf, rakam, boşluk ve şu işaretleri içerebilir: - . , ! ? Lütfen özel karakterleri kaldırın.'
         )
         .optional()
-    )
+    ),
+  version: z
+    .coerce
+    .number()
+    .int('Versiyon numarası tam sayı olmalıdır.')
+    .nonnegative('Versiyon numarası negatif olamaz.')
+    .refine((val) => !isNaN(val), 'Versiyon numarası geçerli bir sayı olmalıdır.')
 })
 
 /**

@@ -62,65 +62,80 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
 
   const storageService = new SupabaseStorageService(supabase)
 
-  // Fetch magazine metadata with error handling
-  // Requirements: 1.2 - Wrap database queries in try-catch and return typed error responses
-  let magazine: Awaited<ReturnType<typeof getMagazineByIssue>> | null = null
-  try {
-    magazine = await getMagazineByIssue(sayi)
-  } catch (error) {
-    const { logger } = await import('@/lib/services/Logger')
-    const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+  // Parallelize independent queries for better performance
+  // Requirements: 1.2 - Use Promise.all for independent queries
+  const [magazineResult, filesResult] = await Promise.all([
+    // Fetch magazine metadata with error handling
+    (async () => {
+      try {
+        const magazine = await getMagazineByIssue(sayi)
+        return { success: true as const, data: magazine }
+      } catch (error) {
+        const { logger } = await import('@/lib/services/Logger')
+        const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+        
+        const appError = ErrorHandler.handleUnknownError(error)
+        logger.error('Failed to fetch magazine by issue', {
+          operation: 'getMagazineByIssue',
+          issueNumber: sayi,
+          error: appError.message,
+          code: appError.code,
+        })
+        
+        return { success: false as const, error: appError }
+      }
+    })(),
     
-    const appError = ErrorHandler.handleUnknownError(error)
-    logger.error('Failed to fetch magazine by issue', {
-      operation: 'getMagazineByIssue',
-      issueNumber: sayi,
-      error: appError.message,
-      code: appError.code,
-    })
-    
-    // Re-throw to trigger error boundary
-    throw appError
+    // Fetch storage files with error handling
+    // Requirements: 1.3 - Wrap storage operations in try-catch and handle partial failures
+    (async () => {
+      try {
+        const pagesPath = STORAGE_PATHS.getPagesPath(sayi)
+        const files = await storageService.list(pagesPath)
+        return { success: true as const, data: files }
+      } catch (error) {
+        const { logger } = await import('@/lib/services/Logger')
+        const { ErrorHandler } = await import('@/lib/errors/errorHandler')
+        
+        const appError = ErrorHandler.handleStorageError(
+          error instanceof Error ? error : new Error(String(error)),
+          'list',
+          STORAGE_PATHS.getPagesPath(sayi)
+        )
+        
+        logger.warn('Failed to list page files, will fallback to cover image', {
+          operation: 'listPageFiles',
+          issueNumber: sayi,
+          path: STORAGE_PATHS.getPagesPath(sayi),
+          error: appError.message,
+          code: appError.code,
+        })
+        
+        // Don't throw - this is a partial failure
+        // Return empty array to fallback to cover image
+        return { success: true as const, data: [] }
+      }
+    })()
+  ])
+
+  // Handle magazine fetch failure
+  if (!magazineResult.success) {
+    throw magazineResult.error
   }
 
+  const magazine = magazineResult.data
   if (!magazine) return notFound()
 
-  // Fetch storage files with error handling
-  // Requirements: 1.3 - Wrap storage operations in try-catch and handle partial failures
-  let filesResult: Awaited<ReturnType<typeof storageService.list>> = []
-  try {
-    const pagesPath = STORAGE_PATHS.getPagesPath(sayi)
-    filesResult = await storageService.list(pagesPath)
-  } catch (error) {
-    const { logger } = await import('@/lib/services/Logger')
-    const { ErrorHandler } = await import('@/lib/errors/errorHandler')
-    
-    const appError = ErrorHandler.handleStorageError(
-      error instanceof Error ? error : new Error(String(error)),
-      'list',
-      STORAGE_PATHS.getPagesPath(sayi)
-    )
-    
-    logger.warn('Failed to list page files, will fallback to cover image', {
-      operation: 'listPageFiles',
-      issueNumber: sayi,
-      path: STORAGE_PATHS.getPagesPath(sayi),
-      error: appError.message,
-      code: appError.code,
-    })
-    
-    // Don't throw - this is a partial failure
-    // Return empty array to fallback to cover image
-    filesResult = []
-  }
+  // Extract files from result
+  const files = filesResult.success ? filesResult.data : []
 
   // Process files to generate image URLs
   let imageUrls: string[] = []
   
-  if (filesResult.length > 0) {
+  if (files.length > 0) {
     // Sort files by page number using utility function
     // Requirements: 9.4, 9.5
-    const sorted = sortFilesByNumber(filesResult)
+    const sorted = sortFilesByNumber(files)
     
     imageUrls = sorted.map((f) => storageService.getPublicUrl(`${sayi}/pages/${f.name}`))
   } else if (!magazine.pdf_url && magazine.cover_image_url) {

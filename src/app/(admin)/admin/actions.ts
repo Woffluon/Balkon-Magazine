@@ -10,7 +10,6 @@ import {
   RenameMagazineSchema
 } from '@/lib/validators/formDataSchemas'
 import { MagazineService } from '@/lib/services/MagazineService'
-import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
 import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { rateLimiter } from '@/lib/services/rateLimiting'
@@ -23,10 +22,9 @@ import type { Result } from '@/lib/errors/errorHandler'
  */
 async function createMagazineService(): Promise<MagazineService> {
   const supabase = await createClient()
-  const magazineRepository = new SupabaseMagazineRepository(supabase)
-  const storageService = new SupabaseStorageService(supabase)
   
-  return new MagazineService(magazineRepository, storageService)
+  // MagazineService will create its own StorageService instance
+  return new MagazineService(supabase)
 }
 
 /**
@@ -146,7 +144,7 @@ export async function deleteMagazine(formData: FormData): Promise<Result<void>> 
     })
     
     const magazineService = await createMagazineService()
-    await magazineService.deleteMagazine(data.id, data.issue_number)
+    await magazineService.deleteMagazine(data)
     
     logger.info('Magazine deleted successfully', {
       operation: 'deleteMagazine',
@@ -211,16 +209,12 @@ export async function renameMagazine(formData: FormData): Promise<Result<void>> 
       oldIssue: data.old_issue,
       newIssue: data.new_issue,
       newTitle: data.new_title,
+      version: data.version,
       userId: authContext.userId
     })
     
     const magazineService = await createMagazineService()
-    await magazineService.renameMagazine(
-      data.id,
-      data.old_issue,
-      data.new_issue,
-      data.new_title
-    )
+    await magazineService.renameMagazine(data)
     
     logger.info('Magazine renamed successfully', {
       operation: 'renameMagazine',

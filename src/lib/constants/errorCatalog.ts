@@ -4,11 +4,6 @@
  * Comprehensive error message mappings with user-friendly messages in Turkish,
  * technical messages for logging, severity levels, recovery actions, and retry flags.
  * 
- * Requirements:
- * - 4.5: Consistent error code format [CATEGORY]_[SPECIFIC_ERROR]
- * - 4.6: User messages don't expose internal details
- * - 4.7: Multi-step errors indicate progress
- */
 
 /**
  * Error message catalog entry structure

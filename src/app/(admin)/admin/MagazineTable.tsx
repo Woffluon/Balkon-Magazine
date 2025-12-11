@@ -131,7 +131,7 @@ export default function MagazineTable({ magazines }: Props) {
                       {mag.publication_date ? new Date(mag.publication_date).toLocaleDateString('tr-TR') : '-'}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <RowActions id={String(mag.id)} issue={mag.issue_number} title={mag.title} />
+                      <RowActions id={String(mag.id)} issue={mag.issue_number} title={mag.title} version={mag.version} />
                     </TableCell>
                   </TableRow>
                 ))}

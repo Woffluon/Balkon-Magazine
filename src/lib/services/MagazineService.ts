@@ -1,741 +1,486 @@
+/**
+ * Magazine Service with Transaction Support
+ * 
+ * Implements Requirements 2.1, 2.3, 3.1, 3.2, 3.3, 4.1, 4.2, 5.5, 8.1, 8.2, 8.4
+ * 
+ * This service provides magazine operations with:
+ * - Input validation using Zod schemas
+ * - Transaction management with rollback support
+ * - Optimistic locking for concurrent operations
+ * - Uniqueness checks for data integrity
+ * - Proper error handling and reporting
+ * 
+ * @module MagazineService
+ */
+
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { TransactionManager } from './TransactionManager'
+import { StorageService } from './storage/StorageService'
+import {
+  MagazineInputSchema,
+  MagazineRenameSchema,
+  MagazineDeleteSchema,
+  type MagazineInput,
+  type MagazineRenameInput,
+  type MagazineDeleteInput
+} from '@/lib/validators/magazineSchemas'
 import type { Magazine } from '@/types/magazine'
-import type { CreateMagazineDto, UpdateMagazineDto } from '@/types/dtos'
-import type { IMagazineRepository } from '@/lib/repositories/IMagazineRepository'
-import type { IStorageService } from '@/lib/services/storage/IStorageService'
-import type { StorageFile } from '@/types/storage'
-import { STORAGE_PATHS } from '@/lib/constants/storage'
+import { STORAGE_CONFIG } from '@/lib/constants/storage'
+import { performanceMonitor } from './PerformanceMonitor'
+import { logger } from './Logger'
 
 /**
- * Magazine Service
+ * Magazine Service Implementation with Transaction Support
  * 
- * Business logic layer for magazine operations.
- * Orchestrates repository and storage service interactions.
- * 
- * @example
- * ```typescript
- * const service = new MagazineService(repository, storageService)
- * const magazines = await service.getAllMagazines()
- * await service.deleteMagazine(id, issueNumber)
- * ```
+ * Provides robust magazine operations with validation, transactions,
+ * optimistic locking, and proper error handling.
  */
 export class MagazineService {
-  constructor(
-    private magazineRepository: IMagazineRepository,
-    private storageService: IStorageService
-  ) {}
+  private storage: StorageService
 
-  /**
-   * Retrieves all magazines
-   * 
-   * @returns Promise resolving to array of magazines
-   * @throws {DatabaseError} If database query fails
-   */
-  async getAllMagazines(): Promise<Magazine[]> {
-    return await this.magazineRepository.findAll()
+  constructor(
+    private supabase: SupabaseClient,
+    storage?: StorageService
+  ) {
+    this.storage = storage ?? new StorageService(supabase)
   }
 
   /**
-   * Finds a magazine by issue number
-   * 
-   * @param issueNumber - The issue number to search for
-   * @returns Promise resolving to magazine or null if not found
-   * @throws {DatabaseError} If database query fails
+   * Validates input data against a Zod schema
    */
-  async getMagazineByIssue(issueNumber: number): Promise<Magazine | null> {
-    return await this.magazineRepository.findByIssue(issueNumber)
+  private validateInput<T>(schema: { parse: (data: unknown) => T }, data: unknown): T {
+    try {
+      return schema.parse(data)
+    } catch (error: any) {
+      if (error?.errors) {
+        const messages = error.errors.map((e: any) => 
+          `${e.path.join('.')}: ${e.message}`
+        ).join(', ')
+        throw new Error(`Doğrulama hatası: ${messages}`)
+      }
+      throw new Error(`Doğrulama hatası: ${error?.message ?? 'Unknown validation error'}`)
+    }
+  }
+
+  /**
+   * Checks if a magazine with the given issue number already exists
+   */
+  private async checkIssueNumberExists(
+    issueNumber: number,
+    excludeId?: string
+  ): Promise<boolean> {
+    let query = this.supabase
+      .from('magazines')
+      .select('id')
+      .eq('issue_number', issueNumber)
+    
+    if (excludeId) {
+      query = query.neq('id', excludeId)
+    }
+    
+    const { data, error } = await query.single()
+    
+    // PGRST116 means no record found, which is what we want
+    if (error && error.code === 'PGRST116') {
+      return false
+    }
+    
+    if (error) {
+      throw new Error(`Veritabanı hatası: ${error.message}`)
+    }
+    
+    return data !== null
+  }
+
+  /**
+   * Gets the current version of a magazine for optimistic locking
+   */
+  private async getMagazineWithVersion(id: string): Promise<Magazine> {
+    const { data, error } = await this.supabase
+      .from('magazines')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    if (error || !data) {
+      throw new Error('Dergi bulunamadı')
+    }
+    
+    return data as Magazine
   }
 
   /**
    * Creates a new magazine record
    * 
-   * @param data - Magazine data to create
-   * @returns Promise resolving to created magazine
-   * @throws {DatabaseError} If creation fails
+   * Implements Property 8: Uniqueness enforcement
+   * Implements Property 33: Duplicate creation prevention
+   * 
+   * Requirements 9.1, 9.2, 9.5: Performance monitoring
    */
-  async createMagazine(data: CreateMagazineDto): Promise<Magazine> {
-    return await this.magazineRepository.create(data)
-  }
-
-  /**
-   * Deletes a magazine and all its associated storage files
-   * 
-   * Implements transactional consistency (Requirements 1.6, 6.4):
-   * - Storage-first, database-second pattern
-   * - Rollback logic if storage deletion fails
-   * - Tracks partial failures
-   * - Returns detailed error responses
-   * - Logs all operations with context
-   * 
-   * @param id - The magazine ID to delete
-   * @param issueNumber - The issue number for storage cleanup
-   * @returns Promise resolving when deletion is complete
-   * @throws {DatabaseError} If database deletion fails
-   * @throws {StorageError} If storage deletion fails
-   */
-  async deleteMagazine(id: string, issueNumber: number): Promise<void> {
-    const { logger } = await import('@/lib/services/Logger')
-    
-    logger.info('Starting magazine deletion', {
-      operation: 'deleteMagazine',
-      magazineId: id,
-      issueNumber
-    })
-    
-    // Step 1: List all files to be deleted (for tracking)
-    let filesToDelete: StorageFile[] = []
-    try {
-      filesToDelete = await this.listAllIssueFiles(issueNumber)
-      logger.debug('Listed files for deletion', {
-        operation: 'deleteMagazine',
-        magazineId: id,
-        issueNumber,
-        fileCount: filesToDelete.length,
-        files: filesToDelete.map(f => f.path)
-      })
-    } catch (error) {
-      logger.error('Failed to list files for deletion', {
-        operation: 'deleteMagazine',
-        magazineId: id,
-        issueNumber,
-        error: error instanceof Error ? error.message : String(error)
-      })
-      throw error
-    }
-    
-    // Step 2: Delete storage files first (storage-first pattern)
-    // This ensures we don't have orphaned database records pointing to deleted files
-    try {
-      await this.deleteIssueFiles(issueNumber)
-      logger.info('Successfully deleted storage files', {
-        operation: 'deleteMagazine',
-        magazineId: id,
-        issueNumber,
-        deletedFileCount: filesToDelete.length
-      })
-    } catch (storageError) {
-      // Storage deletion failed - log detailed error and abort
-      // Do NOT proceed to database deletion to maintain consistency
-      logger.error('Storage deletion failed - aborting magazine deletion', {
-        operation: 'deleteMagazine',
-        magazineId: id,
-        issueNumber,
-        fileCount: filesToDelete.length,
-        error: storageError instanceof Error ? storageError.message : String(storageError),
-        stack: storageError instanceof Error ? storageError.stack : undefined
-      })
+  async createMagazine(input: unknown): Promise<Magazine> {
+    return performanceMonitor.measure('createMagazine', async () => {
+      logger.info('Creating magazine', { input })
       
-      // Re-throw the storage error to prevent database deletion
-      throw storageError
-    }
-    
-    // Step 3: Delete database record (only if storage deletion succeeded)
-    try {
-      await this.magazineRepository.delete(id)
-      logger.info('Successfully deleted magazine from database', {
-        operation: 'deleteMagazine',
-        magazineId: id,
-        issueNumber
-      })
-    } catch (databaseError) {
-      // Database deletion failed after storage deletion succeeded
-      // This is a critical inconsistency - storage is deleted but database record remains
-      logger.error('Database deletion failed after storage deletion - INCONSISTENT STATE', {
-        operation: 'deleteMagazine',
-        magazineId: id,
-        issueNumber,
-        deletedFiles: filesToDelete.map(f => f.path),
-        error: databaseError instanceof Error ? databaseError.message : String(databaseError),
-        stack: databaseError instanceof Error ? databaseError.stack : undefined,
-        severity: 'critical',
-        requiresManualIntervention: true
-      })
-      
-      // Note: We cannot rollback storage deletion easily in Supabase
-      // The database record will remain but files are gone
-      // This should be rare and requires manual intervention
-      throw databaseError
-    }
-    
-    logger.info('Magazine deletion completed successfully', {
-      operation: 'deleteMagazine',
-      magazineId: id,
-      issueNumber,
-      deletedFileCount: filesToDelete.length
-    })
-  }
-
-  /**
-   * Renames a magazine by moving its storage files and updating the database
-   * 
-   * Implements comprehensive error handling (Requirements 1.7, 5.3, 6.5):
-   * - Wraps entire operation in try-catch
-   * - Tracks individual file operation results
-   * - Uses Promise.allSettled for parallel operations
-   * - Returns detailed failure reports
-   * - Implements partial success handling
-   * 
-   * @param id - The magazine ID to update
-   * @param oldIssue - The current issue number
-   * @param newIssue - The new issue number
-   * @param newTitle - Optional new title for the magazine
-   * @returns Promise resolving to updated magazine
-   * @throws {DatabaseError} If database update fails
-   * @throws {StorageError} If storage operations fail with detailed failure information
-   */
-  async renameMagazine(
-    id: string,
-    oldIssue: number,
-    newIssue: number,
-    newTitle?: string
-  ): Promise<Magazine> {
-    const { logger } = await import('@/lib/services/Logger')
-    
-    logger.info('Starting magazine rename operation', {
-      operation: 'renameMagazine',
-      magazineId: id,
-      oldIssue,
-      newIssue,
-      newTitle
-    })
-    
-    try {
-      // Move storage files with detailed tracking
-      const moveResults = await this.moveIssueFiles(oldIssue, newIssue)
-      
-      // Check if any files failed to move
-      const totalFiles = moveResults.successes.length + moveResults.failures.length
-      if (moveResults.failures.length > 0) {
-        logger.warn('Some files failed to move during rename', {
-          operation: 'renameMagazine',
-          magazineId: id,
-          oldIssue,
-          newIssue,
-          successCount: moveResults.successes.length,
-          failureCount: moveResults.failures.length,
-          failures: moveResults.failures
-        })
-        
-        // If all files failed, throw error with progress indication
-        if (moveResults.successes.length === 0) {
-          const { StorageError } = await import('@/lib/errors/AppError')
-          const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
-          const catalogEntry = getErrorEntry('STORAGE_MOVE_FAILED')
-          
-          throw new StorageError(
-            `Failed to move any files from issue ${oldIssue} to ${newIssue}`,
-            'move',
-            `${oldIssue}`,
-            `Yeniden adlandırma başarısız oldu. ${moveResults.failures.length} dosyanın hiçbiri taşınamadı. (0/${totalFiles} tamamlandı)`,
-            catalogEntry.isRetryable,
-            { 
-              failures: moveResults.failures,
-              progress: {
-                total: totalFiles,
-                completed: 0,
-                failed: moveResults.failures.length
-              }
-            },
-            'OPERATION_RENAME_PARTIAL_FAILURE'
-          )
-        }
-        
-        // If some files failed, create partial failure error with progress indication
-        const { StorageError } = await import('@/lib/errors/AppError')
-        const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
-        const catalogEntry = getErrorEntry('OPERATION_RENAME_PARTIAL_FAILURE')
-        
-        throw new StorageError(
-          `Failed to move ${moveResults.failures.length} of ${totalFiles} files from issue ${oldIssue} to ${newIssue}`,
-          'move',
-          `${oldIssue}`,
-          `Yeniden adlandırma kısmen tamamlandı. ${moveResults.successes.length} dosya taşındı, ${moveResults.failures.length} dosya taşınamadı. (${moveResults.successes.length}/${totalFiles} tamamlandı)`,
-          catalogEntry.isRetryable,
-          {
-            totalFiles,
-            successCount: moveResults.successes.length,
-            failureCount: moveResults.failures.length,
-            successes: moveResults.successes,
-            failures: moveResults.failures,
-            progress: {
-              total: totalFiles,
-              completed: moveResults.successes.length,
-              failed: moveResults.failures.length
-            }
-          },
-          'OPERATION_RENAME_PARTIAL_FAILURE'
-        )
-      }
-      
-      // Update database record
-      const updateData: UpdateMagazineDto = { issue_number: newIssue }
-      if (newTitle) {
-        updateData.title = newTitle
-      }
-      
-      const updatedMagazine = await this.magazineRepository.update(id, updateData)
-      
-      logger.info('Magazine rename completed', {
-        operation: 'renameMagazine',
-        magazineId: id,
-        oldIssue,
-        newIssue,
-        filesMovedSuccessfully: moveResults.successes.length,
-        filesFailed: moveResults.failures.length
-      })
-      
-      return updatedMagazine
-    } catch (error) {
-      logger.error('Magazine rename operation failed', {
-        operation: 'renameMagazine',
-        magazineId: id,
-        oldIssue,
-        newIssue,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
-      })
-      
-      throw error
-    }
-  }
-
-  /**
-   * Deletes all storage files for a magazine issue
-   * 
-   * Implements Requirement 6.3: Partial storage failures retry selectively
-   * - Tracks successful vs failed operations
-   * - Only retries failed operations
-   * - Preserves successful operation results
-   * - Returns combined results
-   * 
-   * @param issueNumber - The issue number
-   * @returns Promise resolving when deletion is complete
-   * @throws {StorageError} If deletion fails completely or partially
-   */
-  private async deleteIssueFiles(issueNumber: number): Promise<void> {
-    const { logger } = await import('@/lib/services/Logger')
-    const files = await this.listAllIssueFiles(issueNumber)
-    
-    if (files.length === 0) {
-      logger.debug('No files to delete', {
-        operation: 'deleteIssueFiles',
-        issueNumber
-      })
-      return
-    }
-    
-    const filePaths = files.map(f => f.path)
-    
-    logger.info('Starting file deletion with partial retry', {
-      operation: 'deleteIssueFiles',
-      issueNumber,
-      fileCount: filePaths.length
-    })
-    
-    // Use partial retry to handle individual file failures
-    const result = await this.storageService.deleteWithPartialRetry(filePaths, {
-      maxAttempts: 3,
-      initialDelay: 1000,
-      backoffMultiplier: 2
-    })
-    
-    // Log results
-    if (result.failures.length > 0) {
-      logger.warn('Some files failed to delete', {
-        operation: 'deleteIssueFiles',
-        issueNumber,
-        totalFiles: filePaths.length,
-        successCount: result.successes.length,
-        failureCount: result.failures.length,
-        failures: result.failures
-      })
-      
-      // If all files failed, throw error with progress indication
-      if (result.successes.length === 0) {
-        const { StorageError } = await import('@/lib/errors/AppError')
-        const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
-        const catalogEntry = getErrorEntry('STORAGE_DELETE_FAILED')
-        
-        throw new StorageError(
-          `Failed to delete any files for issue ${issueNumber}`,
-          'delete',
-          String(issueNumber),
-          `Silme işlemi başarısız oldu. ${result.failures.length} dosyanın hiçbiri silinemedi. (0/${filePaths.length} tamamlandı)`,
-          catalogEntry.isRetryable,
-          { 
-            failures: result.failures,
-            progress: {
-              total: filePaths.length,
-              completed: 0,
-              failed: result.failures.length
-            }
-          },
-          'OPERATION_DELETE_PARTIAL_FAILURE'
-        )
-      }
-      
-      // If some files failed, throw error with partial success info and progress indication
-      const { StorageError } = await import('@/lib/errors/AppError')
-      const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
-      const catalogEntry = getErrorEntry('OPERATION_DELETE_PARTIAL_FAILURE')
-      
-      throw new StorageError(
-        `Failed to delete ${result.failures.length} of ${filePaths.length} files for issue ${issueNumber}`,
-        'delete',
-        String(issueNumber),
-        `Silme işlemi kısmen tamamlandı. ${result.successes.length} dosya silindi, ${result.failures.length} dosya silinemedi. (${result.successes.length}/${filePaths.length} tamamlandı)`,
-        catalogEntry.isRetryable,
-        {
-          totalFiles: filePaths.length,
-          successCount: result.successes.length,
-          failureCount: result.failures.length,
-          failures: result.failures,
-          progress: {
-            total: filePaths.length,
-            completed: result.successes.length,
-            failed: result.failures.length
-          }
-        },
-        'OPERATION_DELETE_PARTIAL_FAILURE'
+      // Validate input
+      const validated = this.validateInput<MagazineInput>(
+        MagazineInputSchema,
+        input
       )
-    }
-    
-    logger.info('Successfully deleted all files', {
-      operation: 'deleteIssueFiles',
-      issueNumber,
-      fileCount: result.successes.length
+      
+      // Check uniqueness before insertion
+      const exists = await this.checkIssueNumberExists(validated.issue_number)
+      
+      if (exists) {
+        logger.warn('Magazine creation failed: duplicate issue number', {
+          issue_number: validated.issue_number
+        })
+        throw new Error(`Sayı ${validated.issue_number} zaten mevcut`)
+      }
+      
+      // Insert magazine record
+      const { data, error } = await this.supabase
+        .from('magazines')
+        .insert({
+          ...validated,
+          is_published: true,
+          version: 1
+        })
+        .select()
+        .single()
+      
+      if (error) {
+        logger.error('Magazine creation failed: database error', {
+          error: error.message,
+          issue_number: validated.issue_number
+        })
+        throw new Error(`Veritabanı hatası: ${error.message}`)
+      }
+      
+      logger.info('Magazine created successfully', {
+        id: data.id,
+        issue_number: data.issue_number
+      })
+      
+      return data as Magazine
     })
   }
 
   /**
-   * Moves all storage files from one issue number to another
+   * Uploads magazine files and creates database record with transaction support
    * 
-   * Implements comprehensive error handling (Requirements 1.7, 5.3, 6.5):
-   * - Uses Promise.allSettled for parallel operations
-   * - Tracks individual file operation results
-   * - Returns detailed success/failure information
-   * - Handles partial failures gracefully
+   * Implements Property 11: Upload rollback on DB failure
+   * Implements Property 14: Transaction step tracking
    * 
-   * @param oldIssue - The current issue number
-   * @param newIssue - The new issue number
-   * @returns Promise resolving to operation results with successes and failures
+   * Requirements 9.1, 9.2, 9.5: Performance monitoring
    */
-  private async moveIssueFiles(
-    oldIssue: number,
-    newIssue: number
-  ): Promise<{
-    successes: Array<{ from: string; to: string }>
-    failures: Array<{ from: string; to: string; error: string }>
-  }> {
-    const { logger } = await import('@/lib/services/Logger')
-    const successes: Array<{ from: string; to: string }> = []
-    const failures: Array<{ from: string; to: string; error: string }> = []
-    
-    // If moving to the same issue number, skip
-    if (oldIssue === newIssue) {
-      logger.debug('Skipping file move - same issue number', {
-        operation: 'moveIssueFiles',
-        issueNumber: oldIssue
+  async uploadMagazineWithFiles(
+    magazineData: unknown,
+    files: Array<{ path: string; file: File }>
+  ): Promise<Magazine> {
+    return performanceMonitor.measure('uploadMagazineWithFiles', async () => {
+      const totalSize = files.reduce((sum, { file }) => sum + file.size, 0)
+      
+      logger.info('Starting magazine upload', {
+        fileCount: files.length,
+        totalSize,
+        totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2)
       })
-      return { successes, failures }
-    }
-    
-    logger.info('Starting file move operation', {
-      operation: 'moveIssueFiles',
-      oldIssue,
-      newIssue
-    })
-    
-    // Delete target directory first to avoid conflicts
-    try {
-      await this.deleteIssueFiles(newIssue)
-      logger.debug('Cleaned target directory', {
-        operation: 'moveIssueFiles',
-        targetIssue: newIssue
-      })
-    } catch (error) {
-      // Ignore errors if target doesn't exist
-      logger.debug('Target directory does not exist or could not be cleaned', {
-        operation: 'moveIssueFiles',
-        targetIssue: newIssue,
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
-    
-    // List all files to move
-    let pages: StorageFile[] = []
-    try {
-      const pagesPath = STORAGE_PATHS.getPagesPath(oldIssue)
-      pages = await this.storageService.list(pagesPath)
-      logger.debug('Listed files to move', {
-        operation: 'moveIssueFiles',
-        oldIssue,
-        pageCount: pages.length
-      })
-    } catch (error) {
-      logger.error('Failed to list files for move', {
-        operation: 'moveIssueFiles',
-        oldIssue,
-        error: error instanceof Error ? error.message : String(error)
-      })
-      // If we can't list files, we can't proceed
-      throw error
-    }
-    
-    // Prepare all move operations
-    const moveOperations: Array<{
-      from: string
-      to: string
-      operation: () => Promise<void>
-    }> = []
-    
-    // Add cover image move operation
-    // Implements storage error handling (Requirements 1.3):
-    // - Wraps storage operations in try-catch
-    // - Provides fallback for move operation
-    // - Logs errors with context
-    const oldCoverPath = STORAGE_PATHS.getCoverPath(oldIssue)
-    const newCoverPath = STORAGE_PATHS.getCoverPath(newIssue)
-    moveOperations.push({
-      from: oldCoverPath,
-      to: newCoverPath,
-      operation: async () => {
-        try {
-          await this.storageService.move(oldCoverPath, newCoverPath)
-        } catch (moveError) {
-          // Fallback to copy + delete if move fails
-          logger.debug('Move operation failed, attempting copy + delete fallback', {
-            operation: 'moveIssueFiles',
-            from: oldCoverPath,
-            to: newCoverPath,
-            error: moveError instanceof Error ? moveError.message : String(moveError)
+      
+      const transaction = new TransactionManager()
+      const uploadedFiles: string[] = []
+      let createdMagazine: Magazine | null = null
+      
+      // Step 1: Upload files to storage
+      transaction.addStep({
+        name: 'upload-files',
+        execute: async () => {
+          for (const { path, file } of files) {
+            await this.storage.uploadFile(STORAGE_CONFIG.BUCKET, path, file)
+            uploadedFiles.push(path)
+          }
+          logger.info('Files uploaded successfully', {
+            fileCount: uploadedFiles.length
           })
-          
-          try {
-            await this.storageService.copy(oldCoverPath, newCoverPath)
-            await this.storageService.delete([oldCoverPath])
-          } catch (fallbackError) {
-            logger.error('Fallback copy + delete also failed', {
-              operation: 'moveIssueFiles',
-              from: oldCoverPath,
-              to: newCoverPath,
-              error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+        },
+        rollback: async () => {
+          if (uploadedFiles.length > 0) {
+            logger.warn('Rolling back file uploads', {
+              fileCount: uploadedFiles.length
             })
-            throw fallbackError
+            await this.storage.deleteFiles(STORAGE_CONFIG.BUCKET, uploadedFiles)
           }
         }
+      })
+      
+      // Step 2: Create database record
+      transaction.addStep({
+        name: 'create-record',
+        execute: async () => {
+          createdMagazine = await this.createMagazine(magazineData)
+        },
+        rollback: async () => {
+          // DB record creation failed, no rollback needed
+        }
+      })
+      
+      // Execute transaction
+      await transaction.execute()
+      
+      if (!createdMagazine) {
+        logger.error('Magazine upload failed: no magazine created')
+        throw new Error('Dergi oluşturulamadı')
       }
+      
+      const magazine: Magazine = createdMagazine
+      
+      logger.info('Magazine upload completed successfully', {
+        id: magazine.id,
+        issue_number: magazine.issue_number,
+        fileCount: files.length
+      })
+      
+      return magazine
     })
-    
-    // Add page file move operations
-    // Implements storage error handling (Requirements 1.3):
-    // - Wraps storage operations in try-catch
-    // - Provides fallback for move operation
-    // - Logs errors with context
-    for (const page of pages) {
-      const fromPath = `${oldIssue}/pages/${page.name}`
-      const toPath = `${newIssue}/pages/${page.name}`
-      moveOperations.push({
-        from: fromPath,
-        to: toPath,
-        operation: async () => {
-          try {
-            await this.storageService.move(fromPath, toPath)
-          } catch (moveError) {
-            // Fallback to copy + delete if move fails
-            logger.debug('Move operation failed, attempting copy + delete fallback', {
-              operation: 'moveIssueFiles',
-              from: fromPath,
-              to: toPath,
-              error: moveError instanceof Error ? moveError.message : String(moveError)
+  }
+
+  /**
+   * Renames a magazine with optimistic locking and transaction support
+   * 
+   * Implements Property 13: File move rollback
+   * Implements Property 16: Optimistic locking conflict detection
+   * Implements Property 17: Version conflict error messaging
+   * Implements Property 34: Rename conflict early detection
+   * 
+   * Requirements 9.1, 9.2, 9.5: Performance monitoring
+   */
+  async renameMagazine(input: unknown): Promise<Magazine> {
+    return performanceMonitor.measure('renameMagazine', async () => {
+      logger.info('Starting magazine rename', { input })
+      
+      // Validate input
+      const validated = this.validateInput<MagazineRenameInput>(
+        MagazineRenameSchema,
+        input
+      )
+      
+      // Get current magazine with version check
+      const current = await this.getMagazineWithVersion(validated.id)
+      
+      // Check version for optimistic locking
+      if (current.version !== validated.version) {
+        logger.warn('Magazine rename failed: version conflict', {
+          id: validated.id,
+          expectedVersion: validated.version,
+          currentVersion: current.version
+        })
+        throw new Error(
+          'Dergi başka bir kullanıcı tarafından değiştirildi. Lütfen sayfayı yenileyin.'
+        )
+      }
+      
+      // Check new issue_number uniqueness (if changing)
+      if (validated.new_issue !== validated.old_issue) {
+        const exists = await this.checkIssueNumberExists(
+          validated.new_issue,
+          validated.id
+        )
+        
+        if (exists) {
+          logger.warn('Magazine rename failed: duplicate issue number', {
+            new_issue: validated.new_issue
+          })
+          throw new Error(`Sayı ${validated.new_issue} zaten mevcut`)
+        }
+      }
+      
+      const transaction = new TransactionManager()
+      const movedFiles: Array<{ from: string; to: string }> = []
+      let updatedMagazine: Magazine | null = null
+      
+      // Step 1: Move files in storage (if issue number changed)
+      if (validated.new_issue !== validated.old_issue) {
+        transaction.addStep({
+          name: 'move-files',
+          execute: async () => {
+            const files = await this.storage.listFilesRecursive(
+              STORAGE_CONFIG.BUCKET,
+              `${validated.old_issue}/pages`
+            )
+            
+            logger.info('Moving files for rename', {
+              fileCount: files.length,
+              from: validated.old_issue,
+              to: validated.new_issue
             })
             
-            try {
-              await this.storageService.copy(fromPath, toPath)
-              await this.storageService.delete([fromPath])
-            } catch (fallbackError) {
-              logger.error('Fallback copy + delete also failed', {
-                operation: 'moveIssueFiles',
-                from: fromPath,
-                to: toPath,
-                error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+            const moves = files.map(file => ({
+              from: file,
+              to: file.replace(
+                `${validated.old_issue}/`,
+                `${validated.new_issue}/`
+              )
+            }))
+            
+            await this.storage.moveFiles(STORAGE_CONFIG.BUCKET, moves)
+            movedFiles.push(...moves)
+            
+            logger.info('Files moved successfully', {
+              fileCount: movedFiles.length
+            })
+          },
+          rollback: async () => {
+            if (movedFiles.length > 0) {
+              logger.warn('Rolling back file moves', {
+                fileCount: movedFiles.length
               })
-              throw fallbackError
+              const reverseMoves = movedFiles.map(({ from, to }) => ({
+                from: to,
+                to: from
+              }))
+              await this.storage.moveFiles(STORAGE_CONFIG.BUCKET, reverseMoves)
             }
           }
-        }
-      })
-    }
-    
-    logger.info('Executing parallel file move operations', {
-      operation: 'moveIssueFiles',
-      oldIssue,
-      newIssue,
-      operationCount: moveOperations.length
-    })
-    
-    // Execute all move operations in parallel using Promise.allSettled
-    const results = await Promise.allSettled(
-      moveOperations.map(op => op.operation())
-    )
-    
-    // Track results for each operation
-    results.forEach((result, index) => {
-      const { from, to } = moveOperations[index]
-      
-      if (result.status === 'fulfilled') {
-        successes.push({ from, to })
-        logger.debug('File moved successfully', {
-          operation: 'moveIssueFiles',
-          from,
-          to
-        })
-      } else {
-        const errorMessage = result.reason instanceof Error 
-          ? result.reason.message 
-          : String(result.reason)
-        
-        failures.push({ from, to, error: errorMessage })
-        logger.warn('File move failed', {
-          operation: 'moveIssueFiles',
-          from,
-          to,
-          error: errorMessage
         })
       }
+      
+      // Step 2: Update database record
+      transaction.addStep({
+        name: 'update-db',
+        execute: async () => {
+          const update: {
+            issue_number: number
+            version: number
+            title?: string
+          } = {
+            issue_number: validated.new_issue,
+            version: validated.version + 1
+          }
+          
+          if (validated.new_title) {
+            update.title = validated.new_title
+          }
+          
+          const { data, error } = await this.supabase
+            .from('magazines')
+            .update(update)
+            .eq('id', validated.id)
+            .eq('version', validated.version)
+            .select()
+            .single()
+          
+          if (error) {
+            logger.error('Magazine rename failed: database update error', {
+              error: error.message,
+              id: validated.id
+            })
+            throw new Error(`Veritabanı güncelleme hatası: ${error.message}`)
+          }
+          
+          if (!data) {
+            logger.warn('Magazine rename failed: version conflict during update', {
+              id: validated.id
+            })
+            throw new Error(
+              'Dergi başka bir kullanıcı tarafından değiştirildi. Lütfen sayfayı yenileyin.'
+            )
+          }
+          
+          updatedMagazine = data as Magazine
+        },
+        rollback: async () => {
+          // DB update failed, no rollback needed
+        }
+      })
+      
+      // Execute transaction
+      await transaction.execute()
+      
+      if (!updatedMagazine) {
+        logger.error('Magazine rename failed: no magazine updated')
+        throw new Error('Dergi güncellenemedi')
+      }
+      
+      const magazine: Magazine = updatedMagazine
+      
+      logger.info('Magazine rename completed successfully', {
+        id: magazine.id,
+        old_issue: validated.old_issue,
+        new_issue: validated.new_issue,
+        newVersion: magazine.version
+      })
+      
+      return magazine
     })
-    
-    logger.info('File move operation completed', {
-      operation: 'moveIssueFiles',
-      oldIssue,
-      newIssue,
-      totalOperations: moveOperations.length,
-      successCount: successes.length,
-      failureCount: failures.length
-    })
-    
-    return { successes, failures }
   }
 
   /**
-   * Lists all storage files for a magazine issue recursively
+   * Deletes a magazine with storage-first approach
    * 
-   * Implements recursive error handling (Requirements 1.4):
-   * - Adds depth limit parameter (default 10)
-   * - Adds per-directory error handling
-   * - Tracks failed directories
-   * - Returns partial results on errors
-   * - Logs warnings for depth limit and failures
+   * Implements Property 12: DB preservation on storage failure
    * 
-   * Implements storage error handling (Requirements 1.3):
-   * - Wraps storage operations in try-catch
-   * - Handles StorageError instances appropriately
-   * - Provides context for each operation
-   * 
-   * @param issueNumber - The issue number
-   * @param maxDepth - Maximum recursion depth (default 10)
-   * @returns Promise resolving to array of storage files (partial results if errors occur)
-   * @throws {StorageError} If listing fails completely
+   * Requirements 9.1, 9.2, 9.5: Performance monitoring
    */
-  private async listAllIssueFiles(
-    issueNumber: number,
-    maxDepth: number = 10
-  ): Promise<StorageFile[]> {
-    const { logger } = await import('@/lib/services/Logger')
-    const { ErrorHandler } = await import('@/lib/errors/errorHandler')
-    const files: StorageFile[] = []
-    const failedDirectories: Array<{ path: string; error: string }> = []
-    const issuePrefix = String(issueNumber)
-    
-    logger.debug('Starting recursive file listing', {
-      operation: 'listAllIssueFiles',
-      issueNumber,
-      maxDepth,
-      prefix: issuePrefix
-    })
-    
-    const listRecursive = async (prefix: string, currentDepth: number): Promise<void> => {
-      // Check depth limit
-      if (currentDepth > maxDepth) {
-        const warningMessage = `Depth limit (${maxDepth}) exceeded for path: ${prefix}`
-        logger.warn(warningMessage, {
-          operation: 'listAllIssueFiles',
-          issueNumber,
-          prefix,
-          currentDepth,
-          maxDepth
-        })
-        failedDirectories.push({
-          path: prefix,
-          error: `Depth limit exceeded (max: ${maxDepth})`
-        })
-        return
+  async deleteMagazine(input: unknown): Promise<void> {
+    return performanceMonitor.measure('deleteMagazine', async () => {
+      logger.info('Starting magazine deletion', { input })
+      
+      // Validate input
+      const validated = this.validateInput<MagazineDeleteInput>(
+        MagazineDeleteSchema,
+        input
+      )
+      
+      // Step 1: Delete storage files first
+      const files = await this.storage.listFilesRecursive(
+        STORAGE_CONFIG.BUCKET,
+        String(validated.issue_number)
+      )
+      
+      logger.info('Deleting storage files', {
+        fileCount: files.length,
+        issue_number: validated.issue_number
+      })
+      
+      if (files.length > 0) {
+        try {
+          await this.storage.deleteFiles(STORAGE_CONFIG.BUCKET, files)
+          logger.info('Storage files deleted successfully', {
+            fileCount: files.length
+          })
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          logger.error('Magazine deletion failed: storage deletion error', {
+            error: errorMessage,
+            issue_number: validated.issue_number,
+            fileCount: files.length
+          })
+          throw new Error(
+            `Dosyalar silinemedi: ${errorMessage}. Veritabanı kaydı korundu.`
+          )
+        }
       }
       
-      // Per-directory error handling with storage operation wrapped in try-catch
-      try {
-        const items = await this.storageService.list(prefix)
-        
-        logger.debug('Listed directory contents', {
-          operation: 'listAllIssueFiles',
-          prefix,
-          itemCount: items.length,
-          depth: currentDepth
+      // Step 2: Delete database record
+      const { error } = await this.supabase
+        .from('magazines')
+        .delete()
+        .eq('id', validated.id)
+      
+      if (error) {
+        logger.error('Magazine deletion failed: database deletion error', {
+          error: error.message,
+          id: validated.id,
+          issue_number: validated.issue_number
         })
-        
-        for (const item of items) {
-          if (item.id) {
-            // It's a file
-            files.push(item)
-          } else {
-            // It's a directory, recurse into it
-            await listRecursive(item.path, currentDepth + 1)
-          }
-        }
-      } catch (error) {
-        // Transform to StorageError if not already
-        const storageError = ErrorHandler.handleStorageError(
-          error instanceof Error ? error : new Error(String(error)),
-          'list',
-          prefix
+        throw new Error(
+          `Veritabanı silme hatası: ${error.message}. Dosyalar silindi ama kayıt silinemedi.`
         )
-        
-        // Log per-directory failure but continue with other directories
-        logger.warn('Failed to list directory, continuing with partial results', {
-          operation: 'listAllIssueFiles',
-          issueNumber,
-          prefix,
-          depth: currentDepth,
-          error: storageError.message,
-          code: storageError.code
-        })
-        
-        failedDirectories.push({
-          path: prefix,
-          error: storageError.message
-        })
       }
-    }
-    
-    // Start recursive listing from depth 0
-    await listRecursive(issuePrefix, 0)
-    
-    // Log summary of operation
-    if (failedDirectories.length > 0) {
-      logger.warn('Recursive file listing completed with failures', {
-        operation: 'listAllIssueFiles',
-        issueNumber,
-        filesFound: files.length,
-        failedDirectoryCount: failedDirectories.length,
-        failedDirectories
+      
+      logger.info('Magazine deletion completed successfully', {
+        id: validated.id,
+        issue_number: validated.issue_number
       })
-    } else {
-      logger.debug('Recursive file listing completed successfully', {
-        operation: 'listAllIssueFiles',
-        issueNumber,
-        filesFound: files.length
-      })
-    }
-    
-    return files
+    })
   }
 }

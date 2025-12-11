@@ -1,7 +1,5 @@
 import { getAuthenticatedClient } from '@/lib/supabase/server'
 import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
-import { MagazineService } from '@/lib/services/MagazineService'
-import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
 import { AdminDashboardClient } from './AdminDashboardClient'
 import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { logger } from '@/lib/services/Logger'
@@ -24,23 +22,21 @@ export default async function AdminDashboard() {
 
   const userEmail = user?.email || ''
 
-  // Use MagazineService instead of direct Supabase calls
+  // Use repository to fetch magazines
   const magazineRepository = new SupabaseMagazineRepository(supabase)
-  const storageService = new SupabaseStorageService(supabase)
-  const magazineService = new MagazineService(magazineRepository, storageService)
   
   // Wrap magazine fetching in try-catch (Requirement 1.2)
   let result: Result<Magazine[]>
   
   try {
-    const magazines = await magazineService.getAllMagazines()
+    const magazines = await magazineRepository.findAll()
     result = ErrorHandler.success(magazines)
   } catch (error) {
     // Log error with page context
     const appError = ErrorHandler.handleUnknownError(error)
     logger.error('Failed to fetch magazines in admin page', {
       page: 'admin/page',
-      operation: 'getAllMagazines',
+      operation: 'findAll',
       userId: user?.id,
       userEmail,
       error: {

@@ -8,14 +8,17 @@ import { Input } from '@/components/ui/input'
 import { deleteMagazine, renameMagazine } from './actions'
 import { Loader2, Trash2 } from 'lucide-react'
 import { handleServerActionResult } from '@/lib/utils/resultValidation'
+import { formatErrorWithContext, type FormattedError } from '@/lib/utils/errorMessages'
 import { z } from 'zod'
 
-export function RowActions({ id, issue, title }: { id: string; issue: number; title: string }) {
+export function RowActions({ id, issue, title, version }: { id: string; issue: number; title: string; version: number }) {
   const [openRename, setOpenRename] = useState(false)
   const [newIssue, setNewIssue] = useState(issue)
   const [newTitle, setNewTitle] = useState(title)
   const [openDelete, setOpenDelete] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [renameError, setRenameError] = useState<FormattedError | null>(null)
+  const [deleteError, setDeleteError] = useState<FormattedError | null>(null)
 
   return (
     <div className="flex items-center gap-1 sm:gap-2">
@@ -40,16 +43,19 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
                 <form
                   action={async (formData: FormData) => {
                     startTransition(async () => {
+                      setRenameError(null)
                       await handleServerActionResult(
                         await renameMagazine(formData),
                         z.void(),
                         {
                           onSuccess: () => {
                             setOpenRename(false)
+                            setRenameError(null)
                           },
                           onError: (error) => {
-                            // Show error to user with validated error response
-                            alert(error.userMessage || 'Dergi yeniden adlandırılırken bir hata oluştu')
+                            // Format error with full context
+                            const formattedError = formatErrorWithContext(error)
+                            setRenameError(formattedError)
                           }
                         },
                         { operation: 'renameMagazine', magazineId: id, oldIssue: issue, newIssue }
@@ -60,6 +66,7 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
                 >
                   <input type="hidden" name="id" value={id} />
                   <input type="hidden" name="old_issue" value={issue} />
+                  <input type="hidden" name="version" value={version} />
                   <div>
                     <label className="text-xs sm:text-sm font-medium text-gray-700">Yeni Sayı No</label>
                     <Input 
@@ -80,6 +87,73 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
                       className="mt-1 text-sm"
                     />
                   </div>
+                  
+                  {/* Enhanced Error Display */}
+                  {renameError && (
+                    <div className={`rounded-lg border p-3 ${
+                      renameError.type === 'CONFLICT' ? 'border-amber-200 bg-amber-50' :
+                      renameError.type === 'VALIDATION' ? 'border-red-200 bg-red-50' :
+                      renameError.type === 'NETWORK' ? 'border-blue-200 bg-blue-50' :
+                      'border-red-200 bg-red-50'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        <div className="flex-shrink-0">
+                          {renameError.type === 'CONFLICT' ? (
+                            <svg className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          ) : renameError.type === 'NETWORK' ? (
+                            <svg className="h-5 w-5 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          ) : (
+                            <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-sm font-medium ${
+                            renameError.type === 'CONFLICT' ? 'text-amber-800' :
+                            renameError.type === 'NETWORK' ? 'text-blue-800' :
+                            'text-red-800'
+                          }`}>
+                            {renameError.message}
+                          </p>
+                          
+                          {/* Show validation field errors */}
+                          {renameError.fields && renameError.fields.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {renameError.fields.map((field, idx) => (
+                                <li key={idx} className="text-xs text-red-700">
+                                  • <span className="font-medium">{field.field}:</span> {field.message}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          
+                          {/* Show retry info for network errors */}
+                          {renameError.retryable && (
+                            <p className="mt-2 text-xs text-blue-700">
+                              Bu hata geçici olabilir. Lütfen tekrar deneyin.
+                            </p>
+                          )}
+                          
+                          {/* Show refresh button for conflicts */}
+                          {renameError.type === 'CONFLICT' && (
+                            <button
+                              type="button"
+                              onClick={() => window.location.reload()}
+                              className="mt-2 text-sm font-medium text-amber-900 hover:text-amber-700 underline"
+                            >
+                              Sayfayı Yenile
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <DialogFooter className="flex flex-col sm:flex-row gap-2">
                     <Button 
                       type="button" 
@@ -115,16 +189,19 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
                 <form
                   action={async (formData: FormData) => {
                     startTransition(async () => {
+                      setDeleteError(null)
                       await handleServerActionResult(
                         await deleteMagazine(formData),
                         z.void(),
                         {
                           onSuccess: () => {
                             setOpenDelete(false)
+                            setDeleteError(null)
                           },
                           onError: (error) => {
-                            // Show error to user with validated error response
-                            alert(error.userMessage || 'Dergi silinirken bir hata oluştu')
+                            // Format error with full context
+                            const formattedError = formatErrorWithContext(error)
+                            setDeleteError(formattedError)
                           }
                         },
                         { operation: 'deleteMagazine', magazineId: id, issueNumber: issue }
@@ -135,6 +212,70 @@ export function RowActions({ id, issue, title }: { id: string; issue: number; ti
                 >
                   <input type="hidden" name="id" value={id} />
                   <input type="hidden" name="issue_number" value={issue} />
+                  <input type="hidden" name="version" value={version} />
+                  
+                  {/* Enhanced Error Display */}
+                  {deleteError && (
+                    <div className={`rounded-lg border p-3 mb-4 ${
+                      deleteError.type === 'CONFLICT' ? 'border-amber-200 bg-amber-50' :
+                      deleteError.type === 'VALIDATION' ? 'border-red-200 bg-red-50' :
+                      deleteError.type === 'NETWORK' ? 'border-blue-200 bg-blue-50' :
+                      'border-red-200 bg-red-50'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        <div className="flex-shrink-0">
+                          {deleteError.type === 'CONFLICT' ? (
+                            <svg className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          ) : deleteError.type === 'NETWORK' ? (
+                            <svg className="h-5 w-5 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          ) : (
+                            <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-sm font-medium ${
+                            deleteError.type === 'CONFLICT' ? 'text-amber-800' :
+                            deleteError.type === 'NETWORK' ? 'text-blue-800' :
+                            'text-red-800'
+                          }`}>
+                            {deleteError.message}
+                          </p>
+                          
+                          {/* Show cleanup notification if present in context */}
+                          {deleteError.context && 'cleanup' in deleteError.context && Boolean(deleteError.context.cleanup) && (
+                            <p className="mt-2 text-xs text-red-700">
+                              ⚠️ Bazı dosyalar silinemedi. Manuel temizlik gerekebilir.
+                            </p>
+                          )}
+                          
+                          {/* Show retry info for network errors */}
+                          {deleteError.retryable && (
+                            <p className="mt-2 text-xs text-blue-700">
+                              Bu hata geçici olabilir. Lütfen tekrar deneyin.
+                            </p>
+                          )}
+                          
+                          {/* Show refresh button for conflicts */}
+                          {deleteError.type === 'CONFLICT' && (
+                            <button
+                              type="button"
+                              onClick={() => window.location.reload()}
+                              className="mt-2 text-sm font-medium text-amber-900 hover:text-amber-700 underline"
+                            >
+                              Sayfayı Yenile
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <DialogFooter className="flex flex-col sm:flex-row gap-2">
                     <Button type="button" variant="ghost" onClick={() => setOpenDelete(false)} className="w-full sm:w-auto order-2 sm:order-1">İptal</Button>
                     <Button type="submit" variant="destructive" disabled={isPending} aria-busy={isPending} className="w-full sm:w-auto order-1 sm:order-2">

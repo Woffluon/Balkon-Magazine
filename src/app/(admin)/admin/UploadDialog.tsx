@@ -17,6 +17,7 @@ import { saveUploadLog } from './actions'
 import { useSupabaseClient } from '@/hooks/useSupabaseClient'
 import { categorizeError, showError, showSuccess } from '@/lib/utils/uploadErrors'
 import { logger } from '@/lib/services/Logger'
+import { IdempotencyManager } from '@/lib/services/IdempotencyManager'
 import type { Magazine } from '@/types/magazine'
 import type { UploadState } from '@/hooks/useUploadPersistence'
 
@@ -37,7 +38,12 @@ export default function UploadDialog() {
     errorMessage: '',
     errorType: 'unknown'
   })
+  const [idempotencyKey, setIdempotencyKey] = useState<string>('')
+  const [uploadCompleted, setUploadCompleted] = useState(false)
   const router = useRouter()
+  
+  // Initialize idempotency manager
+  const idempotencyManager = new IdempotencyManager()
   
   // Custom hooks for separation of concerns
   const { formState, updateField, reset: resetForm, validate } = useUploadForm()
@@ -68,7 +74,40 @@ export default function UploadDialog() {
       errorMessage: '',
       errorType: 'unknown'
     })
+    
+    // Clear idempotency key on success to allow new uploads
+    if (idempotencyKey && uploadCompleted) {
+      idempotencyManager.clear(idempotencyKey)
+    }
+    
+    // Reset idempotency state
+    setIdempotencyKey('')
+    setUploadCompleted(false)
   }
+
+  /**
+   * Generate idempotency key and check for completed uploads when dialog opens
+   * 
+   * Requirements: 4.3, 4.4
+   * - Generates unique idempotency key on mount
+   * - Checks if upload with this key was already completed
+   * - Disables submit if upload was completed
+   */
+  useEffect(() => {
+    if (open && !idempotencyKey) {
+      // Generate new idempotency key
+      const key = idempotencyManager.generateKey()
+      setIdempotencyKey(key)
+      
+      // Check if this upload was already completed
+      const isCompleted = idempotencyManager.isCompleted(key)
+      setUploadCompleted(isCompleted)
+      
+      if (isCompleted) {
+        addLog('⚠️ Bu yükleme işlemi daha önce tamamlanmış.')
+      }
+    }
+  }, [open, idempotencyKey, idempotencyManager, addLog])
 
   /**
    * Fetch existing magazines when dialog opens
@@ -145,6 +184,17 @@ export default function UploadDialog() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    
+    // Check idempotency - prevent duplicate submissions
+    if (uploadCompleted) {
+      addLog('❌ Bu yükleme işlemi zaten tamamlanmış. Yeni bir yükleme için dialogu kapatıp tekrar açın.')
+      return
+    }
+    
+    if (!idempotencyKey) {
+      addLog('❌ İdempotency anahtarı oluşturulamadı. Lütfen dialogu kapatıp tekrar açın.')
+      return
+    }
     
     if (!validate()) {
       addLog('Lütfen tüm zorunlu alanları doldurun.')
@@ -303,6 +353,10 @@ export default function UploadDialog() {
 
       addLog('🎉 Dergi başarıyla yüklendi!')
       
+      // Mark upload as completed (idempotency)
+      idempotencyManager.markCompleted(idempotencyKey)
+      setUploadCompleted(true)
+      
       // Clear upload state on success
       clearState()
       
@@ -453,8 +507,29 @@ export default function UploadDialog() {
           />
           <UploadLogs logs={logs} />
           
+          {/* Upload Completed UI */}
+          {uploadCompleted && !busy && (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-green-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-green-800">
+                    Yükleme Tamamlandı
+                  </h3>
+                  <div className="mt-2 text-sm text-green-700">
+                    <p>Bu yükleme işlemi başarıyla tamamlanmış. Yeni bir yükleme yapmak için dialogu kapatıp tekrar açın.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {/* Error Recovery UI */}
-          {errorState.hasError && !busy && (
+          {errorState.hasError && !busy && !uploadCompleted && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-4">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
@@ -516,10 +591,10 @@ export default function UploadDialog() {
             </Button>
             <Button 
               type="submit" 
-              disabled={busy} 
-              className="w-full sm:w-auto order-1 sm:order-2 bg-neutral-900 hover:bg-neutral-800 text-white"
+              disabled={busy || uploadCompleted} 
+              className="w-full sm:w-auto order-1 sm:order-2 bg-neutral-900 hover:bg-neutral-800 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {busy ? 'Yükleniyor...' : errorState.hasError ? '🔄 Tekrar Dene' : 'Kaydet'}
+              {uploadCompleted ? '✓ Tamamlandı' : busy ? 'Yükleniyor...' : errorState.hasError ? '🔄 Tekrar Dene' : 'Kaydet'}
             </Button>
           </DialogFooter>
         </form>

@@ -7,6 +7,9 @@
 
 // Export schemas
 export {
+  MagazineInputSchema,
+  MagazineRenameSchema,
+  MagazineDeleteSchema,
   createMagazineSchema,
   updateMagazineSchema,
   deleteMagazineSchema,
@@ -17,6 +20,9 @@ export {
 
 // Export DTO types
 export type {
+  MagazineInput,
+  MagazineRenameInput,
+  MagazineDeleteInput,
   CreateMagazineDto,
   UpdateMagazineDto,
   DeleteMagazineDto,
@@ -24,6 +30,16 @@ export type {
   LoginDto,
   PasswordChangeDto
 } from './magazineSchemas'
+
+// Export URL validation
+export {
+  URLSchema,
+  OptionalURLSchema,
+  isValidURL,
+  isValidOptionalURL,
+  validateURL,
+  validatePageNumber
+} from './urlValidation'
 
 // Export error schemas
 export {

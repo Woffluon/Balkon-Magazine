@@ -10,6 +10,7 @@ export const MagazineEntitySchema = z.object({
   pdf_url: z.string().nullable().optional(),
   page_count: z.number().nullable().optional(),
   is_published: z.boolean(),
+  version: z.number().int().nonnegative().default(1),
   created_at: z.string().nullable().optional(),
   updated_at: z.string().nullable().optional(),
 })
@@ -27,6 +28,7 @@ export interface MagazineInterface {
   pdf_url?: string | null
   page_count?: number | null
   is_published: boolean
+  version: number
   created_at?: string | null
   updated_at?: string | null
 }
