@@ -306,37 +306,37 @@ export async function withPartialRetry<T>(
     const failedItems: T[] = []
     
     // Process results
-    for (let index = 0; index < results.length; index++) {
-      const result = results[index]
-      const item = itemsToProcess[index]
+    for (let resultIndex = 0; resultIndex < results.length; resultIndex++) {
+      const operationResult = results[resultIndex]
+      const currentItem = itemsToProcess[resultIndex]
       
-      if (result.status === 'fulfilled') {
+      if (operationResult.status === 'fulfilled') {
         // Operation succeeded
-        successes.push(item)
+        successes.push(currentItem)
         log.debug('Batch operation item succeeded', {
           attempt: attempt + 1,
-          item
+          item: currentItem
         })
       } else {
         // Operation failed
-        const error = result.reason
-        const shouldRetry = isRetryableError(error, finalConfig.retryableErrors)
+        const operationError = operationResult.reason
+        const shouldRetry = isRetryableError(operationError, finalConfig.retryableErrors)
         
         if (shouldRetry && attempt < finalConfig.maxAttempts - 1) {
           // Add to retry list
-          failedItems.push(item)
+          failedItems.push(currentItem)
           log.debug('Batch operation item failed, will retry', {
             attempt: attempt + 1,
-            item,
-            error: error instanceof Error ? error.message : String(error)
+            item: currentItem,
+            error: operationError instanceof Error ? operationError.message : String(operationError)
           })
         } else {
           // Non-retryable error or last attempt - add to permanent failures
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          failures.push({ item, error: errorMessage })
+          const errorMessage = operationError instanceof Error ? operationError.message : String(operationError)
+          failures.push({ item: currentItem, error: errorMessage })
           log.warn('Batch operation item failed permanently', {
             attempt: attempt + 1,
-            item,
+            item: currentItem,
             error: errorMessage,
             retryable: shouldRetry,
             lastAttempt: attempt >= finalConfig.maxAttempts - 1

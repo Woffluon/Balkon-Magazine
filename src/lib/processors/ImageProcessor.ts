@@ -42,8 +42,8 @@ export class ImageProcessor implements IFileProcessor {
       canvas.height = img.naturalHeight
       
       // Get canvas context
-      const ctx = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
-      if (!ctx) {
+      const canvasContext = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
+      if (!canvasContext) {
         throw new ProcessingError(
           'Canvas context unavailable',
           'image_conversion',
@@ -52,7 +52,7 @@ export class ImageProcessor implements IFileProcessor {
       }
       
       // Draw image to canvas
-      ctx.drawImage(img, 0, 0)
+      canvasContext.drawImage(img, 0, 0)
       
       // Convert to WebP blob
       const blob = await this.canvasToBlob(canvas, quality)

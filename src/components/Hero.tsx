@@ -3,6 +3,8 @@ import { TimelineContent } from "@/components/ui/timeline-animation";
 import VerticalCutReveal from "@/components/ui/vertical-cut-reveal";
 import { ArrowRight } from "lucide-react";
 import { useRef } from "react";
+import { logger } from '@/lib/services/Logger'
+import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 
 type HeroProps = {
   title?: string
@@ -13,6 +15,52 @@ export function Hero({
   title = 'Balkon Dergisi',
   subtitle = 'Keyfini çıkar, derin bir nefes al ve rahatla.',
 }: HeroProps) {
+  // Validate props using type guards (Requirement 7.2)
+  const validatedTitle = ValidationHelpers.validateOrDefault(
+    title,
+    TypeGuards.isNonEmptyString,
+    'Balkon Dergisi',
+    'Hero.title'
+  )
+  
+  const validatedSubtitle = ValidationHelpers.validateOrDefault(
+    subtitle,
+    TypeGuards.isNonEmptyString,
+    'Keyfini çıkar, derin bir nefes al ve rahatla.',
+    'Hero.subtitle'
+  )
+  
+  const handleScrollToMagazines = () => {
+    try {
+      const magazineSection = document.querySelector('[data-magazine-grid]')
+      if (magazineSection) {
+        magazineSection.scrollIntoView({ behavior: 'smooth' })
+        
+        logger.debug('Scrolled to magazine section from hero', {
+          component: 'Hero',
+          operation: 'handleScrollToMagazines'
+        })
+      } else {
+        logger.warn('Magazine section not found for scrolling from hero', {
+          component: 'Hero',
+          operation: 'handleScrollToMagazines'
+        })
+      }
+    } catch (error) {
+      logger.error('Failed to scroll to magazine section from hero', {
+        component: 'Hero',
+        operation: 'handleScrollToMagazines',
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+  
+  const handleKeyboardNavigation = (keyboardEvent: React.KeyboardEvent) => {
+    if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+      keyboardEvent.preventDefault()
+      handleScrollToMagazines()
+    }
+  }
   const heroRef = useRef<HTMLDivElement>(null);
   const revealVariants = {
     visible: (i: number) => ({
@@ -159,7 +207,7 @@ export function Hero({
                   delay: 3,
                 }}
               >
-                {title}
+                {validatedTitle}
               </VerticalCutReveal>
             </h1>
 
@@ -178,7 +226,7 @@ export function Hero({
                 className="sm:text-lg text-base"
               >
                 <p className="leading-relaxed">
-                  {subtitle}
+                  {validatedSubtitle}
                 </p>
               </TimelineContent>
               <TimelineContent
@@ -235,17 +283,8 @@ export function Hero({
                 customVariants={revealVariants}
                 type="button"
                 className="bg-neutral-900 hover:bg-neutral-950 shadow-lg shadow-neutral-900 border border-neutral-700 flex w-fit ml-auto gap-2 hover:gap-4 transition-all duration-300 ease-in-out text-white px-5 py-3 rounded-lg cursor-pointer font-semibold"
-                onClick={() => {
-                  const magazineSection = document.querySelector('[data-magazine-grid]');
-                  magazineSection?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                onKeyDown={(e: React.KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    const magazineSection = document.querySelector('[data-magazine-grid]');
-                    magazineSection?.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
+                onClick={handleScrollToMagazines}
+                onKeyDown={handleKeyboardNavigation}
               >
                 SAYILARI KEŞFET <ArrowRight className="" />
               </TimelineContent>

@@ -1,17 +1,17 @@
 import { ProgressBar } from './ProgressBar'
 
 interface UploadProgressProps {
-  coverPct: number
-  pagesPct: number
+  coverProgress: number
+  pagesProgress: number
   overall: number
 }
 
-export function UploadProgress({ coverPct, pagesPct, overall }: UploadProgressProps) {
+export function UploadProgress({ coverProgress, pagesProgress, overall }: UploadProgressProps) {
   return (
     <div className="grid gap-3 sm:gap-4">
-      <ProgressBar value={coverPct} label="Kapak yükleme ilerlemesi" showPercentage={true} />
+      <ProgressBar value={coverProgress} label="Kapak yükleme ilerlemesi" showPercentage={true} />
       
-      <ProgressBar value={pagesPct} label="Sayfa yükleme ilerlemesi" showPercentage={true} />
+      <ProgressBar value={pagesProgress} label="Sayfa yükleme ilerlemesi" showPercentage={true} />
       
       <div className="text-xs text-gray-600">
         <span>Toplam: %{Math.round(overall)}</span>

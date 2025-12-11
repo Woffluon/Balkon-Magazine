@@ -29,21 +29,21 @@ export interface RenderContext {
  * @example
  * ```typescript
  * const canvas = document.createElement('canvas')
- * const ctx = canvas.getContext('2d')
- * if (!ctx) throw new Error('Canvas context unavailable')
+ * const canvasContext = canvas.getContext('2d')
+ * if (!canvasContext) throw new Error('Canvas context unavailable')
  * 
  * const viewport = page.getViewport({ scale: 1.5 })
- * const renderContext = createRenderContext(ctx, viewport, canvas)
+ * const renderContext = createRenderContext(canvasContext, viewport, canvas)
  * await page.render(renderContext).promise
  * ```
  */
 export function createRenderContext(
-  ctx: CanvasRenderingContext2D,
+  canvasContext: CanvasRenderingContext2D,
   viewport: PageViewport,
   canvas: HTMLCanvasElement | null
 ): RenderContext {
   return {
-    canvasContext: ctx,
+    canvasContext,
     viewport,
     canvas
   }

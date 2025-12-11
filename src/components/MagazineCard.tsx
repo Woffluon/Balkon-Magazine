@@ -3,20 +3,103 @@ import Image from 'next/image'
 import React from 'react'
 import type { Magazine } from '@/types/magazine'
 import { getMagazineCoverUrl } from '@/lib/utils/storage'
+import { logger } from '@/lib/services/Logger'
+import { ErrorHandler } from '@/lib/errors/errorHandler'
+import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 
 type Props = {
   magazine: Magazine
 }
 
+/**
+ * Validates magazine data using type guards
+ * Ensures magazine object has required properties with correct types
+ */
+function validateMagazineData(magazine: unknown): Magazine | null {
+  if (!TypeGuards.isObject(magazine)) {
+    logger.warn('Invalid magazine data provided to MagazineCard', {
+      component: 'MagazineCard',
+      operation: 'validateMagazineData',
+      receivedType: typeof magazine
+    })
+    return null
+  }
+  
+  // Validate required properties using type guards (Requirement 7.2)
+  try {
+    const validatedMagazine = {
+      id: ValidationHelpers.validateOrThrow(
+        magazine.id,
+        TypeGuards.isString,
+        'string',
+        'magazine.id'
+      ),
+      title: ValidationHelpers.validateOrThrow(
+        magazine.title,
+        TypeGuards.isString,
+        'string',
+        'magazine.title'
+      ),
+      issue_number: ValidationHelpers.validateOrThrow(
+        magazine.issue_number,
+        TypeGuards.isNumber,
+        'number',
+        'magazine.issue_number'
+      ),
+      cover_image_url: ValidationHelpers.validateOrDefault(
+        magazine.cover_image_url,
+        TypeGuards.isString,
+        '',
+        'magazine.cover_image_url'
+      )
+    } as Magazine
+    
+    return validatedMagazine
+  } catch (error) {
+    const handledError = ErrorHandler.handleUnknownError(error)
+    logger.error('Magazine data validation failed', {
+      component: 'MagazineCard',
+      operation: 'validateMagazineData',
+      error: handledError.message,
+      magazine: JSON.stringify(magazine)
+    })
+    return null
+  }
+}
+
 export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props) {
-  const coverUrl = getMagazineCoverUrl(magazine.cover_image_url)
+  // Validate magazine data using type guards (Requirement 7.2)
+  const validatedMagazine = validateMagazineData(magazine)
+  
+  if (!validatedMagazine) {
+    logger.error('MagazineCard received invalid magazine data', {
+      component: 'MagazineCard',
+      operation: 'render',
+      magazine: JSON.stringify(magazine)
+    })
+    
+    // Return error placeholder
+    return (
+      <div className="group block w-full">
+        <div className="relative overflow-hidden rounded-xl bg-red-50 aspect-[3/4] w-full border border-red-200">
+          <div className="w-full h-full flex flex-col items-center justify-center text-red-600 p-4">
+            <div className="text-2xl mb-2">⚠️</div>
+            <div className="text-sm font-medium text-center">Geçersiz Dergi Verisi</div>
+            <div className="text-xs text-center mt-1">Lütfen sayfayı yenileyin</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  const coverUrl = getMagazineCoverUrl(validatedMagazine.cover_image_url)
   
   return (
     <Link 
-      key={magazine.id} 
-      href={`/dergi/${magazine.issue_number}`} 
+      key={validatedMagazine.id} 
+      href={`/dergi/${validatedMagazine.issue_number}`} 
       className="group block w-full"
-      aria-label={`Sayı ${magazine.issue_number} dergisini oku`}
+      aria-label={`Sayı ${validatedMagazine.issue_number} dergisini oku`}
     >
       {/* Card Container */}
       <div className="relative overflow-hidden rounded-xl bg-white aspect-[3/4] w-full transition-all duration-500 group-hover:shadow-xl">
@@ -26,7 +109,7 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props
             <>
               <Image
                 src={coverUrl}
-                alt={`${magazine.title} kapak görseli - Sayı ${magazine.issue_number}`}
+                alt={`${validatedMagazine.title} kapak görseli - Sayı ${validatedMagazine.issue_number}`}
                 fill
                 className="object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
                 style={{ willChange: 'transform' }}
@@ -34,6 +117,17 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props
                 placeholder="blur"
                 blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YzZjRmNiIvPjwvc3ZnPg=="
                 loading="lazy"
+                onError={(imageError) => {
+                  // Handle image load error with proper logging (Requirement 4.1)
+                  logger.warn('Magazine cover image failed to load', {
+                    component: 'MagazineCard',
+                    operation: 'coverImageOnError',
+                    magazineId: validatedMagazine.id,
+                    issueNumber: validatedMagazine.issue_number,
+                    coverUrl,
+                    error: imageError instanceof Event ? 'Image load error' : String(imageError)
+                  })
+                }}
               />
               {/* Gradient overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -76,14 +170,14 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props
         <div className="space-y-3">
           {/* Magazine Title */}
           <h3 className="font-bold text-sm sm:text-base lg:text-lg line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] text-gray-900 group-hover:text-red-600 transition-colors duration-300 leading-tight">
-            {magazine.title}
+            {validatedMagazine.title}
           </h3>
           
           {/* Issue Info & Stats */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
-                Sayı {magazine.issue_number}
+                Sayı {validatedMagazine.issue_number}
               </span>
             </div>
             
@@ -108,9 +202,28 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine }: Props
     </Link>
   )
 }, (prevProps, nextProps) => {
-  // Custom comparison function for deep equality check
-  return prevProps.magazine.id === nextProps.magazine.id &&
-         prevProps.magazine.title === nextProps.magazine.title &&
-         prevProps.magazine.cover_image_url === nextProps.magazine.cover_image_url &&
-         prevProps.magazine.issue_number === nextProps.magazine.issue_number
+  // Custom comparison function with type-safe property access (Requirement 7.2)
+  try {
+    const prevMagazine = validateMagazineData(prevProps.magazine)
+    const nextMagazine = validateMagazineData(nextProps.magazine)
+    
+    // If either validation fails, force re-render
+    if (!prevMagazine || !nextMagazine) {
+      return false
+    }
+    
+    // Deep equality check with validated data
+    return prevMagazine.id === nextMagazine.id &&
+           prevMagazine.title === nextMagazine.title &&
+           prevMagazine.cover_image_url === nextMagazine.cover_image_url &&
+           prevMagazine.issue_number === nextMagazine.issue_number
+  } catch (error) {
+    // If comparison fails, force re-render for safety
+    logger.warn('MagazineCard comparison failed, forcing re-render', {
+      component: 'MagazineCard',
+      operation: 'memoComparison',
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return false
+  }
 })

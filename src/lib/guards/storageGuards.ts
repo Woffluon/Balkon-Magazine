@@ -18,12 +18,12 @@ export function isStorageFile(value: unknown): value is StorageFile {
     return false
   }
 
-  const obj = value as Record<string, unknown>
+  const storageObject = value as Record<string, unknown>
 
   return (
-    typeof obj.name === 'string' &&
-    (obj.id === null || typeof obj.id === 'string') &&
-    typeof obj.path === 'string'
+    typeof storageObject.name === 'string' &&
+    (storageObject.id === null || typeof storageObject.id === 'string') &&
+    typeof storageObject.path === 'string'
   )
 }
 

@@ -2,6 +2,11 @@ import { useState, useCallback, useRef } from 'react'
 import * as pdfjs from 'pdfjs-dist'
 import { PDF_CONFIG, IMAGE_CONFIG } from '@/lib/constants/upload'
 import { createRenderContext } from '@/types/pdfjs'
+import { logger } from '@/lib/services/Logger'
+import { ErrorHandler } from '@/lib/errors/errorHandler'
+import { executeAsyncOperation, createStandardizedPromise } from '@/lib/utils/asyncPatterns'
+import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
+import { APP_CONFIG } from '@/lib/config/app-config'
 
 /**
  * Processed PDF result interface
@@ -120,51 +125,112 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
       targetHeight: number,
       quality: number
     ): Promise<Blob> => {
-      let canvas: HTMLCanvasElement | null = document.createElement('canvas')
-      let ctx: CanvasRenderingContext2D | null = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
+      // Validate inputs using type guards (Requirement 7.2)
+      const validatedTargetHeight = ValidationHelpers.validateOrThrow(
+        targetHeight,
+        TypeGuards.isPositiveNumber,
+        'positive number',
+        'renderPageToBlob.targetHeight'
+      )
       
-      if (!ctx) {
-        throw new Error('Canvas context unavailable')
+      const validatedQuality = ValidationHelpers.validateOrThrow(
+        quality,
+        (value): value is number => TypeGuards.isNumber(value) && value >= 0 && value <= 1,
+        'number between 0 and 1',
+        'renderPageToBlob.quality'
+      )
+
+      let canvas: HTMLCanvasElement | null = document.createElement('canvas')
+      let canvasContext: CanvasRenderingContext2D | null = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
+      
+      if (!canvasContext) {
+        const error = new Error('Canvas context unavailable')
+        logger.error('Canvas context creation failed', {
+          hook: 'usePDFProcessor',
+          operation: 'renderPageToBlob',
+          error: error.message
+        })
+        throw error
       }
       
       try {
+        logger.debug('Starting PDF page render', {
+          hook: 'usePDFProcessor',
+          operation: 'renderPageToBlob',
+          targetHeight: validatedTargetHeight,
+          quality: validatedQuality
+        })
+
         // Calculate scale to achieve target height
         const viewport = page.getViewport({ scale: 1 })
-        const scale = targetHeight / viewport.height
+        const scale = validatedTargetHeight / viewport.height
         const scaledViewport = page.getViewport({ scale })
         
         canvas.width = Math.ceil(scaledViewport.width)
         canvas.height = Math.ceil(scaledViewport.height)
         
+        logger.debug('Canvas dimensions calculated', {
+          hook: 'usePDFProcessor',
+          operation: 'renderPageToBlob',
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          scale
+        })
+        
         // Render PDF page to canvas using type-safe render context
-        const renderContext = createRenderContext(ctx, scaledViewport, canvas)
+        const renderContext = createRenderContext(canvasContext, scaledViewport, canvas)
         await page.render(renderContext).promise
         
-        // Convert canvas to WebP blob with proper null handling
-        return await new Promise<Blob>((resolve, reject) => {
-          if (!canvas) {
-            reject(new Error('Canvas is null'))
-            return
-          }
-          
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error('Failed to convert canvas to blob'))
+        // Convert canvas to WebP blob with standardized promise handling (Requirement 7.3)
+        return await createStandardizedPromise<Blob>(
+          (resolve, reject) => {
+            if (!canvas) {
+              reject(new Error('Canvas is null'))
+              return
+            }
+            
+            canvas.toBlob(
+              (blob) => {
+                if (blob) {
+                  logger.debug('Canvas converted to blob successfully', {
+                    hook: 'usePDFProcessor',
+                    operation: 'renderPageToBlob',
+                    blobSize: blob.size,
+                    blobType: blob.type
+                  })
+                  resolve(blob)
+                } else {
+                  reject(new Error('Failed to convert canvas to blob'))
+                }
+              },
+              IMAGE_CONFIG.FORMAT,
+              validatedQuality
+            )
+            
+            // Return cleanup function
+            return () => {
+              if (canvas) {
+                canvas.width = 0
+                canvas.height = 0
               }
-            },
-            IMAGE_CONFIG.FORMAT,
-            quality
-          )
-        })
+            }
+          },
+          {
+            timeout: APP_CONFIG.system.performance.maxExecutionTime,
+            context: {
+              hook: 'usePDFProcessor',
+              operation: 'canvasToBlob',
+              canvasWidth: canvas.width,
+              canvasHeight: canvas.height
+            }
+          }
+        )
       } finally {
         // Cleanup canvas resources to prevent memory leaks
         if (canvas) {
           canvas.width = 0
           canvas.height = 0
-          ctx = null
+          canvasContext = null
           canvas = null
         }
       }
@@ -186,63 +252,186 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
    */
   const processPDF = useCallback(
     async (file: File, options?: PDFProcessorOptions): Promise<ProcessedPDF> => {
+      // Validate inputs using type guards (Requirement 7.2)
+      if (!TypeGuards.isFile(file)) {
+        const error = new Error('Invalid file parameter: must be File instance')
+        logger.error('PDF processing validation failed', {
+          hook: 'usePDFProcessor',
+          operation: 'processPDF',
+          error: error.message,
+          fileType: typeof file
+        })
+        throw error
+      }
+
       // Reset state for new processing
       setProcessedPages(0)
       setTotalPages(0)
       setIsProcessing(true)
       setError(null)
 
+      logger.info('Starting PDF processing', {
+        hook: 'usePDFProcessor',
+        operation: 'processPDF',
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      })
+
       try {
-        // Set PDF.js worker
-        pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC
-        
-        // Load PDF document
-        const pdfBuffer = await file.arrayBuffer()
-        const pdfDoc = await pdfjs.getDocument({ data: pdfBuffer }).promise
-        pdfDocRef.current = pdfDoc
-        
-        const pages: Blob[] = []
-        const targetHeight = options?.targetHeight ?? PDF_CONFIG.TARGET_HEIGHT
-        const quality = options?.quality ?? IMAGE_CONFIG.WEBP_QUALITY
-        const numPages = pdfDoc.numPages
-        
-        setTotalPages(numPages)
-        
-        // Process each page
-        for (let i = 1; i <= numPages; i++) {
-          const page = await pdfDoc.getPage(i)
-          const blob = await renderPageToBlob(page, targetHeight, quality)
-          
-          pages.push(blob)
-          setProcessedPages(i)
-          
-          // Call progress callback
-          if (options?.onProgress) {
-            options.onProgress(i, numPages)
+        // Execute PDF processing with standardized async patterns (Requirement 7.1)
+        const processingResult = await executeAsyncOperation(
+          async () => {
+            // Set PDF.js worker
+            pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC
+            
+            // Load PDF document
+            const pdfBuffer = await file.arrayBuffer()
+            const pdfDoc = await pdfjs.getDocument({ data: pdfBuffer }).promise
+            pdfDocRef.current = pdfDoc
+            
+            const pages: Blob[] = []
+            
+            // Validate processing options with type guards
+            const targetHeight = ValidationHelpers.validateOrDefault(
+              options?.targetHeight,
+              TypeGuards.isPositiveNumber,
+              PDF_CONFIG.TARGET_HEIGHT,
+              'options.targetHeight'
+            )
+            
+            const quality = ValidationHelpers.validateOrDefault(
+              options?.quality,
+              (value): value is number => TypeGuards.isNumber(value) && value >= 0 && value <= 1,
+              IMAGE_CONFIG.WEBP_QUALITY,
+              'options.quality'
+            )
+            
+            const numPages = ValidationHelpers.validateOrThrow(
+              pdfDoc.numPages,
+              TypeGuards.isPositiveInteger,
+              'positive integer',
+              'pdfDoc.numPages'
+            )
+            
+            setTotalPages(numPages)
+            
+            logger.info('PDF document loaded successfully', {
+              hook: 'usePDFProcessor',
+              operation: 'processPDF',
+              numPages,
+              targetHeight,
+              quality
+            })
+            
+            // Process each page with proper error handling
+            for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+              try {
+                const pdfPage = await pdfDoc.getPage(pageNumber)
+                const pageBlob = await renderPageToBlob(pdfPage, targetHeight, quality)
+                
+                pages.push(pageBlob)
+                setProcessedPages(pageNumber)
+                
+                logger.debug('PDF page processed successfully', {
+                  hook: 'usePDFProcessor',
+                  operation: 'processPDF',
+                  pageNumber,
+                  totalPages: numPages,
+                  blobSize: pageBlob.size
+                })
+                
+                // Call progress callback with validation
+                if (options?.onProgress && typeof options.onProgress === 'function') {
+                  try {
+                    options.onProgress(pageNumber, numPages)
+                  } catch (callbackError) {
+                    logger.warn('Progress callback failed', {
+                      hook: 'usePDFProcessor',
+                      operation: 'processPDF',
+                      pageNumber,
+                      error: callbackError instanceof Error ? callbackError.message : String(callbackError)
+                    })
+                  }
+                }
+                
+                // Small delay every 5 pages to prevent UI freeze
+                if (pageNumber % 5 === 0) {
+                  await new Promise(resolve => setTimeout(resolve, 10))
+                }
+              } catch (pageError) {
+                const handledError = ErrorHandler.handleUnknownError(pageError)
+                logger.error('PDF page processing failed', {
+                  hook: 'usePDFProcessor',
+                  operation: 'processPDF',
+                  pageNumber,
+                  error: handledError.message
+                })
+                throw handledError
+              }
+            }
+            
+            return {
+              pages,
+              totalPages: numPages
+            }
+          },
+          {
+            hook: 'usePDFProcessor',
+            operation: 'processPDFDocument',
+            fileName: file.name,
+            fileSize: file.size
           }
-          
-          // Small delay every 5 pages to prevent UI freeze
-          if (i % 5 === 0) {
-            await new Promise(resolve => setTimeout(resolve, 10))
-          }
+        )
+
+        if (!processingResult.success) {
+          throw processingResult.error
         }
-        
-        return {
-          pages,
-          totalPages: numPages
-        }
+
+        logger.info('PDF processing completed successfully', {
+          hook: 'usePDFProcessor',
+          operation: 'processPDF',
+          fileName: file.name,
+          totalPages: processingResult.data.totalPages,
+          pagesProcessed: processingResult.data.pages.length
+        })
+
+        return processingResult.data
       } catch (err) {
-        const processingError = err instanceof Error 
-          ? err 
-          : new Error('PDF processing failed: Unknown error')
+        // Handle errors with standardized error handling (Requirement 4.1)
+        const processingError = ErrorHandler.handleUnknownError(err)
+        
+        logger.error('PDF processing failed', {
+          hook: 'usePDFProcessor',
+          operation: 'processPDF',
+          fileName: file.name,
+          fileSize: file.size,
+          error: processingError.message,
+          userMessage: processingError.userMessage
+        })
         
         setError(processingError)
         throw processingError
       } finally {
         // Always cleanup PDF document resources
         if (pdfDocRef.current) {
-          pdfDocRef.current.destroy()
-          pdfDocRef.current = null
+          try {
+            pdfDocRef.current.destroy()
+            pdfDocRef.current = null
+            
+            logger.debug('PDF document resources cleaned up', {
+              hook: 'usePDFProcessor',
+              operation: 'processPDF',
+              fileName: file.name
+            })
+          } catch (cleanupError) {
+            logger.warn('PDF document cleanup failed', {
+              hook: 'usePDFProcessor',
+              operation: 'processPDF',
+              fileName: file.name,
+              error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+            })
+          }
         }
         setIsProcessing(false)
       }

@@ -16,6 +16,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { TransactionManager } from './TransactionManager'
 import { StorageService } from './storage/StorageService'
+import { executeSupabaseQuery } from '@/lib/utils/supabaseClientUtils'
+import { executeAsyncOperation } from '@/lib/utils/asyncPatterns'
 import {
   MagazineInputSchema,
   MagazineRenameSchema,
@@ -54,8 +56,8 @@ export class MagazineService {
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'errors' in error) {
         const zodError = error as { errors: Array<{ path: string[]; message: string }> }
-        const messages = zodError.errors.map((e) => 
-          `${e.path.join('.')}: ${e.message}`
+        const messages = zodError.errors.map((validationError) => 
+          `${validationError.path.join('.')}: ${validationError.message}`
         ).join(', ')
         throw new Error(`Doğrulama hatası: ${messages}`)
       }
@@ -71,44 +73,87 @@ export class MagazineService {
     issueNumber: number,
     excludeId?: string
   ): Promise<boolean> {
-    let query = this.supabase
-      .from('magazines')
-      .select('id')
-      .eq('issue_number', issueNumber)
+    const result = await executeAsyncOperation(
+      async () => {
+        return await executeSupabaseQuery(
+          this.supabase,
+          async (supabase) => {
+            let query = supabase
+              .from('magazines')
+              .select('id')
+              .eq('issue_number', issueNumber)
+            
+            if (excludeId) {
+              query = query.neq('id', excludeId)
+            }
+            
+            return await query.single()
+          },
+          {
+            operation: 'checkIssueNumberExists',
+            component: 'MagazineService',
+            expectData: false,
+            allowEmpty: true
+          }
+        )
+      },
+      {
+        operation: 'checkIssueNumberExists',
+        component: 'MagazineService',
+        issueNumber,
+        excludeId
+      }
+    )
     
-    if (excludeId) {
-      query = query.neq('id', excludeId)
+    if (!result.success) {
+      // Check if this is a "no record found" error (PGRST116)
+      const details = result.error.details as { originalError?: { code?: string } } | undefined
+      const error = details?.originalError
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'PGRST116') {
+        return false
+      }
+      throw result.error
     }
     
-    const { data, error } = await query.single()
-    
-    // PGRST116 means no record found, which is what we want
-    if (error && error.code === 'PGRST116') {
-      return false
-    }
-    
-    if (error) {
-      throw new Error(`Veritabanı hatası: ${error.message}`)
-    }
-    
-    return data !== null
+    return result.data !== null
   }
 
   /**
    * Gets the current version of a magazine for optimistic locking
    */
   private async getMagazineWithVersion(id: string): Promise<Magazine> {
-    const { data, error } = await this.supabase
-      .from('magazines')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const result = await executeAsyncOperation(
+      async () => {
+        return await executeSupabaseQuery(
+          this.supabase,
+          async (supabase) => supabase
+            .from('magazines')
+            .select('*')
+            .eq('id', id)
+            .single(),
+          {
+            operation: 'getMagazineWithVersion',
+            component: 'MagazineService',
+            expectData: true
+          }
+        )
+      },
+      {
+        operation: 'getMagazineWithVersion',
+        component: 'MagazineService',
+        magazineId: id
+      }
+    )
     
-    if (error || !data) {
+    if (!result.success) {
+      throw result.error
+    }
+    
+    if (!result.data) {
       throw new Error('Dergi bulunamadı')
     }
     
-    return data as Magazine
+    return result.data as Magazine
   }
 
   /**

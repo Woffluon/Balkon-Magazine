@@ -60,9 +60,9 @@ export function getUserFriendlyError(error: unknown): string {
   
   // Zod validation error - format validation errors
   if (error instanceof ZodError) {
-    const fieldErrors = error.issues.map(e => {
-      const field = e.path.map(String).join('.')
-      return `${field}: ${e.message}`
+    const fieldErrors = error.issues.map(zodIssue => {
+      const fieldPath = zodIssue.path.map(String).join('.')
+      return `${fieldPath}: ${zodIssue.message}`
     })
     
     if (fieldErrors.length === 1) {
@@ -126,9 +126,9 @@ export function getUserFriendlyError(error: unknown): string {
 export function formatValidationErrors(
   error: ZodError
 ): Array<{ field: string; message: string }> {
-  return error.issues.map(e => ({
-    field: e.path.map(String).join('.'),
-    message: e.message
+  return error.issues.map(zodIssue => ({
+    field: zodIssue.path.map(String).join('.'),
+    message: zodIssue.message
   }))
 }
 
@@ -321,7 +321,7 @@ export function formatRollbackError(
   }
   
   const rollbackMessages = rollbackErrors
-    .map(e => getUserFriendlyError(e))
+    .map(rollbackError => getUserFriendlyError(rollbackError))
     .join('\n- ')
   
   return `${primaryMessage}\n\nGeri alma işlemi sırasında hatalar oluştu:\n- ${rollbackMessages}\n\nManuel temizlik gerekebilir. Lütfen sistem yöneticisi ile iletişime geçin.`
@@ -363,7 +363,7 @@ export function formatBatchError(
     if (sampleErrors.length > 0) {
       const errorMessages = sampleErrors
         .slice(0, 3)
-        .map(e => getUserFriendlyError(e))
+        .map(sampleError => getUserFriendlyError(sampleError))
         .join('\n- ')
       
       message += `:\n- ${errorMessages}`

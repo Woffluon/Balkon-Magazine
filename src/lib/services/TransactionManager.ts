@@ -164,7 +164,7 @@ export class TransactionManager {
           const rollbackInfo = rollbackResult.success
             ? 'All changes have been rolled back successfully.'
             : `Rollback completed with errors. Manual cleanup may be required: ${
-                rollbackResult.errors.map(e => `${e.step}: ${e.error}`).join(', ')
+                rollbackResult.errors.map(rollbackError => `${rollbackError.step}: ${rollbackError.error}`).join(', ')
               }`
           
           throw new Error(

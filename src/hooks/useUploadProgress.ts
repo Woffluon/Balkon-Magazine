@@ -70,11 +70,11 @@ export function useUploadProgress() {
    * @param percent - Progress percentage (0-100)
    * @param done - Whether cover upload is complete
    */
-  const updateCoverProgress = useCallback((percent: number, done: boolean = false) => {
-    setProgress(prev => ({
-      ...prev,
+  const updateCoverProgress = useCallback((percent: number, isCompleted: boolean = false) => {
+    setProgress(previousProgress => ({
+      ...previousProgress,
       coverProgress: percent,
-      coverDone: done
+      coverDone: isCompleted
     }))
   }, [])
 
@@ -84,13 +84,13 @@ export function useUploadProgress() {
    * @param pagesDone - Number of pages uploaded
    * @param totalPages - Total number of pages to upload
    */
-  const updatePagesProgress = useCallback((pagesDone: number, totalPages: number) => {
-    const percent = totalPages > 0 ? (pagesDone / totalPages) * 100 : 0
-    setProgress(prev => ({
-      ...prev,
-      pagesProgress: percent,
-      pagesDone,
-      totalPages
+  const updatePagesProgress = useCallback((pagesCompleted: number, totalPageCount: number) => {
+    const progressPercent = totalPageCount > 0 ? (pagesCompleted / totalPageCount) * 100 : 0
+    setProgress(previousProgress => ({
+      ...previousProgress,
+      pagesProgress: progressPercent,
+      pagesDone: pagesCompleted,
+      totalPages: totalPageCount
     }))
   }, [])
 
@@ -106,8 +106,8 @@ export function useUploadProgress() {
     const timestamp = new Date().toLocaleTimeString('tr-TR')
     const logEntry = `${timestamp} - ${message}`
 
-    setLogs(prev => {
-      const updated = [...prev, logEntry]
+    setLogs(previousLogs => {
+      const updatedLogs = [...previousLogs, logEntry]
 
       // Auto-scroll to bottom after state update
       queueMicrotask(() => {
@@ -117,7 +117,7 @@ export function useUploadProgress() {
         }
       })
 
-      return updated
+      return updatedLogs
     })
   }, [])
 

@@ -17,6 +17,7 @@ import {
 } from '@/lib/validators/errorSchemas'
 import { z } from 'zod'
 import { logger } from '@/lib/services/Logger'
+import { safeTypeConversion, isObject } from './asyncPatterns'
 
 /**
  * Validates and handles a Result response from a server action
@@ -104,11 +105,15 @@ export async function handleServerActionResult<T extends z.ZodTypeAny>(
     return
   }
   
-  // Use type guards and type assertions
-  if (isSuccessResponse(result as Result<z.infer<T>>)) {
-    await handlers.onSuccess((result as { success: true; data: z.infer<T> }).data)
-  } else if (isErrorResponse(result as Result<z.infer<T>>)) {
-    await handlers.onError((result as { success: false; error: { code: string; message: string; userMessage: string; details?: unknown } }).error)
+  // Use type guards instead of unsafe type assertions
+  const typedResult = safeTypeConversion(result, isObject, 'Result must be an object')
+  
+  if (isSuccessResponse(typedResult as Result<z.infer<T>>)) {
+    const successResult = typedResult as { success: true; data: z.infer<T> }
+    await handlers.onSuccess(successResult.data)
+  } else if (isErrorResponse(typedResult as Result<z.infer<T>>)) {
+    const errorResult = typedResult as { success: false; error: { code: string; message: string; userMessage: string; details?: unknown } }
+    await handlers.onError(errorResult.error)
   }
 }
 
@@ -145,11 +150,15 @@ export function extractResultData<T extends z.ZodTypeAny>(
     throw new Error('Failed to validate server response')
   }
   
-  // Use type guards from errorSchemas
-  if (isSuccessResponse(result as Result<z.infer<T>>)) {
-    return (result as { success: true; data: z.infer<T> }).data
-  } else if (isErrorResponse(result as Result<z.infer<T>>)) {
-    throw new Error((result as { success: false; error: { userMessage: string } }).error.userMessage)
+  // Use type guards instead of unsafe type assertions
+  const typedResult = safeTypeConversion(result, isObject, 'Result must be an object')
+  
+  if (isSuccessResponse(typedResult as Result<z.infer<T>>)) {
+    const successResult = typedResult as { success: true; data: z.infer<T> }
+    return successResult.data
+  } else if (isErrorResponse(typedResult as Result<z.infer<T>>)) {
+    const errorResult = typedResult as { success: false; error: { userMessage: string } }
+    throw new Error(errorResult.error.userMessage)
   } else {
     throw new Error('Invalid result structure')
   }
@@ -188,9 +197,12 @@ export function extractResultDataOrUndefined<T extends z.ZodTypeAny>(
     return undefined
   }
   
-  // Use type guards from errorSchemas
-  if (isSuccessResponse(result as Result<z.infer<T>>)) {
-    return (result as { success: true; data: z.infer<T> }).data
+  // Use type guards instead of unsafe type assertions
+  const typedResult = safeTypeConversion(result, isObject, 'Result must be an object')
+  
+  if (isSuccessResponse(typedResult as Result<z.infer<T>>)) {
+    const successResult = typedResult as { success: true; data: z.infer<T> }
+    return successResult.data
   } else {
     return undefined
   }
@@ -226,9 +238,12 @@ export function extractResultDataOr<T extends z.ZodTypeAny>(
     return defaultValue
   }
   
-  // Use type guards from errorSchemas
-  if (isSuccessResponse(result as Result<z.infer<T>>)) {
-    return (result as { success: true; data: z.infer<T> }).data
+  // Use type guards instead of unsafe type assertions
+  const typedResult = safeTypeConversion(result, isObject, 'Result must be an object')
+  
+  if (isSuccessResponse(typedResult as Result<z.infer<T>>)) {
+    const successResult = typedResult as { success: true; data: z.infer<T> }
+    return successResult.data
   } else {
     return defaultValue
   }

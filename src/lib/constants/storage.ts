@@ -19,10 +19,19 @@ export const STORAGE_CONFIG = {
   DEFAULT_UPSERT: true,
 } as const
 
+import {
+  createCoverFilePath,
+  createPageFilePath,
+  createPagesFolderPath,
+  createMagazineFolderPath,
+  createLogFilePath
+} from '@/lib/utils/pathUtils'
+
 /**
  * Storage path generation helpers
  * 
  * Provides consistent path generation for all storage operations
+ * using standardized path utilities.
  */
 export const STORAGE_PATHS = {
   /**
@@ -31,7 +40,7 @@ export const STORAGE_PATHS = {
    * @returns Path to the cover image
    */
   getCoverPath: (issueNumber: number): string => {
-    return `${issueNumber}/cover.webp`
+    return createCoverFilePath(issueNumber)
   },
   
   /**
@@ -41,7 +50,7 @@ export const STORAGE_PATHS = {
    * @returns Path to the page image
    */
   getPagePath: (issueNumber: number, pageNumber: number): string => {
-    return `${issueNumber}/pages/page-${pageNumber}.webp`
+    return createPageFilePath(issueNumber, pageNumber)
   },
   
   /**
@@ -50,7 +59,7 @@ export const STORAGE_PATHS = {
    * @returns Path to the pages directory
    */
   getPagesPath: (issueNumber: number): string => {
-    return `${issueNumber}/pages`
+    return createPagesFolderPath(issueNumber)
   },
   
   /**
@@ -59,7 +68,7 @@ export const STORAGE_PATHS = {
    * @returns Path to the issue root directory
    */
   getIssuePath: (issueNumber: number): string => {
-    return `${issueNumber}`
+    return createMagazineFolderPath(issueNumber)
   },
   
   /**
@@ -70,6 +79,6 @@ export const STORAGE_PATHS = {
    */
   getLogsPath: (issueNumber: number, timestamp?: string): string => {
     const ts = timestamp || new Date().toISOString().replace(/[:.]/g, '-')
-    return `${issueNumber}/logs/upload-${ts}.txt`
+    return createLogFilePath(issueNumber, ts)
   },
 } as const

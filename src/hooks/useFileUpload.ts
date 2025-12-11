@@ -1,5 +1,9 @@
 import { useState, useCallback, useRef } from 'react'
 import { uploadFileToStorage } from '@/app/(admin)/admin/actions'
+import { logger } from '@/lib/services/Logger'
+import { ErrorHandler } from '@/lib/errors/errorHandler'
+import { executeAsyncOperation } from '@/lib/utils/asyncPatterns'
+import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 
 /**
  * File upload options interface
@@ -150,6 +154,25 @@ export function useFileUpload(
    */
   const uploadFile = useCallback(
     async (path: string, file: File | Blob): Promise<void> => {
+      // Validate inputs using type guards (Requirement 7.2)
+      const validatedPath = ValidationHelpers.validateOrThrow(
+        path,
+        TypeGuards.isNonEmptyString,
+        'non-empty string',
+        'useFileUpload.uploadFile.path'
+      )
+      
+      if (!TypeGuards.isFile(file) && !(file instanceof Blob)) {
+        const error = new Error('Invalid file parameter: must be File or Blob')
+        logger.error('File upload validation failed', {
+          hook: 'useFileUpload',
+          operation: 'uploadFile',
+          error: error.message,
+          fileType: typeof file
+        })
+        throw error
+      }
+
       // Reset state for new upload
       setProgress(0)
       setIsUploading(true)
@@ -158,6 +181,14 @@ export function useFileUpload(
       // Create new abort controller for this upload
       const abortController = new AbortController()
       abortControllerRef.current = abortController
+
+      logger.info('Starting file upload', {
+        hook: 'useFileUpload',
+        operation: 'uploadFile',
+        path: validatedPath,
+        fileSize: file.size,
+        fileType: file.type || 'unknown'
+      })
 
       try {
         // Report initial progress
@@ -170,30 +201,70 @@ export function useFileUpload(
           throw new Error('Upload cancelled')
         }
 
-        // Convert File/Blob to ArrayBuffer for server action
-        // Requirement 14.3: Convert File to ArrayBuffer on client
-        const arrayBuffer = await file.arrayBuffer()
+        // Execute upload with standardized async patterns (Requirement 7.1)
+        const uploadResult = await executeAsyncOperation(
+          async () => {
+            // Convert File/Blob to ArrayBuffer for server action
+            // Requirement 14.3: Convert File to ArrayBuffer on client
+            const arrayBuffer = await file.arrayBuffer()
 
-        // Check if aborted after reading file
-        if (abortController.signal.aborted) {
-          throw new Error('Upload cancelled')
+            // Check if aborted after reading file
+            if (abortController.signal.aborted) {
+              throw new Error('Upload cancelled')
+            }
+
+            // Get content type with validation
+            const contentType = ValidationHelpers.validateOrDefault(
+              file.type,
+              TypeGuards.isNonEmptyString,
+              'application/octet-stream',
+              'file.type'
+            )
+
+            logger.debug('File converted to ArrayBuffer', {
+              hook: 'useFileUpload',
+              operation: 'uploadFile',
+              arrayBufferSize: arrayBuffer.byteLength,
+              contentType
+            })
+
+            // Call server action to upload file
+            // Requirements 14.1, 14.4, 14.5: Use server action with server-side client
+            const result = await uploadFileToStorage(validatedPath, arrayBuffer, contentType)
+
+            // Check if aborted after upload
+            if (abortController.signal.aborted) {
+              throw new Error('Upload cancelled')
+            }
+
+            return result
+          },
+          {
+            hook: 'useFileUpload',
+            operation: 'uploadFileToStorage',
+            path: validatedPath,
+            fileSize: file.size
+          }
+        )
+
+        if (!uploadResult.success) {
+          throw uploadResult.error
         }
 
-        // Get content type
-        const contentType = file.type || 'application/octet-stream'
-
-        // Call server action to upload file
-        // Requirements 14.1, 14.4, 14.5: Use server action with server-side client
-        const result = await uploadFileToStorage(path, arrayBuffer, contentType)
-
-        // Check if aborted after upload
-        if (abortController.signal.aborted) {
-          throw new Error('Upload cancelled')
+        // Check result from server action with type validation
+        const serverResult = uploadResult.data
+        if (!TypeGuards.isObject(serverResult) || !TypeGuards.isBoolean(serverResult.success)) {
+          throw new Error('Invalid server response format')
         }
 
-        // Check result from server action
-        if (!result.success) {
-          throw new Error(result.error?.userMessage || result.error?.message || 'Upload failed')
+        if (!serverResult.success) {
+          const errorMessage = TypeGuards.isObject(serverResult.error) && TypeGuards.isString(serverResult.error.userMessage)
+            ? serverResult.error.userMessage
+            : TypeGuards.isObject(serverResult.error) && TypeGuards.isString(serverResult.error.message)
+            ? serverResult.error.message
+            : 'Upload failed'
+          
+          throw new Error(errorMessage)
         }
 
         // Report completion
@@ -202,12 +273,29 @@ export function useFileUpload(
           options.onProgress(100)
         }
 
+        logger.info('File upload completed successfully', {
+          hook: 'useFileUpload',
+          operation: 'uploadFile',
+          path: validatedPath,
+          fileSize: file.size
+        })
+
         // Call completion callback
         if (options?.onComplete) {
           options.onComplete()
         }
       } catch (err) {
-        const uploadError = err instanceof Error ? err : new Error('Upload failed')
+        // Handle errors with standardized error handling (Requirement 4.1)
+        const uploadError = ErrorHandler.handleUnknownError(err)
+        
+        logger.error('File upload failed', {
+          hook: 'useFileUpload',
+          operation: 'uploadFile',
+          path: validatedPath,
+          fileSize: file.size,
+          error: uploadError.message,
+          userMessage: uploadError.userMessage
+        })
         
         // Set error state
         setError(uploadError)

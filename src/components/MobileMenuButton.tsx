@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { TimelineContent } from '@/components/ui/timeline-animation'
+import { logger } from '@/lib/services/Logger'
+import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 
 interface MobileMenuButtonProps {
   headerRef: React.RefObject<HTMLDivElement | null>
@@ -26,13 +28,58 @@ interface MobileMenuButtonProps {
 }
 
 export function MobileMenuButton({ headerRef, animationNum, revealVariants }: MobileMenuButtonProps) {
+  // Validate props using type guards (Requirement 7.2)
+  const validatedAnimationNum = ValidationHelpers.validateOrDefault(
+    animationNum,
+    TypeGuards.isNumber,
+    0,
+    'MobileMenuButton.animationNum'
+  )
+  
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  
+  const handleMenuToggle = () => {
+    const newState = !isMobileMenuOpen
+    setIsMobileMenuOpen(newState)
+    
+    logger.debug('Mobile menu toggled', {
+      component: 'MobileMenuButton',
+      operation: 'handleMenuToggle',
+      isOpen: newState
+    })
+  }
+  
+  const handleScrollToMagazines = () => {
+    try {
+      const magazineSection = document.querySelector('[data-magazine-grid]')
+      if (magazineSection) {
+        magazineSection.scrollIntoView({ behavior: 'smooth' })
+        setIsMobileMenuOpen(false)
+        
+        logger.debug('Scrolled to magazine section', {
+          component: 'MobileMenuButton',
+          operation: 'handleScrollToMagazines'
+        })
+      } else {
+        logger.warn('Magazine section not found for scrolling', {
+          component: 'MobileMenuButton',
+          operation: 'handleScrollToMagazines'
+        })
+      }
+    } catch (error) {
+      logger.error('Failed to scroll to magazine section', {
+        component: 'MobileMenuButton',
+        operation: 'handleScrollToMagazines',
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
 
   return (
     <>
       <TimelineContent
         as="button"
-        animationNum={animationNum}
+        animationNum={validatedAnimationNum}
         timelineRef={headerRef}
         customVariants={revealVariants}
         type="button"
@@ -40,7 +87,7 @@ export function MobileMenuButton({ headerRef, animationNum, revealVariants }: Mo
         aria-expanded={isMobileMenuOpen}
         aria-controls="mobile-navigation"
         className="md:hidden w-8 h-8 border border-gray-200 bg-white/80 rounded-lg flex items-center justify-center cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors"
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        onClick={handleMenuToggle}
       >
         {isMobileMenuOpen ? (
           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-600">
@@ -70,11 +117,7 @@ export function MobileMenuButton({ headerRef, animationNum, revealVariants }: Mo
               </Link>
               <button
                 type="button"
-                onClick={() => {
-                  const magazineSection = document.querySelector('[data-magazine-grid]')
-                  magazineSection?.scrollIntoView({ behavior: 'smooth' })
-                  setIsMobileMenuOpen(false)
-                }}
+                onClick={handleScrollToMagazines}
                 className="text-gray-600 hover:text-red-500 transition-colors font-medium text-base px-2 py-1 text-left"
               >
                 Sayılar

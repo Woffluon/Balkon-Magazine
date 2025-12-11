@@ -87,14 +87,14 @@ export class IdempotencyManager {
     const keysToRemove: string[] = []
     
     // Find all keys with our prefix
-    for (let i = 0; i < this.storage.length; i++) {
-      const key = this.storage.key(i)
-      if (key && key.startsWith(this.prefix)) {
-        keysToRemove.push(key)
+    for (let storageIndex = 0; storageIndex < this.storage.length; storageIndex++) {
+      const storageKey = this.storage.key(storageIndex)
+      if (storageKey && storageKey.startsWith(this.prefix)) {
+        keysToRemove.push(storageKey)
       }
     }
     
     // Remove them
-    keysToRemove.forEach(key => this.storage!.removeItem(key))
+    keysToRemove.forEach(keyToRemove => this.storage!.removeItem(keyToRemove))
   }
 }

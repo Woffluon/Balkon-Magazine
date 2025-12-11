@@ -1,8 +1,8 @@
 'use server'
 
 import { revalidatePath, revalidateTag } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/middleware/authMiddleware'
+import { createStandardizedSupabaseClient } from '@/lib/utils/supabaseClientUtils'
 import { parseFormDataWithZod } from '@/lib/validators/formDataParser'
 import {
   MagazineFormSchema,
@@ -14,6 +14,7 @@ import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageSe
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { rateLimiter } from '@/lib/services/rateLimiting'
 import { verifyCSRFOrigin, requireAdmin } from '@/lib/services/authorization'
+import { APP_CONFIG } from '@/lib/config/app-config'
 import type { Result } from '@/lib/errors/errorHandler'
 
 /**
@@ -21,10 +22,93 @@ import type { Result } from '@/lib/errors/errorHandler'
  * Creates a MagazineService instance with all dependencies
  */
 async function createMagazineService(): Promise<MagazineService> {
-  const supabase = await createClient()
+  const supabase = await createStandardizedSupabaseClient({
+    context: 'server-auth',
+    component: 'AdminActions',
+    operation: 'createMagazineService'
+  })
   
   // MagazineService will create its own StorageService instance
   return new MagazineService(supabase)
+}
+
+/**
+ * Validates authentication and rate limiting for magazine record addition
+ * Separates authentication and rate limiting concerns
+ */
+async function validateAddMagazineRequest(formData: FormData) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  // Require admin role
+  const authContext = await requireAdmin()
+  const userId = authContext.userId
+  
+  logger.info('Add magazine record request received', {
+    operation: 'addMagazineRecord',
+    userId
+  })
+  
+  // Verify CSRF origin
+  await verifyCSRFOrigin()
+  
+  // Check upload rate limit
+  if (!rateLimiter.checkUploadLimit(userId)) {
+    const resetTime = rateLimiter.getUploadResetTime(userId)
+    const { millisecondsPerMinute } = APP_CONFIG.system.time
+    const defaultWaitMinutes = 60
+    const minutesRemaining = resetTime ? Math.ceil(resetTime / millisecondsPerMinute) : defaultWaitMinutes
+    
+    const { ValidationError } = await import('@/lib/errors/AppError')
+    throw new ValidationError(
+      `Upload limit exceeded. Maximum 10 uploads per hour. Please try again in ${minutesRemaining} minutes.`,
+      'rate_limit',
+      'upload_limit',
+      `Yükleme limiti aşıldı. Lütfen ${minutesRemaining} dakika sonra tekrar deneyin.`
+    )
+  }
+  
+  const data = parseFormDataWithZod(formData, MagazineFormSchema)
+  
+  logger.info('Validated add magazine request', {
+    operation: 'addMagazineRecord',
+    issueNumber: data.issue_number,
+    title: data.title,
+    userId
+  })
+  
+  return { authContext, data }
+}
+
+/**
+ * Performs the magazine creation operation
+ * Handles the core business logic of creating a magazine record
+ */
+async function performMagazineCreation(data: unknown, userId: string) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  const magazineService = await createMagazineService()
+  await magazineService.createMagazine(data)
+  
+  // Record successful upload attempt
+  rateLimiter.recordUploadAttempt(userId)
+  
+  logger.info('Magazine record added successfully', {
+    operation: 'addMagazineRecord',
+    issueNumber: (data as { issue_number?: unknown })?.issue_number,
+    userId
+  })
+}
+
+/**
+ * Revalidates cache and paths after magazine creation
+ * Handles cache invalidation concerns
+ */
+function revalidateAfterCreation(issueNumber: number) {
+  // Revalidate cache and paths (Requirements 8.2, 8.4)
+  revalidateTag('magazines') // Invalidate magazines cache
+  revalidatePath('/admin')
+  revalidatePath('/')
+  revalidatePath(`/dergi/${issueNumber}`)
 }
 
 /**
@@ -36,6 +120,11 @@ async function createMagazineService(): Promise<MagazineService> {
  * - Returns Result<void> type
  * - Logs errors with context
  * 
+ * Refactored to separate concerns (Requirements 2.1, 2.4):
+ * - Authentication and rate limiting
+ * - Business logic execution
+ * - Cache invalidation
+ * 
  * @returns Result<void> indicating success or failure
  */
 export async function addMagazineRecord(formData: FormData): Promise<Result<void>> {
@@ -43,58 +132,9 @@ export async function addMagazineRecord(formData: FormData): Promise<Result<void
   const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
   try {
-    // Require admin role
-    const authContext = await requireAdmin()
-    const userId = authContext.userId
-    
-    logger.info('Add magazine record request received', {
-      operation: 'addMagazineRecord',
-      userId
-    })
-    
-    // Verify CSRF origin
-    await verifyCSRFOrigin()
-    
-    // Check upload rate limit
-    if (!rateLimiter.checkUploadLimit(userId)) {
-      const resetTime = rateLimiter.getUploadResetTime(userId)
-      const minutesRemaining = resetTime ? Math.ceil(resetTime / 60000) : 60
-      
-      const { ValidationError } = await import('@/lib/errors/AppError')
-      throw new ValidationError(
-        `Upload limit exceeded. Maximum 10 uploads per hour. Please try again in ${minutesRemaining} minutes.`,
-        'rate_limit',
-        'upload_limit',
-        `Yükleme limiti aşıldı. Lütfen ${minutesRemaining} dakika sonra tekrar deneyin.`
-      )
-    }
-    
-    const data = parseFormDataWithZod(formData, MagazineFormSchema)
-    
-    logger.info('Validated add magazine request', {
-      operation: 'addMagazineRecord',
-      issueNumber: data.issue_number,
-      title: data.title,
-      userId
-    })
-    
-    const magazineService = await createMagazineService()
-    await magazineService.createMagazine(data)
-    
-    // Record successful upload attempt
-    rateLimiter.recordUploadAttempt(userId)
-    
-    logger.info('Magazine record added successfully', {
-      operation: 'addMagazineRecord',
-      issueNumber: data.issue_number,
-      userId
-    })
-    
-    // Revalidate cache and paths (Requirements 8.2, 8.4)
-    revalidateTag('magazines') // Invalidate magazines cache
-    revalidatePath('/admin')
-    revalidatePath('/')
-    revalidatePath(`/dergi/${data.issue_number}`)
+    const { authContext, data } = await validateAddMagazineRequest(formData)
+    await performMagazineCreation(data, authContext.userId)
+    revalidateAfterCreation(data.issue_number)
     
     return ErrorHandler.success(undefined)
   } catch (error) {
@@ -110,6 +150,66 @@ export async function addMagazineRecord(formData: FormData): Promise<Result<void
 }
 
 /**
+ * Validates and authenticates delete magazine request
+ * Separates authentication and validation concerns from business logic
+ */
+async function validateDeleteMagazineRequest(formData: FormData) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  // Require admin role
+  const authContext = await requireAdmin()
+  
+  logger.info('Delete magazine request received', {
+    operation: 'deleteMagazine',
+    userId: authContext.userId
+  })
+  
+  // Verify CSRF origin
+  await verifyCSRFOrigin()
+  
+  const data = parseFormDataWithZod(formData, DeleteMagazineSchema)
+  
+  logger.info('Validated delete magazine request', {
+    operation: 'deleteMagazine',
+    magazineId: data.id,
+    issueNumber: data.issue_number,
+    userId: authContext.userId
+  })
+  
+  return { authContext, data }
+}
+
+/**
+ * Performs the magazine deletion operation
+ * Handles the core business logic of deleting a magazine
+ */
+async function performMagazineDeletion(data: { id: string; issue_number: number }, userId: string) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  const magazineService = await createMagazineService()
+  await magazineService.deleteMagazine(data)
+  
+  logger.info('Magazine deleted successfully', {
+    operation: 'deleteMagazine',
+    magazineId: data.id,
+    issueNumber: data.issue_number,
+    userId
+  })
+}
+
+/**
+ * Revalidates cache and paths after magazine deletion
+ * Handles cache invalidation concerns
+ */
+function revalidateAfterDeletion(issueNumber: number) {
+  // Revalidate cache and paths (Requirements 8.2, 8.4)
+  revalidateTag('magazines') // Invalidate magazines cache
+  revalidatePath('/admin')
+  revalidatePath('/')
+  revalidatePath(`/dergi/${issueNumber}`)
+}
+
+/**
  * Deletes a magazine and all its associated storage files
  * 
  * Implements transactional consistency (Requirements 1.6, 6.4):
@@ -117,47 +217,20 @@ export async function addMagazineRecord(formData: FormData): Promise<Result<void
  * - Logs all operations with context
  * - Provides detailed error responses
  * - Maintains transactional consistency (storage-first, database-second)
+ * 
+ * Refactored to separate concerns (Requirements 2.1, 2.4):
+ * - Authentication and validation
+ * - Business logic execution
+ * - Cache invalidation
  */
 export async function deleteMagazine(formData: FormData): Promise<Result<void>> {
   const { logger } = await import('@/lib/services/Logger')
   const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
   try {
-    // Require admin role
-    const authContext = await requireAdmin()
-    
-    logger.info('Delete magazine request received', {
-      operation: 'deleteMagazine',
-      userId: authContext.userId
-    })
-    
-    // Verify CSRF origin
-    await verifyCSRFOrigin()
-    
-    const data = parseFormDataWithZod(formData, DeleteMagazineSchema)
-    
-    logger.info('Validated delete magazine request', {
-      operation: 'deleteMagazine',
-      magazineId: data.id,
-      issueNumber: data.issue_number,
-      userId: authContext.userId
-    })
-    
-    const magazineService = await createMagazineService()
-    await magazineService.deleteMagazine(data)
-    
-    logger.info('Magazine deleted successfully', {
-      operation: 'deleteMagazine',
-      magazineId: data.id,
-      issueNumber: data.issue_number,
-      userId: authContext.userId
-    })
-    
-    // Revalidate cache and paths (Requirements 8.2, 8.4)
-    revalidateTag('magazines') // Invalidate magazines cache
-    revalidatePath('/admin')
-    revalidatePath('/')
-    revalidatePath(`/dergi/${data.issue_number}`)
+    const { authContext, data } = await validateDeleteMagazineRequest(formData)
+    await performMagazineDeletion(data, authContext.userId)
+    revalidateAfterDeletion(data.issue_number)
     
     return ErrorHandler.success(undefined)
   } catch (error) {
@@ -173,6 +246,74 @@ export async function deleteMagazine(formData: FormData): Promise<Result<void>> 
 }
 
 /**
+ * Validates and authenticates rename magazine request
+ * Separates authentication and validation concerns from business logic
+ */
+async function validateRenameMagazineRequest(formData: FormData) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  // Require admin role
+  const authContext = await requireAdmin()
+  
+  logger.info('Rename magazine request received', {
+    operation: 'renameMagazine',
+    userId: authContext.userId
+  })
+  
+  // Verify CSRF origin
+  await verifyCSRFOrigin()
+  
+  const data = parseFormDataWithZod(formData, RenameMagazineSchema)
+  
+  logger.info('Validated rename magazine request', {
+    operation: 'renameMagazine',
+    magazineId: data.id,
+    oldIssue: data.old_issue,
+    newIssue: data.new_issue,
+    newTitle: data.new_title,
+    version: data.version,
+    userId: authContext.userId
+  })
+  
+  return { authContext, data }
+}
+
+/**
+ * Performs the magazine rename operation
+ * Handles the core business logic of renaming a magazine
+ */
+async function performMagazineRename(
+  data: { id: string; old_issue: number; new_issue: number; new_title?: string; version: number }, 
+  userId: string
+) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  const magazineService = await createMagazineService()
+  await magazineService.renameMagazine(data)
+  
+  logger.info('Magazine renamed successfully', {
+    operation: 'renameMagazine',
+    magazineId: data.id,
+    oldIssue: data.old_issue,
+    newIssue: data.new_issue,
+    userId
+  })
+}
+
+/**
+ * Revalidates cache and paths after magazine rename
+ * Handles cache invalidation for both old and new paths
+ */
+function revalidateAfterRename(oldIssue: number, newIssue: number) {
+  // Revalidate cache and paths (Requirements 8.2, 8.4)
+  revalidateTag('magazines') // Invalidate magazines cache
+  revalidatePath('/admin')
+  revalidatePath('/')
+  revalidatePath(`/dergi/${oldIssue}`)
+  revalidatePath(`/dergi/${newIssue}`)
+}
+
+/**
  * Renames a magazine by updating issue number and/or title
  * Moves all associated storage files to new paths
  * 
@@ -183,6 +324,11 @@ export async function deleteMagazine(formData: FormData): Promise<Result<void>> 
  * - Returns detailed failure reports
  * - Implements partial success handling
  * 
+ * Refactored to separate concerns (Requirements 2.1, 2.4):
+ * - Authentication and validation
+ * - Business logic execution
+ * - Cache invalidation
+ * 
  * @returns Result<void> with detailed error information on failure
  */
 export async function renameMagazine(formData: FormData): Promise<Result<void>> {
@@ -190,46 +336,9 @@ export async function renameMagazine(formData: FormData): Promise<Result<void>> 
   const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
   try {
-    // Require admin role
-    const authContext = await requireAdmin()
-    
-    logger.info('Rename magazine request received', {
-      operation: 'renameMagazine',
-      userId: authContext.userId
-    })
-    
-    // Verify CSRF origin
-    await verifyCSRFOrigin()
-    
-    const data = parseFormDataWithZod(formData, RenameMagazineSchema)
-    
-    logger.info('Validated rename magazine request', {
-      operation: 'renameMagazine',
-      magazineId: data.id,
-      oldIssue: data.old_issue,
-      newIssue: data.new_issue,
-      newTitle: data.new_title,
-      version: data.version,
-      userId: authContext.userId
-    })
-    
-    const magazineService = await createMagazineService()
-    await magazineService.renameMagazine(data)
-    
-    logger.info('Magazine renamed successfully', {
-      operation: 'renameMagazine',
-      magazineId: data.id,
-      oldIssue: data.old_issue,
-      newIssue: data.new_issue,
-      userId: authContext.userId
-    })
-    
-    // Revalidate cache and paths (Requirements 8.2, 8.4)
-    revalidateTag('magazines') // Invalidate magazines cache
-    revalidatePath('/admin')
-    revalidatePath('/')
-    revalidatePath(`/dergi/${data.old_issue}`)
-    revalidatePath(`/dergi/${data.new_issue}`)
+    const { authContext, data } = await validateRenameMagazineRequest(formData)
+    await performMagazineRename(data, authContext.userId)
+    revalidateAfterRename(data.old_issue, data.new_issue)
     
     return ErrorHandler.success(undefined)
   } catch (error) {
@@ -245,6 +354,56 @@ export async function renameMagazine(formData: FormData): Promise<Result<void>> 
 }
 
 /**
+ * Prepares log data and path for upload
+ * Separates data preparation concerns from upload logic
+ */
+async function prepareLogData(issue: string, content: string) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  const decimalBase = 10
+  const issueNumber = parseInt(issue, decimalBase)
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const path = STORAGE_PATHS.getLogsPath(issueNumber, timestamp)
+  
+  logger.debug('Preparing upload log', {
+    operation: 'saveUploadLog',
+    issueNumber,
+    path
+  })
+  
+  const data = new TextEncoder().encode(content)
+  const blob = new Blob([data], { type: 'text/plain' })
+  
+  return { path, blob, issueNumber }
+}
+
+/**
+ * Performs the log upload operation
+ * Handles the core business logic of uploading log content
+ */
+async function performLogUpload(path: string, blob: Blob, issueNumber: number) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  const supabase = await createStandardizedSupabaseClient({
+    context: 'server-auth',
+    component: 'AdminActions',
+    operation: 'performLogUpload'
+  })
+  const storageService = new SupabaseStorageService(supabase)
+  
+  await storageService.upload(path, blob, {
+    contentType: 'text/plain',
+    upsert: true
+  })
+  
+  logger.info('Upload log saved successfully', {
+    operation: 'saveUploadLog',
+    issueNumber,
+    path
+  })
+}
+
+/**
  * Saves upload logs to storage
  * Uses SupabaseStorageService for consistent storage operations
  * 
@@ -254,6 +413,10 @@ export async function renameMagazine(formData: FormData): Promise<Result<void>> 
  * - Returns Result<string> type
  * - Logs errors with context
  * 
+ * Refactored to separate concerns (Requirements 2.1, 2.4):
+ * - Data preparation and path generation
+ * - Log upload execution
+ * 
  * @returns Result<string> with log path on success or error details on failure
  */
 export async function saveUploadLog(issue: string, content: string): Promise<Result<string>> {
@@ -261,32 +424,8 @@ export async function saveUploadLog(issue: string, content: string): Promise<Res
   const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
   try {
-    const supabase = await createClient()
-    const storageService = new SupabaseStorageService(supabase)
-    
-    const issueNumber = parseInt(issue, 10)
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const path = STORAGE_PATHS.getLogsPath(issueNumber, timestamp)
-    
-    logger.debug('Saving upload log', {
-      operation: 'saveUploadLog',
-      issueNumber,
-      path
-    })
-    
-    const data = new TextEncoder().encode(content)
-    const blob = new Blob([data], { type: 'text/plain' })
-    
-    await storageService.upload(path, blob, {
-      contentType: 'text/plain',
-      upsert: true
-    })
-    
-    logger.info('Upload log saved successfully', {
-      operation: 'saveUploadLog',
-      issueNumber,
-      path
-    })
+    const { path, blob, issueNumber } = await prepareLogData(issue, content)
+    await performLogUpload(path, blob, issueNumber)
     
     return ErrorHandler.success(path)
   } catch (error) {
@@ -331,6 +470,58 @@ export async function revalidateMagazines() {
 }
 
 /**
+ * Validates authentication for file upload
+ * Separates authentication concerns from upload logic
+ */
+async function validateFileUploadRequest(path: string, contentType: string, fileSize: number) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  // Require admin role for file uploads
+  await requireAdmin()
+  
+  // Verify CSRF origin
+  await verifyCSRFOrigin()
+  
+  logger.debug('Starting file upload', {
+    operation: 'uploadFileToStorage',
+    path,
+    contentType,
+    size: fileSize
+  })
+}
+
+/**
+ * Performs the file upload operation
+ * Handles the core business logic of uploading a file
+ */
+async function performFileUpload(path: string, fileData: ArrayBuffer, contentType: string) {
+  const { logger } = await import('@/lib/services/Logger')
+  
+  // Create storage service with server-side Supabase client
+  const supabase = await createStandardizedSupabaseClient({
+    context: 'server-auth',
+    component: 'AdminActions',
+    operation: 'performFileUpload'
+  })
+  const storageService = new SupabaseStorageService(supabase)
+  
+  // Convert ArrayBuffer to Blob for upload
+  const blob = new Blob([fileData], { type: contentType })
+  
+  // Upload file to storage
+  await storageService.upload(path, blob, {
+    upsert: true,
+    contentType
+  })
+  
+  logger.info('File uploaded successfully', {
+    operation: 'uploadFileToStorage',
+    path,
+    size: fileData.byteLength
+  })
+}
+
+/**
  * Uploads a file to storage using server-side Supabase client
  * 
  * This server action handles file uploads securely on the server side,
@@ -349,6 +540,10 @@ export async function revalidateMagazines() {
  * - Returns Result<void> type
  * - Logs errors with context
  * 
+ * Refactored to separate concerns (Requirements 2.1, 2.4):
+ * - Authentication and validation
+ * - File upload execution
+ * 
  * @param path - The storage path for the file
  * @param fileData - The file data as ArrayBuffer
  * @param contentType - The MIME type of the file
@@ -363,37 +558,8 @@ export async function uploadFileToStorage(
   const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
   try {
-    // Require admin role for file uploads
-    await requireAdmin()
-    
-    // Verify CSRF origin
-    await verifyCSRFOrigin()
-    
-    logger.debug('Starting file upload', {
-      operation: 'uploadFileToStorage',
-      path,
-      contentType,
-      size: fileData.byteLength
-    })
-    
-    // Create storage service with server-side Supabase client
-    const supabase = await createClient()
-    const storageService = new SupabaseStorageService(supabase)
-    
-    // Convert ArrayBuffer to Blob for upload
-    const blob = new Blob([fileData], { type: contentType })
-    
-    // Upload file to storage
-    await storageService.upload(path, blob, {
-      upsert: true,
-      contentType
-    })
-    
-    logger.info('File uploaded successfully', {
-      operation: 'uploadFileToStorage',
-      path,
-      size: fileData.byteLength
-    })
+    await validateFileUploadRequest(path, contentType, fileData.byteLength)
+    await performFileUpload(path, fileData, contentType)
     
     return ErrorHandler.success(undefined)
   } catch (error) {

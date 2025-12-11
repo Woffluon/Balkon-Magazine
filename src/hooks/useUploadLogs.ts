@@ -42,8 +42,8 @@ export function useUploadLogs() {
     const timestamp = new Date().toLocaleTimeString('tr-TR')
     const logEntry = `${timestamp} - ${message}`
 
-    setLogs(prev => {
-      const updated = [...prev, logEntry]
+    setLogs(previousLogs => {
+      const updatedLogs = [...previousLogs, logEntry]
 
       // Auto-scroll to bottom after state update
       queueMicrotask(() => {
@@ -53,7 +53,7 @@ export function useUploadLogs() {
         }
       })
 
-      return updated
+      return updatedLogs
     })
   }, [])
 

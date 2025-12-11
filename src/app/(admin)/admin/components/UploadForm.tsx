@@ -8,8 +8,8 @@ interface UploadFormProps {
   title: string
   issue: number | ''
   date: string
-  coverPct: number
-  pagesPct: number
+  coverProgress: number
+  pagesProgress: number
   overall: number
   busy: boolean
   pagesDone?: number
@@ -175,8 +175,8 @@ export function UploadForm({
   title,
   issue,
   date,
-  coverPct,
-  pagesPct,
+  coverProgress,
+  pagesProgress,
   busy,
   pagesDone = 0,
   totalPages = 0,
@@ -385,13 +385,13 @@ export function UploadForm({
       {busy && (
         <>
           <ProgressBar 
-            value={coverPct} 
+            value={coverProgress} 
             label="Kapak yükleme ilerlemesi"
             showPercentage={true}
           />
           
           <ProgressBar 
-            value={pagesPct} 
+            value={pagesProgress} 
             label="Sayfa yükleme ilerlemesi"
             showPercentage={true}
             fileCount={totalPages > 0 ? { done: pagesDone, total: totalPages } : undefined}

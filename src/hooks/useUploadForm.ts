@@ -54,7 +54,7 @@ export function useUploadForm() {
     field: K,
     value: UploadFormState[K]
   ) => {
-    setFormState(prev => ({ ...prev, [field]: value }))
+    setFormState(previousState => ({ ...previousState, [field]: value }))
   }, [])
 
   /**

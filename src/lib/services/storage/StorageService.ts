@@ -127,23 +127,23 @@ export class StorageService {
       const BATCH_SIZE = 1000
       const totalBatches = Math.ceil(paths.length / BATCH_SIZE)
       
-      for (let i = 0; i < paths.length; i += BATCH_SIZE) {
-        const batch = paths.slice(i, i + BATCH_SIZE)
-        const batchNumber = Math.floor(i / BATCH_SIZE) + 1
+      for (let batchStartIndex = 0; batchStartIndex < paths.length; batchStartIndex += BATCH_SIZE) {
+        const currentBatch = paths.slice(batchStartIndex, batchStartIndex + BATCH_SIZE)
+        const batchNumber = Math.floor(batchStartIndex / BATCH_SIZE) + 1
         
         logger.info(`Processing delete batch ${batchNumber}/${totalBatches}`, {
-          batchSize: batch.length
+          batchSize: currentBatch.length
         })
         
         const { error } = await this.supabase.storage
           .from(bucket)
-          .remove(batch)
+          .remove(currentBatch)
         
         if (error) {
           logger.error(`Batch ${batchNumber} delete failed`, {
             bucket,
             batchNumber,
-            batchSize: batch.length,
+            batchSize: currentBatch.length,
             error: error.message
           })
           throw new Error(
@@ -152,7 +152,7 @@ export class StorageService {
         }
         
         logger.info(`Batch ${batchNumber} deleted successfully`, {
-          filesDeleted: batch.length
+          filesDeleted: currentBatch.length
         })
       }
       
@@ -164,12 +164,61 @@ export class StorageService {
   }
 
   /**
-   * Lists all files recursively with a single API call
+   * Processes a single directory level for file listing
+   * Separates the concern of processing individual directory levels
+   */
+  private async processDirectoryLevel(
+    bucket: string,
+    prefix: string,
+    limit: number = 1000
+  ): Promise<{ files: string[]; directories: string[] }> {
+    const { data, error } = await this.supabase.storage
+      .from(bucket)
+      .list(prefix, {
+        limit,
+        sortBy: { column: 'name', order: 'asc' }
+      })
+    
+    if (error) {
+      logger.error('Directory listing failed', {
+        bucket,
+        prefix,
+        error: error.message
+      })
+      throw new Error(error.message)
+    }
+    
+    const files: string[] = []
+    const directories: string[] = []
+    
+    for (const item of data ?? []) {
+      const fullPath = prefix ? `${prefix}/${item.name}` : item.name
+      
+      if (item.id) {
+        // It's a file
+        files.push(fullPath)
+      } else {
+        // It's a directory
+        directories.push(fullPath)
+      }
+    }
+    
+    return { files, directories }
+  }
+
+  /**
+   * Lists all files recursively using iterative approach
    * 
-   * Implements Requirement 1.1: Single API call for recursive listing
+   * Implements Requirement 1.1: Iterative approach for recursive listing
+   * Refactored to separate concerns (Requirements 2.1, 2.2):
+   * - Directory level processing
+   * - Queue-based iteration logic
+   * - Result aggregation
    * 
-   * Uses the storage API's list method with appropriate parameters
-   * to fetch all files in a directory structure without recursive calls.
+   * Uses iterative queue-based approach instead of recursion to:
+   * - Avoid stack overflow for deep directory structures
+   * - Provide better control over memory usage
+   * - Enable progress tracking and cancellation
    * 
    * Requirements 9.1, 9.2, 9.5: Performance monitoring
    * 
@@ -183,38 +232,52 @@ export class StorageService {
     prefix: string
   ): Promise<string[]> {
     return performanceMonitor.measure('storage.listFilesRecursive', async () => {
-      logger.info('Listing files from storage', {
+      logger.info('Starting iterative file listing', {
         bucket,
         prefix
       })
       
-      const { data, error } = await this.supabase.storage
-        .from(bucket)
-        .list(prefix, {
-          limit: 1000,
-          sortBy: { column: 'name', order: 'asc' }
-        })
+      const allFiles: string[] = []
+      const directoriesToProcess: string[] = [prefix]
+      let processedDirectories = 0
       
-      if (error) {
-        logger.error('File listing failed', {
+      // Iterative approach using queue instead of recursion
+      while (directoriesToProcess.length > 0) {
+        const currentPrefix = directoriesToProcess.shift()!
+        processedDirectories++
+        
+        logger.debug('Processing directory level', {
           bucket,
-          prefix,
-          error: error.message
+          currentPrefix,
+          remainingDirectories: directoriesToProcess.length,
+          processedDirectories
         })
-        throw new Error(error.message)
+        
+        const { files, directories } = await this.processDirectoryLevel(bucket, currentPrefix)
+        
+        // Add files to result
+        allFiles.push(...files)
+        
+        // Add subdirectories to queue for processing
+        directoriesToProcess.push(...directories)
+        
+        logger.debug('Directory level processed', {
+          bucket,
+          currentPrefix,
+          filesFound: files.length,
+          subdirectoriesFound: directories.length,
+          totalFilesFound: allFiles.length
+        })
       }
       
-      const files = (data ?? [])
-        .filter(item => item.id) // Only files (not directories)
-        .map(item => `${prefix}/${item.name}`)
-      
-      logger.info('Files listed successfully', {
+      logger.info('Iterative file listing completed', {
         bucket,
         prefix,
-        fileCount: files.length
+        totalFiles: allFiles.length,
+        directoriesProcessed: processedDirectories
       })
       
-      return files
+      return allFiles
     })
   }
 

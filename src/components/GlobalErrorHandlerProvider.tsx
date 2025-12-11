@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { globalErrorHandler } from '@/lib/errors'
+import { logger } from '@/lib/services/Logger'
 
 /**
  * Global Error Handler Provider
@@ -14,12 +15,38 @@ import { globalErrorHandler } from '@/lib/errors'
  */
 export function GlobalErrorHandlerProvider() {
   useEffect(() => {
-    // Initialize global error handlers
-    globalErrorHandler.initialize()
+    try {
+      // Initialize global error handlers with proper logging (Requirement 4.1, 5.1)
+      globalErrorHandler.initialize()
+      
+      logger.info('Global error handlers initialized successfully', {
+        component: 'GlobalErrorHandlerProvider',
+        operation: 'initialize'
+      })
+    } catch (error) {
+      logger.error('Failed to initialize global error handlers', {
+        component: 'GlobalErrorHandlerProvider',
+        operation: 'initialize',
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
 
-    // Cleanup on unmount
+    // Cleanup on unmount with proper error handling
     return () => {
-      globalErrorHandler.cleanup()
+      try {
+        globalErrorHandler.cleanup()
+        
+        logger.debug('Global error handlers cleaned up', {
+          component: 'GlobalErrorHandlerProvider',
+          operation: 'cleanup'
+        })
+      } catch (error) {
+        logger.error('Failed to cleanup global error handlers', {
+          component: 'GlobalErrorHandlerProvider',
+          operation: 'cleanup',
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
     }
   }, [])
 

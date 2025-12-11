@@ -18,19 +18,19 @@ export function isMagazine(value: unknown): value is Magazine {
     return false
   }
 
-  const obj = value as Record<string, unknown>
+  const magazineObject = value as Record<string, unknown>
 
   return (
-    typeof obj.id === 'string' &&
-    typeof obj.title === 'string' &&
-    typeof obj.issue_number === 'number' &&
-    typeof obj.publication_date === 'string' &&
-    typeof obj.is_published === 'boolean' &&
-    (obj.cover_image_url === undefined || obj.cover_image_url === null || typeof obj.cover_image_url === 'string') &&
-    (obj.pdf_url === undefined || obj.pdf_url === null || typeof obj.pdf_url === 'string') &&
-    (obj.page_count === undefined || obj.page_count === null || typeof obj.page_count === 'number') &&
-    (obj.created_at === undefined || obj.created_at === null || typeof obj.created_at === 'string') &&
-    (obj.updated_at === undefined || obj.updated_at === null || typeof obj.updated_at === 'string')
+    typeof magazineObject.id === 'string' &&
+    typeof magazineObject.title === 'string' &&
+    typeof magazineObject.issue_number === 'number' &&
+    typeof magazineObject.publication_date === 'string' &&
+    typeof magazineObject.is_published === 'boolean' &&
+    (magazineObject.cover_image_url === undefined || magazineObject.cover_image_url === null || typeof magazineObject.cover_image_url === 'string') &&
+    (magazineObject.pdf_url === undefined || magazineObject.pdf_url === null || typeof magazineObject.pdf_url === 'string') &&
+    (magazineObject.page_count === undefined || magazineObject.page_count === null || typeof magazineObject.page_count === 'number') &&
+    (magazineObject.created_at === undefined || magazineObject.created_at === null || typeof magazineObject.created_at === 'string') &&
+    (magazineObject.updated_at === undefined || magazineObject.updated_at === null || typeof magazineObject.updated_at === 'string')
   )
 }
 

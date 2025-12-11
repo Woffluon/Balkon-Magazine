@@ -1,4 +1,5 @@
 import { RefObject, useEffect, useState } from 'react'
+import { APP_CONFIG } from '@/lib/config/app-config'
 
 /**
  * Aspect ratio interface for dimension calculations
@@ -45,7 +46,10 @@ export function useResponsiveDimensions(
   containerRef: RefObject<HTMLElement | null>,
   aspectRatio: AspectRatio
 ): Dimensions {
-  const [dims, setDims] = useState<Dimensions>({ w: 500, h: 700 })
+  const [dims, setDims] = useState<Dimensions>({ 
+    w: APP_CONFIG.magazine.viewport.defaultWidth, 
+    h: APP_CONFIG.magazine.viewport.defaultHeight 
+  })
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | null = null
@@ -66,21 +70,23 @@ export function useResponsiveDimensions(
         if (!el) return
 
         // Calculate maximum width from container, with reasonable bounds
-        const maxW = Math.max(300, Math.min(900, el.clientWidth || 500))
+        const { minWidth, maxWidth, defaultWidth } = APP_CONFIG.magazine.viewport
+        const maxW = Math.max(minWidth, Math.min(maxWidth, el.clientWidth || defaultWidth))
 
         // Use visualViewport API for accurate viewport height (handles mobile keyboard)
         const visualViewport =
           typeof window !== 'undefined' && 'visualViewport' in window
             ? window.visualViewport
             : null
+        const { heightRatio, defaultHeight } = APP_CONFIG.magazine.viewport
         const viewportH = visualViewport
           ? visualViewport.height
           : typeof window !== 'undefined'
             ? window.innerHeight
-            : 900
+            : defaultHeight
 
-        // Calculate maximum height as 85% of viewport (Requirement 4.3)
-        const maxH = Math.floor(viewportH * 0.85)
+        // Calculate maximum height using configured ratio (Requirement 4.3)
+        const maxH = Math.floor(viewportH * heightRatio)
 
         // Calculate height from width based on aspect ratio
         const hFromW = Math.floor((maxW * aspectRatio.h) / aspectRatio.w)
@@ -94,7 +100,7 @@ export function useResponsiveDimensions(
           // Width constraint is limiting, use calculated height
           setDims({ w: maxW, h: hFromW })
         }
-      }, 100) // 100ms debounce delay
+      }, 100) // 100ms debounce delay for performance
     }
 
     // Initial size calculation

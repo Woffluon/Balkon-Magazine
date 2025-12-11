@@ -4,6 +4,8 @@
  * Requirements: 9.1, 9.2, 9.5
  */
 
+import { logger } from './Logger'
+
 export interface OperationMetrics {
   label: string
   startTime: number
@@ -65,7 +67,7 @@ export class PerformanceMonitor {
       const result = await operation()
       const duration = this.end(label)
       
-      console.log(`[PERFORMANCE] ${label}: ${duration}ms (success)`)
+      logger.debug(`Performance: ${label}: ${duration}ms (success)`)
       
       return result
     } catch (error) {
@@ -90,7 +92,7 @@ export class PerformanceMonitor {
       const result = operation()
       const duration = this.end(label)
       
-      console.log(`[PERFORMANCE] ${label}: ${duration}ms (success)`)
+      logger.debug(`Performance: ${label}: ${duration}ms (success)`)
       
       return result
     } catch (error) {

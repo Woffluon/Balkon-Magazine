@@ -69,20 +69,20 @@ export async function processBatch<T, R>(
   const { batchSize, onProgress } = options
 
   // Process items in batches
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize)
+  for (let batchStartIndex = 0; batchStartIndex < items.length; batchStartIndex += batchSize) {
+    const currentBatch = items.slice(batchStartIndex, batchStartIndex + batchSize)
     
     // Process all items in the current batch concurrently
     const batchResults = await Promise.all(
-      batch.map(item => processor(item))
+      currentBatch.map(batchItem => processor(batchItem))
     )
     
     results.push(...batchResults)
     
     // Report progress if callback provided
     if (onProgress) {
-      const processed = Math.min(i + batch.length, items.length)
-      onProgress(processed, items.length)
+      const processedCount = Math.min(batchStartIndex + currentBatch.length, items.length)
+      onProgress(processedCount, items.length)
     }
   }
 
@@ -113,8 +113,8 @@ export async function processBatch<T, R>(
 export function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   const chunks: T[][] = []
   
-  for (let i = 0; i < items.length; i += chunkSize) {
-    chunks.push(items.slice(i, i + chunkSize))
+  for (let chunkStartIndex = 0; chunkStartIndex < items.length; chunkStartIndex += chunkSize) {
+    chunks.push(items.slice(chunkStartIndex, chunkStartIndex + chunkSize))
   }
   
   return chunks
@@ -181,32 +181,32 @@ export async function processBatchWithErrors<T, R>(
   const { batchSize, onProgress } = options
 
   // Process items in batches
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize)
+  for (let batchStartIndex = 0; batchStartIndex < items.length; batchStartIndex += batchSize) {
+    const currentBatch = items.slice(batchStartIndex, batchStartIndex + batchSize)
     
     // Process all items in the current batch concurrently with error handling
     const batchResults = await Promise.allSettled(
-      batch.map(item => processor(item))
+      currentBatch.map(batchItem => processor(batchItem))
     )
     
     // Categorize results
-    for (let j = 0; j < batchResults.length; j++) {
-      const result = batchResults[j]
-      const item = batch[j]
+    for (let resultIndex = 0; resultIndex < batchResults.length; resultIndex++) {
+      const operationResult = batchResults[resultIndex]
+      const processedItem = currentBatch[resultIndex]
       
-      if (result.status === 'fulfilled') {
-        successes.push({ item, result: result.value })
+      if (operationResult.status === 'fulfilled') {
+        successes.push({ item: processedItem, result: operationResult.value })
       } else {
-        const error = result.reason
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        failures.push({ item, error: errorMessage })
+        const operationError = operationResult.reason
+        const errorMessage = operationError instanceof Error ? operationError.message : String(operationError)
+        failures.push({ item: processedItem, error: errorMessage })
       }
     }
     
     // Report progress if callback provided
     if (onProgress) {
-      const processed = Math.min(i + batch.length, items.length)
-      onProgress(processed, items.length)
+      const processedCount = Math.min(batchStartIndex + currentBatch.length, items.length)
+      onProgress(processedCount, items.length)
     }
   }
 

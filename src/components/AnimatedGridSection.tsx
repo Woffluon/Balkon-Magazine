@@ -4,6 +4,8 @@ import React, { useRef, useMemo } from 'react'
 import type { Magazine } from '@/types/magazine'
 import { MagazineCard } from '@/components/MagazineCard'
 import { TimelineContent } from '@/components/ui/timeline-animation'
+import { logger } from '@/lib/services/Logger'
+import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 
 type Props = {
   magazines: Magazine[]
@@ -11,11 +13,70 @@ type Props = {
   showCount: boolean
 }
 
+/**
+ * Validates magazines array using type guards
+ * Ensures all magazines are valid objects with required properties
+ */
+function validateMagazinesArray(magazines: unknown): Magazine[] {
+  if (!TypeGuards.isArray(magazines)) {
+    logger.warn('Invalid magazines array provided to AnimatedGridSection', {
+      component: 'AnimatedGridSection',
+      operation: 'validateMagazinesArray',
+      receivedType: typeof magazines
+    })
+    return []
+  }
+  
+  return magazines.filter((magazine): magazine is Magazine => {
+    if (!TypeGuards.isObject(magazine)) {
+      logger.debug('Filtering out non-object magazine', {
+        component: 'AnimatedGridSection',
+        operation: 'validateMagazinesArray',
+        magazine: String(magazine)
+      })
+      return false
+    }
+    
+    // Check required properties
+    const hasRequiredProps = TypeGuards.isString(magazine.id) &&
+                            TypeGuards.isString(magazine.title) &&
+                            TypeGuards.isNumber(magazine.issue_number)
+    
+    if (!hasRequiredProps) {
+      logger.debug('Filtering out magazine with missing required properties', {
+        component: 'AnimatedGridSection',
+        operation: 'validateMagazinesArray',
+        magazine: JSON.stringify(magazine)
+      })
+      return false
+    }
+    
+    return true
+  })
+}
+
 export const AnimatedGridSection = React.memo(function AnimatedGridSection({ 
   magazines, 
   title, 
   showCount 
 }: Props) {
+  // Validate props using type guards (Requirement 7.2)
+  const validatedMagazines = useMemo(() => validateMagazinesArray(magazines), [magazines])
+  
+  const validatedTitle = ValidationHelpers.validateOrDefault(
+    title,
+    TypeGuards.isNonEmptyString,
+    'Tüm Sayılar',
+    'AnimatedGridSection.title'
+  )
+  
+  const validatedShowCount = ValidationHelpers.validateOrDefault(
+    showCount,
+    TypeGuards.isBoolean,
+    true,
+    'AnimatedGridSection.showCount'
+  )
+  
   const gridRef = useRef<HTMLDivElement>(null)
 
   const revealVariants = useMemo(() => ({
@@ -50,16 +111,16 @@ export const AnimatedGridSection = React.memo(function AnimatedGridSection({
           <div className="inline-flex items-center gap-3 mb-6">
             <div className="w-8 h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent"></div>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 tracking-tight">
-              {title}
+              {validatedTitle}
             </h2>
             <div className="w-8 h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent"></div>
           </div>
           
-          {showCount && (
+          {validatedShowCount && (
             <div className="flex items-center justify-center gap-4 text-gray-600">
               <div className="h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent w-20"></div>
               <span className="text-lg font-medium px-6 py-2 bg-white/80 backdrop-blur-sm rounded-full border border-gray-200 shadow-sm">
-                Dergi Sayısı: {magazines.length}
+                Dergi Sayısı: {validatedMagazines.length}
               </span>
               <div className="h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent w-20"></div>
             </div>
@@ -89,7 +150,7 @@ export const AnimatedGridSection = React.memo(function AnimatedGridSection({
         <div 
           className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 xs:gap-4 sm:gap-6 lg:gap-8"
         >
-          {magazines.map((magazine, index) => (
+          {validatedMagazines.map((magazine, index) => (
             <TimelineContent
               key={magazine.id}
               as="div"

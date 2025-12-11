@@ -46,22 +46,22 @@ export class PDFProcessor implements IFileProcessor {
       const totalPages = pdfDoc.numPages
       
       // Process each page and stream to upload immediately
-      for (let i = 1; i <= totalPages; i++) {
-        const page = await pdfDoc.getPage(i)
-        const blob = await this.renderPageToBlob(page, targetHeight, quality)
+      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+        const pdfPage = await pdfDoc.getPage(pageNumber)
+        const pageBlob = await this.renderPageToBlob(pdfPage, targetHeight, quality)
         
         pages.push({
-          pageNumber: i,
-          blob
+          pageNumber,
+          blob: pageBlob
         })
         
         // Call progress callback with the processed blob (streaming)
         if (options?.onProgress) {
-          await options.onProgress(i, totalPages, blob)
+          await options.onProgress(pageNumber, totalPages, pageBlob)
         }
         
         // Small delay every 5 pages to prevent UI freeze
-        if (i % 5 === 0) {
+        if (pageNumber % 5 === 0) {
           await new Promise(resolve => setTimeout(resolve, 10))
         }
       }
@@ -115,9 +115,9 @@ export class PDFProcessor implements IFileProcessor {
     quality: number
   ): Promise<Blob> {
     let canvas: HTMLCanvasElement | null = document.createElement('canvas')
-    let ctx: CanvasRenderingContext2D | null = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
+    let canvasContext: CanvasRenderingContext2D | null = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
     
-    if (!ctx) {
+    if (!canvasContext) {
       throw new ProcessingError(
         'Canvas context unavailable',
         'pdf_processing',
@@ -135,7 +135,7 @@ export class PDFProcessor implements IFileProcessor {
       canvas.height = Math.ceil(scaledViewport.height)
       
       // Render PDF page to canvas using type-safe render context
-      const renderContext = createRenderContext(ctx, scaledViewport, canvas)
+      const renderContext = createRenderContext(canvasContext, scaledViewport, canvas)
       await page.render(renderContext).promise
       
       // Convert canvas to WebP blob
@@ -145,7 +145,7 @@ export class PDFProcessor implements IFileProcessor {
       if (canvas) {
         canvas.width = 0
         canvas.height = 0
-        ctx = null
+        canvasContext = null
         canvas = null
       }
     }

@@ -42,14 +42,14 @@ export const MagazineFormSchema = z.object({
   pdf_url: z
     .string()
     .optional()
-    .transform((val) => val === '' ? undefined : val)
+    .transform((inputValue) => inputValue === '' ? undefined : inputValue)
     .pipe(
       z.string().url('PDF adresi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional()
     ),
   cover_image_url: z
     .string()
     .optional()
-    .transform((val) => val === '' ? undefined : val)
+    .transform((inputValue) => inputValue === '' ? undefined : inputValue)
     .pipe(
       z.string().url('Kapak resmi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional()
     ),
@@ -118,7 +118,7 @@ export const RenameMagazineSchema = z.object({
   new_title: z
     .string()
     .optional()
-    .transform((val) => val === '' ? undefined : val)
+    .transform((inputValue) => inputValue === '' ? undefined : inputValue)
     .pipe(
       z.string()
         .min(1, 'Yeni başlık boş olamaz. Lütfen bir başlık girin.')

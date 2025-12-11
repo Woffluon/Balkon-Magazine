@@ -6,6 +6,7 @@ import type { IMagazineRepository } from '@/lib/repositories/IMagazineRepository
 import type { FileProcessorFactory } from '@/lib/processors/FileProcessorFactory'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { UPLOAD_CONFIG } from '@/lib/constants/upload'
+import { createStandardizedPromise } from '@/lib/utils/asyncPatterns'
 import {
   validatePDF,
   validateImage,
@@ -224,17 +225,17 @@ export class UploadService {
     
     // Split pages into batches
     const batches: ProcessedPage[][] = []
-    for (let i = 0; i < pages.length; i += CONCURRENT_UPLOADS) {
-      batches.push(pages.slice(i, i + CONCURRENT_UPLOADS))
+    for (let pageIndex = 0; pageIndex < pages.length; pageIndex += CONCURRENT_UPLOADS) {
+      batches.push(pages.slice(pageIndex, pageIndex + CONCURRENT_UPLOADS))
     }
     
     // Process each batch sequentially, but pages within batch in parallel
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-      const batch = batches[batchIndex]
+      const currentBatch = batches[batchIndex]
       
       try {
         const batchResults = await Promise.allSettled(
-          batch.map(async (page) => {
+          currentBatch.map(async (page) => {
             try {
               // Upload with retry logic
               await this.uploadPageWithRetry(page)
@@ -297,7 +298,7 @@ export class UploadService {
         })
         
         // Continue processing remaining batches
-        batch.forEach(page => {
+        currentBatch.forEach(page => {
           failedUploads.push({
             pageNumber: page.pageNumber,
             error: batchError instanceof Error ? batchError : new Error('Batch processing error'),
@@ -385,7 +386,22 @@ export class UploadService {
         
         // Exponential backoff: wait 1s, 2s, 4s, etc.
         const delayMs = 1000 * Math.pow(2, attempt - 1)
-        await new Promise(resolve => setTimeout(resolve, delayMs))
+        await createStandardizedPromise<void>(
+          (resolve) => {
+            const timer = setTimeout(() => resolve(), delayMs)
+            return () => clearTimeout(timer)
+          },
+          {
+            timeout: delayMs + 1000, // Add buffer for timeout
+            context: { 
+              operation: 'retryDelay', 
+              component: 'UploadService',
+              attempt,
+              delayMs,
+              pageNumber: page.pageNumber
+            }
+          }
+        )
       }
     }
     

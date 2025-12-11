@@ -6,22 +6,58 @@ import Image from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useResponsiveDimensions } from '@/hooks/useResponsiveDimensions'
 import { logger } from '@/lib/services/Logger'
+import { ErrorHandler } from '@/lib/errors/errorHandler'
+import { APP_CONFIG } from '@/lib/config/app-config'
+import { 
+  executeAsyncOperation, 
+  createStandardizedPromise,
+  isNumber
+} from '@/lib/utils/asyncPatterns'
+import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 import type { PageFlipHandle, FlipEvent } from 'react-pageflip'
 
 const SafeFlipBook = dynamic(() => import('react-pageflip'), {
   ssr: false,
-  loading: () => <div className="h-[700px] flex items-center justify-center text-sm text-muted-foreground">Yükleniyor...</div>,
+  loading: () => <div className={`h-[${APP_CONFIG.magazine.viewport.loadingHeight}px] flex items-center justify-center text-sm text-muted-foreground`}>Yükleniyor...</div>,
 })
 
 interface FlipbookViewerProps {
   imageUrls: string[]
 }
 
-const ASPECT_W = 848
-const ASPECT_H = 1200
+/**
+ * Validates image URLs array using type guards
+ * Ensures all URLs are valid strings and filters out invalid entries
+ */
+function validateImageUrls(urls: unknown): string[] {
+  if (!TypeGuards.isArray(urls)) {
+    logger.warn('Invalid imageUrls provided to FlipbookViewer', {
+      component: 'FlipbookViewer',
+      operation: 'validateImageUrls',
+      receivedType: typeof urls
+    })
+    return []
+  }
+  
+  return urls
+    .filter((url): url is string => {
+      if (!TypeGuards.isString(url) || url.trim().length === 0) {
+        logger.debug('Filtering out invalid image URL', {
+          component: 'FlipbookViewer',
+          operation: 'validateImageUrls',
+          url: String(url),
+          urlType: typeof url
+        })
+        return false
+      }
+      return true
+    })
+    .map(url => url.trim())
+}
 
 export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerProps) {
-  const pages = useMemo(() => (imageUrls ?? []).filter(Boolean), [imageUrls])
+  // Validate and sanitize image URLs using type guards (Requirement 7.2)
+  const pages = useMemo(() => validateImageUrls(imageUrls), [imageUrls])
   const containerRef = useRef<HTMLDivElement>(null)
   const bookRef = useRef<PageFlipHandle | null>(null)
   const [currentPage, setCurrentPage] = useState(0)
@@ -30,75 +66,194 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
   const [pageAnnouncement, setPageAnnouncement] = useState('')
 
   // Use custom hook for responsive dimensions (Requirements: 4.1, 4.2, 4.3, 4.4, 4.5)
-  const dims = useResponsiveDimensions(containerRef, { w: ASPECT_W, h: ASPECT_H })
+  const dimensions = useResponsiveDimensions(containerRef, { 
+    w: APP_CONFIG.magazine.aspectRatio.width, 
+    h: APP_CONFIG.magazine.aspectRatio.height 
+  })
 
-  // Image preload with AbortController
-  // Handles image loading errors gracefully and prevents retry loops
-  // Requirements: 2.4 - Handle image loading errors gracefully
+  // Image preload with standardized async patterns (Requirements 7.1, 7.3)
+  // Uses standardized promise creation with proper error handling and cleanup
   useEffect(() => {
     const abortController = new AbortController()
     const { signal } = abortController
     
-    const nextIndices = [currentPage + 1, currentPage + 2, currentPage + 3]
-    nextIndices.forEach((idx) => {
-      // Skip if already preloaded or if it failed before (prevent retry loops)
-      if (idx < pages.length && !preloadedPages.has(idx) && !failedPages.has(idx)) {
-        const img = new window.Image()
-        img.onload = () => {
-          if (!signal.aborted) {
-            setPreloadedPages((prev) => new Set([...prev, idx]))
-          }
-        }
-        img.onerror = () => {
-          if (!signal.aborted) {
-            // Mark page as failed to prevent retry loops
-            setFailedPages((prev) => new Set([...prev, idx]))
-            // Log the failure but don't throw - graceful degradation
-            if (typeof window !== 'undefined') {
-              logger.warn(`Failed to preload page ${idx}, will show placeholder`, {
-                pageIndex: idx,
-                operation: 'image_preload'
-              })
+    const { pagesAhead } = APP_CONFIG.magazine.preload
+    const nextIndices = Array.from({ length: pagesAhead }, (_, i) => currentPage + i + 1)
+    
+    // Process preloading with standardized async patterns
+    const preloadImages = async () => {
+      const preloadPromises = nextIndices
+        .filter(idx => idx < pages.length && !preloadedPages.has(idx) && !failedPages.has(idx))
+        .map(idx => 
+          createStandardizedPromise<void>(
+            (resolve, reject) => {
+              if (signal.aborted) {
+                reject(new Error('Preload cancelled'))
+                return
+              }
+              
+              const img = new window.Image()
+              
+              const cleanup = () => {
+                img.onload = null
+                img.onerror = null
+              }
+              
+              img.onload = () => {
+                if (!signal.aborted) {
+                  setPreloadedPages(prev => new Set([...prev, idx]))
+                  logger.debug('Image preloaded successfully', {
+                    component: 'FlipbookViewer',
+                    operation: 'preloadImage',
+                    pageIndex: idx,
+                    totalPages: pages.length
+                  })
+                }
+                resolve()
+              }
+              
+              img.onerror = (error) => {
+                if (!signal.aborted) {
+                  setFailedPages(prev => new Set([...prev, idx]))
+                  logger.warn('Image preload failed, will show placeholder', {
+                    component: 'FlipbookViewer',
+                    operation: 'preloadImage',
+                    pageIndex: idx,
+                    error: error instanceof Event ? 'Image load error' : String(error)
+                  })
+                }
+                resolve() // Don't reject, just mark as failed
+              }
+              
+              img.src = pages[idx]
+              return cleanup
+            },
+            {
+              timeout: APP_CONFIG.system.performance.maxExecutionTime,
+              context: { 
+                component: 'FlipbookViewer', 
+                operation: 'preloadImage',
+                pageIndex: idx 
+              }
             }
+          )
+        )
+      
+      // Execute preloading operations with proper error handling
+      if (preloadPromises.length > 0) {
+        const result = await executeAsyncOperation(
+          () => Promise.allSettled(preloadPromises),
+          {
+            component: 'FlipbookViewer',
+            operation: 'preloadImages',
+            imageCount: preloadPromises.length
           }
+        )
+        
+        if (!result.success) {
+          logger.error('Image preloading operation failed', {
+            component: 'FlipbookViewer',
+            operation: 'preloadImages',
+            error: result.error.message
+          })
         }
-        img.src = pages[idx]
       }
+    }
+    
+    preloadImages().catch(error => {
+      logger.error('Unexpected error in image preloading', {
+        component: 'FlipbookViewer',
+        operation: 'preloadImages',
+        error: error instanceof Error ? error.message : String(error)
+      })
     })
     
     return () => abortController.abort()
   }, [currentPage, pages, preloadedPages, failedPages])
 
-  const onFlip = useCallback((e: FlipEvent) => {
-    setCurrentPage(e.data)
+  const onFlip = useCallback((flipEvent: FlipEvent) => {
+    // Validate flip event data using type guards (Requirement 7.2)
+    const pageNumber = ValidationHelpers.validateOrDefault(
+      flipEvent.data,
+      isNumber,
+      0,
+      'FlipbookViewer.onFlip'
+    )
+    
+    setCurrentPage(pageNumber)
+    
     // Announce page change to screen readers
-    setPageAnnouncement(`Sayfa ${e.data + 1} / ${pages.length}`)
+    const announcement = `Sayfa ${pageNumber + 1} / ${pages.length}`
+    setPageAnnouncement(announcement)
+    
+    logger.debug('Page flip completed', {
+      component: 'FlipbookViewer',
+      operation: 'onFlip',
+      currentPage: pageNumber,
+      totalPages: pages.length
+    })
   }, [pages.length])
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (!bookRef.current) return
-      if (e.key === 'ArrowRight') {
-        bookRef.current.pageFlip().flipNext()
-        // Get updated page index and announce
-        const newPage = bookRef.current.pageFlip().getCurrentPageIndex()
-        setPageAnnouncement(`Sayfa ${newPage + 1} / ${pages.length}`)
+    const handleKeyboardNavigation = (keyboardEvent: KeyboardEvent) => {
+      if (!bookRef.current) {
+        logger.debug('Keyboard navigation ignored - no book reference', {
+          component: 'FlipbookViewer',
+          operation: 'handleKeyboardNavigation',
+          key: keyboardEvent.key
+        })
+        return
       }
-      if (e.key === 'ArrowLeft') {
-        bookRef.current.pageFlip().flipPrev()
-        // Get updated page index and announce
-        const newPage = bookRef.current.pageFlip().getCurrentPageIndex()
-        setPageAnnouncement(`Sayfa ${newPage + 1} / ${pages.length}`)
+      
+      try {
+        let newPageIndex: number | undefined
+        
+        if (keyboardEvent.key === 'ArrowRight') {
+          bookRef.current.pageFlip().flipNext()
+          newPageIndex = bookRef.current.pageFlip().getCurrentPageIndex()
+          
+          logger.debug('Keyboard navigation: next page', {
+            component: 'FlipbookViewer',
+            operation: 'handleKeyboardNavigation',
+            newPage: newPageIndex,
+            totalPages: pages.length
+          })
+        } else if (keyboardEvent.key === 'ArrowLeft') {
+          bookRef.current.pageFlip().flipPrev()
+          newPageIndex = bookRef.current.pageFlip().getCurrentPageIndex()
+          
+          logger.debug('Keyboard navigation: previous page', {
+            component: 'FlipbookViewer',
+            operation: 'handleKeyboardNavigation',
+            newPage: newPageIndex,
+            totalPages: pages.length
+          })
+        }
+        
+        // Validate and announce page change
+        if (TypeGuards.isNumber(newPageIndex)) {
+          const announcement = `Sayfa ${newPageIndex + 1} / ${pages.length}`
+          setPageAnnouncement(announcement)
+        }
+      } catch (error) {
+        const handledError = ErrorHandler.handleUnknownError(error)
+        logger.error('Keyboard navigation failed', {
+          component: 'FlipbookViewer',
+          operation: 'handleKeyboardNavigation',
+          key: keyboardEvent.key,
+          error: handledError.message
+        })
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    
+    window.addEventListener('keydown', handleKeyboardNavigation)
+    return () => window.removeEventListener('keydown', handleKeyboardNavigation)
   }, [pages.length])
 
   if (!pages.length) {
     return (
       <div 
-        className="flex flex-col items-center justify-center min-h-[500px] p-8 text-center"
+        className={`flex flex-col items-center justify-center min-h-[${APP_CONFIG.magazine.viewport.defaultWidth}px] p-8 text-center`}
         role="status"
         aria-live="polite"
       >
@@ -146,7 +301,7 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
     <div 
       ref={containerRef} 
       className="relative w-full flex justify-center items-center overflow-hidden" 
-      style={{ height: dims.h }}
+      style={{ height: dimensions.h }}
       role="region"
       aria-label="Dergi görüntüleyici"
       aria-describedby="flipbook-instructions"
@@ -167,14 +322,18 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
       </div>
 
       {/* Flipbook */}
-      <SafeFlipBook ref={bookRef} width={dims.w} height={dims.h} showCover size="fixed" maxShadowOpacity={0} drawShadow={false} usePortrait mobileScrollSupport onFlip={onFlip}>
+      <SafeFlipBook ref={bookRef} width={dimensions.w} height={dimensions.h} showCover size="fixed" maxShadowOpacity={0} drawShadow={false} usePortrait mobileScrollSupport onFlip={onFlip}>
         {pages.map((url, index) => {
-          const shouldLoad = index === currentPage || index === currentPage - 1 || (index > currentPage && index <= currentPage + 3) || preloadedPages.has(index)
-          const shouldPrioritize = index >= currentPage && index <= currentPage + 3
+          const { pagesAhead, preloadCurrent, preloadPrevious } = APP_CONFIG.magazine.preload
+          const shouldLoad = (preloadCurrent && index === currentPage) || 
+                           (preloadPrevious && index === currentPage - 1) || 
+                           (index > currentPage && index <= currentPage + pagesAhead) || 
+                           preloadedPages.has(index)
+          const shouldPrioritize = index >= currentPage && index <= currentPage + pagesAhead
           const hasFailed = failedPages.has(index)
           
           return (
-            <div key={index} className="page overflow-hidden" style={{ width: dims.w, height: dims.h }}>
+            <div key={index} className="page overflow-hidden" style={{ width: dimensions.w, height: dimensions.h }}>
               {hasFailed ? (
                 // Show error placeholder for failed images
                 <div className="w-full h-full bg-neutral-100 flex flex-col items-center justify-center text-neutral-500">
@@ -198,13 +357,21 @@ export default React.memo(function FlipbookViewer({ imageUrls }: FlipbookViewerP
                 <Image
                   src={url}
                   alt={`Dergi Sayfası ${index + 1}`}
-                  width={dims.w}
-                  height={dims.h}
+                  width={dimensions.w}
+                  height={dimensions.h}
                   priority={shouldPrioritize}
                   style={{ objectFit: 'cover', width: '100%', height: '100%' }}
-                  onError={() => {
-                    // Mark as failed if Image component fails to load
+                  onError={(imageError) => {
+                    // Handle image load error with proper logging (Requirement 4.1)
                     setFailedPages((prev) => new Set([...prev, index]))
+                    
+                    logger.warn('Image component failed to load', {
+                      component: 'FlipbookViewer',
+                      operation: 'imageOnError',
+                      pageIndex: index,
+                      imageUrl: url,
+                      error: imageError instanceof Event ? 'Image load error' : String(imageError)
+                    })
                   }}
                 />
               ) : (
