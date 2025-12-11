@@ -51,14 +51,16 @@ export class MagazineService {
   private validateInput<T>(schema: { parse: (data: unknown) => T }, data: unknown): T {
     try {
       return schema.parse(data)
-    } catch (error: any) {
-      if (error?.errors) {
-        const messages = error.errors.map((e: any) => 
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'errors' in error) {
+        const zodError = error as { errors: Array<{ path: string[]; message: string }> }
+        const messages = zodError.errors.map((e) => 
           `${e.path.join('.')}: ${e.message}`
         ).join(', ')
         throw new Error(`Doğrulama hatası: ${messages}`)
       }
-      throw new Error(`Doğrulama hatası: ${error?.message ?? 'Unknown validation error'}`)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown validation error'
+      throw new Error(`Doğrulama hatası: ${errorMessage}`)
     }
   }
 

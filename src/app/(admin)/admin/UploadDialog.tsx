@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useRouter } from 'next/navigation'
@@ -42,8 +42,8 @@ export default function UploadDialog() {
   const [uploadCompleted, setUploadCompleted] = useState(false)
   const router = useRouter()
   
-  // Initialize idempotency manager
-  const idempotencyManager = new IdempotencyManager()
+  // Initialize idempotency manager with useMemo to prevent recreation on every render
+  const idempotencyManager = useMemo(() => new IdempotencyManager(), [])
   
   // Custom hooks for separation of concerns
   const { formState, updateField, reset: resetForm, validate } = useUploadForm()

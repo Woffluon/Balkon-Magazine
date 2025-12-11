@@ -59,7 +59,6 @@ export class PerformanceMonitor {
     label: string,
     operation: () => Promise<T>
   ): Promise<T> {
-    const startTime = Date.now()
     this.start(label)
 
     try {
@@ -85,7 +84,6 @@ export class PerformanceMonitor {
    * Requirement 9.1: Log start time, end time, and duration
    */
   measureSync<T>(label: string, operation: () => T): T {
-    const startTime = Date.now()
     this.start(label)
 
     try {
