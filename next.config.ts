@@ -8,16 +8,16 @@ const nextConfig: NextConfig = {
     formats: ['image/webp', 'image/avif'],
   },
   outputFileTracingRoot: process.cwd(),
-  
+
   experimental: {
     serverActions: {
       bodySizeLimit: '500mb',
     },
   },
-  
+
   poweredByHeader: false,
   compress: true,
-  
+
   webpack: (config, { isServer }) => {
     // Suppress OpenTelemetry instrumentation warnings
     if (isServer) {
@@ -28,25 +28,25 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
-  
+
   async headers() {
     // Extract Supabase domain from URL for CSP
     const supabaseUrl = new URL(env.NEXT_PUBLIC_SUPABASE_URL);
     const supabaseDomain = supabaseUrl.hostname;
-    
+
     // Content Security Policy
     const cspHeader = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
-      "font-src 'self' data:",
+      "font-src 'self' data: https://fonts.gstatic.com",
       `connect-src 'self' https://${supabaseDomain} https://*.supabase.co`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
     ].join('; ');
-    
+
     return [
       {
         source: '/(.*)',
@@ -79,7 +79,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  
+
   ...(env.NODE_ENV === 'production' && {
     output: 'standalone',
   }),

@@ -177,7 +177,68 @@ CREATE POLICY "Admin can manage all magazine pages"
   );
 
 -- ============================================================================
--- 7. STORAGE BUCKET KURULUMU
+-- 7. ANALYTICS TABLES - Okuma analitiği
+-- ============================================================================
+
+-- Sessions table
+CREATE TABLE IF NOT EXISTS public.analytics_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id), -- Nullable for anonymous users
+  magazine_id text NOT NULL, -- Can link to a magazines table if it exists
+  started_at timestamptz NOT NULL DEFAULT now(),
+  last_active_at timestamptz NOT NULL DEFAULT now(),
+  device_type text, -- 'mobile', 'tablet', 'desktop'
+  user_agent text,
+  metadata jsonb DEFAULT '{}'::jsonb
+);
+
+-- Events table (Interactions only)
+CREATE TABLE IF NOT EXISTS public.analytics_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id uuid REFERENCES public.analytics_sessions(id) ON DELETE CASCADE,
+  event_type text NOT NULL, -- 'interaction' (zoom, lock_toggle etc.)
+  created_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb DEFAULT '{}'::jsonb
+);
+
+-- Indexes for Analytics
+CREATE INDEX IF NOT EXISTS idx_analytics_sessions_magazine_id ON public.analytics_sessions(magazine_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_sessions_started_at ON public.analytics_sessions(started_at);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_session_id ON public.analytics_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON public.analytics_events(event_type);
+
+-- RLS Enable for Analytics
+ALTER TABLE public.analytics_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.analytics_events ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- 8. RLS POLİCİES - ANALYTICS
+-- ============================================================================
+
+-- Allow anyone to insert (public analytics)
+DROP POLICY IF EXISTS "Allow anonymous inserts to sessions" ON public.analytics_sessions;
+CREATE POLICY "Allow anonymous inserts to sessions" 
+  ON public.analytics_sessions FOR INSERT 
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anonymous inserts to events" ON public.analytics_events;
+CREATE POLICY "Allow anonymous inserts to events" 
+  ON public.analytics_events FOR INSERT 
+  WITH CHECK (true);
+
+-- Allow admins/service_role to read
+DROP POLICY IF EXISTS "Allow authenticated/service_role read access" ON public.analytics_sessions;
+CREATE POLICY "Allow authenticated/service_role read access" 
+  ON public.analytics_sessions FOR SELECT 
+  USING (auth.role() = 'authenticated' or auth.role() = 'service_role');
+
+DROP POLICY IF EXISTS "Allow authenticated/service_role read access" ON public.analytics_events;
+CREATE POLICY "Allow authenticated/service_role read access" 
+  ON public.analytics_events FOR SELECT 
+  USING (auth.role() = 'authenticated' or auth.role() = 'service_role');
+
+-- ============================================================================
+-- 9. STORAGE BUCKET KURULUMU
 -- ============================================================================
 
 -- Magazines bucket'ını oluştur (görsel erişimi için PUBLIC)
@@ -208,7 +269,7 @@ CREATE POLICY "Authenticated can manage magazine images"
   WITH CHECK (bucket_id = 'magazines');
 
 -- ============================================================================
--- 8. OTOMATİK USER PROFILE OLUŞTURMA TRİGGER'I
+-- 10. OTOMATİK USER PROFILE OLUŞTURMA TRİGGER'I
 -- ============================================================================
 
 -- Yeni kullanıcı profili otomatik oluşturma fonksiyonu
@@ -230,7 +291,7 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================================
--- 9. MEVCUT KULLANICILARI ADMİN YAP
+-- 11. MEVCUT KULLANICILARI ADMİN YAP
 -- ============================================================================
 
 -- Tüm mevcut kullanıcılar için admin profilleri ekle
@@ -240,7 +301,7 @@ SELECT id, 'admin' FROM auth.users
 ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
 
 -- ============================================================================
--- 10. KURULUM DOĞRULAMA
+-- 12. KURULUM DOĞRULAMA
 -- ============================================================================
 
 -- Kurulumun başarılı olduğunu doğrula
@@ -268,7 +329,7 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- 11. PERFORMANS VE GÜVENLİK KONTROLLERI
+-- 13. PERFORMANS VE GÜVENLİK KONTROLLERI
 -- ============================================================================
 
 -- Kritik indekslerin varlığını kontrol et

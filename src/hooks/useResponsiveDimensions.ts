@@ -46,9 +46,9 @@ export function useResponsiveDimensions(
   containerRef: RefObject<HTMLElement | null>,
   aspectRatio: AspectRatio
 ): Dimensions {
-  const [dims, setDims] = useState<Dimensions>({ 
-    w: APP_CONFIG.magazine.viewport.defaultWidth, 
-    h: APP_CONFIG.magazine.viewport.defaultHeight 
+  const [dims, setDims] = useState<Dimensions>({
+    w: APP_CONFIG.magazine.viewport.defaultWidth,
+    h: APP_CONFIG.magazine.viewport.defaultHeight
   })
 
   useEffect(() => {

@@ -102,7 +102,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
   const [processedPages, setProcessedPages] = useState<number>(0)
   const [isProcessing, setIsProcessing] = useState<boolean>(false)
   const [error, setError] = useState<Error | null>(null)
-  
+
   // Use ref to store PDF document so it persists across renders
   // and can be properly cleaned up
   const pdfDocRef = useRef<pdfjs.PDFDocumentProxy | null>(null)
@@ -132,7 +132,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
         'positive number',
         'renderPageToBlob.targetHeight'
       )
-      
+
       const validatedQuality = ValidationHelpers.validateOrThrow(
         quality,
         (value): value is number => TypeGuards.isNumber(value) && value >= 0 && value <= 1,
@@ -142,7 +142,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
 
       let canvas: HTMLCanvasElement | null = document.createElement('canvas')
       let canvasContext: CanvasRenderingContext2D | null = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
-      
+
       if (!canvasContext) {
         const error = new Error('Canvas context unavailable')
         logger.error('Canvas context creation failed', {
@@ -152,35 +152,35 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
         })
         throw error
       }
-      
+
       try {
-        logger.debug('Starting PDF page render', {
+        /* logger.debug('Starting PDF page render', {
           hook: 'usePDFProcessor',
           operation: 'renderPageToBlob',
           targetHeight: validatedTargetHeight,
           quality: validatedQuality
-        })
+        }) */
 
         // Calculate scale to achieve target height
         const viewport = page.getViewport({ scale: 1 })
         const scale = validatedTargetHeight / viewport.height
         const scaledViewport = page.getViewport({ scale })
-        
+
         canvas.width = Math.ceil(scaledViewport.width)
         canvas.height = Math.ceil(scaledViewport.height)
-        
-        logger.debug('Canvas dimensions calculated', {
+
+        /* logger.debug('Canvas dimensions calculated', {
           hook: 'usePDFProcessor',
           operation: 'renderPageToBlob',
           canvasWidth: canvas.width,
           canvasHeight: canvas.height,
           scale
-        })
-        
+        }) */
+
         // Render PDF page to canvas using type-safe render context
         const renderContext = createRenderContext(canvasContext, scaledViewport, canvas)
         await page.render(renderContext).promise
-        
+
         // Convert canvas to WebP blob with standardized promise handling (Requirement 7.3)
         return await createStandardizedPromise<Blob>(
           (resolve, reject) => {
@@ -188,16 +188,16 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
               reject(new Error('Canvas is null'))
               return
             }
-            
+
             canvas.toBlob(
               (blob) => {
                 if (blob) {
-                  logger.debug('Canvas converted to blob successfully', {
+                  /* logger.debug('Canvas converted to blob successfully', {
                     hook: 'usePDFProcessor',
                     operation: 'renderPageToBlob',
                     blobSize: blob.size,
                     blobType: blob.type
-                  })
+                  }) */
                   resolve(blob)
                 } else {
                   reject(new Error('Failed to convert canvas to blob'))
@@ -206,7 +206,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
               IMAGE_CONFIG.FORMAT,
               validatedQuality
             )
-            
+
             // Return cleanup function
             return () => {
               if (canvas) {
@@ -284,14 +284,14 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
           async () => {
             // Set PDF.js worker
             pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC
-            
+
             // Load PDF document
             const pdfBuffer = await file.arrayBuffer()
             const pdfDoc = await pdfjs.getDocument({ data: pdfBuffer }).promise
             pdfDocRef.current = pdfDoc
-            
+
             const pages: Blob[] = []
-            
+
             // Validate processing options with type guards
             const targetHeight = ValidationHelpers.validateOrDefault(
               options?.targetHeight,
@@ -299,23 +299,23 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
               PDF_CONFIG.TARGET_HEIGHT,
               'options.targetHeight'
             )
-            
+
             const quality = ValidationHelpers.validateOrDefault(
               options?.quality,
               (value): value is number => TypeGuards.isNumber(value) && value >= 0 && value <= 1,
               IMAGE_CONFIG.WEBP_QUALITY,
               'options.quality'
             )
-            
+
             const numPages = ValidationHelpers.validateOrThrow(
               pdfDoc.numPages,
               TypeGuards.isPositiveInteger,
               'positive integer',
               'pdfDoc.numPages'
             )
-            
+
             setTotalPages(numPages)
-            
+
             logger.info('PDF document loaded successfully', {
               hook: 'usePDFProcessor',
               operation: 'processPDF',
@@ -323,24 +323,24 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
               targetHeight,
               quality
             })
-            
+
             // Process each page with proper error handling
             for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
               try {
                 const pdfPage = await pdfDoc.getPage(pageNumber)
                 const pageBlob = await renderPageToBlob(pdfPage, targetHeight, quality)
-                
+
                 pages.push(pageBlob)
                 setProcessedPages(pageNumber)
-                
-                logger.debug('PDF page processed successfully', {
+
+                /* logger.debug('PDF page processed successfully', {
                   hook: 'usePDFProcessor',
                   operation: 'processPDF',
                   pageNumber,
                   totalPages: numPages,
                   blobSize: pageBlob.size
-                })
-                
+                }) */
+
                 // Call progress callback with validation
                 if (options?.onProgress && typeof options.onProgress === 'function') {
                   try {
@@ -354,7 +354,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
                     })
                   }
                 }
-                
+
                 // Small delay every 5 pages to prevent UI freeze
                 if (pageNumber % 5 === 0) {
                   await new Promise(resolve => setTimeout(resolve, 10))
@@ -370,7 +370,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
                 throw handledError
               }
             }
-            
+
             return {
               pages,
               totalPages: numPages
@@ -400,7 +400,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
       } catch (err) {
         // Handle errors with standardized error handling (Requirement 4.1)
         const processingError = ErrorHandler.handleUnknownError(err)
-        
+
         logger.error('PDF processing failed', {
           hook: 'usePDFProcessor',
           operation: 'processPDF',
@@ -409,7 +409,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
           error: processingError.message,
           userMessage: processingError.userMessage
         })
-        
+
         setError(processingError)
         throw processingError
       } finally {
@@ -418,7 +418,7 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
           try {
             pdfDocRef.current.destroy()
             pdfDocRef.current = null
-            
+
             logger.debug('PDF document resources cleaned up', {
               hook: 'usePDFProcessor',
               operation: 'processPDF',

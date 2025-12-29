@@ -128,12 +128,12 @@ function escapeJsonLd(json: object): string {
  */
 function getSafeUrl(): string {
   const siteUrl = env.NEXT_PUBLIC_SITE_URL;
-  
+
   // If NEXT_PUBLIC_SITE_URL is not set or invalid, use localhost
   if (!siteUrl) {
     return 'http://localhost:3000';
   }
-  
+
   // Additional validation: ensure it's a valid URL
   try {
     new URL(siteUrl);
@@ -149,7 +149,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const safeUrl = getSafeUrl();
-  
+
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -246,9 +246,9 @@ export default function RootLayout({
     "spatialCoverage": "Türkiye",
     "funding": "Sezai Karakoç Anadolu Lisesi"
   };
-  
+
   return (
-    <html lang="tr" className="scroll-smooth">
+    <html lang="tr" className="scroll-smooth" data-scroll-behavior="smooth">
       <head>
         <link rel="icon" href="/favicon.png" sizes="any" />
         <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />

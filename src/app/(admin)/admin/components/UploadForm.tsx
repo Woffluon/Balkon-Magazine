@@ -1,5 +1,6 @@
 import { Input } from '@/components/ui/input'
 import { ProgressBar } from './ProgressBar'
+import { UPLOAD_LIMITS } from '@/lib/constants/upload'
 import { FILE_SIZE_LIMITS, ALLOWED_MIME_TYPES, validatePDF as validatePDFMagic, validateImage } from '@/lib/services/fileValidation'
 import { useState, useEffect } from 'react'
 import type { Magazine } from '@/types/magazine'
@@ -95,11 +96,10 @@ async function validatePDF(file: File): Promise<FileValidationState> {
     }
   }
 
-  // Check file size (100MB max)
-  const maxSize = 100 * 1024 * 1024
-  if (file.size > maxSize) {
+  // Check file size (500MB max)
+  if (file.size > UPLOAD_LIMITS.MAX_CLIENT_FILE_SIZE) {
     return {
-      error: `PDF dosyası çok büyük (maksimum 100MB)`,
+      error: `PDF dosyası çok büyük (maksimum ${UPLOAD_LIMITS.MAX_BODY_SIZE_MB}MB)`,
       fileName: null,
       fileSize: null,
       isValid: false
@@ -219,7 +219,7 @@ export function UploadForm({
 
   const handlePdfChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
-    
+
     if (!file) {
       setPdfValidation({
         error: null,
@@ -230,11 +230,11 @@ export function UploadForm({
       onPdfChange(null)
       return
     }
-    
+
     // Real-time validation
     const validation = await validatePDF(file)
     setPdfValidation(validation)
-    
+
     if (validation.isValid) {
       onPdfChange(file)
     } else {
@@ -245,7 +245,7 @@ export function UploadForm({
 
   const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
-    
+
     if (!file) {
       setCoverValidation({
         error: null,
@@ -256,11 +256,11 @@ export function UploadForm({
       onCoverChange(null)
       return
     }
-    
+
     // Real-time validation
     const validation = await validateCover(file)
     setCoverValidation(validation)
-    
+
     if (validation.isValid) {
       onCoverChange(file)
     } else {
@@ -275,28 +275,28 @@ export function UploadForm({
         <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="title">
           Başlık
         </label>
-        <Input 
-          id="title" 
-          value={title} 
-          onChange={(e) => onTitleChange(e.target.value)} 
-          required 
+        <Input
+          id="title"
+          value={title}
+          onChange={(e) => onTitleChange(e.target.value)}
+          required
           disabled={busy}
           className="w-full text-[10px] sm:text-xs"
         />
       </div>
-      
+
       <div className="grid gap-2">
         <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="issue">
           Sayı No
         </label>
-        <Input 
-          id="issue" 
-          type="number" 
+        <Input
+          id="issue"
+          type="number"
           min="1"
           max="9999"
-          value={issue} 
-          onChange={(e) => onIssueChange(Number(e.target.value))} 
-          required 
+          value={issue}
+          onChange={(e) => onIssueChange(Number(e.target.value))}
+          required
           disabled={busy}
           className={`w-full text-[10px] sm:text-xs ${issueValidation.error ? 'border-red-500' : ''}`}
           aria-invalid={issueValidation.error ? "true" : "false"}
@@ -313,32 +313,32 @@ export function UploadForm({
           </p>
         )}
       </div>
-      
+
       <div className="grid gap-2">
         <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="date">
           Yayın Tarihi
         </label>
-        <Input 
-          id="date" 
-          type="date" 
-          value={date} 
-          onChange={(e) => onDateChange(e.target.value)} 
-          required 
+        <Input
+          id="date"
+          type="date"
+          value={date}
+          onChange={(e) => onDateChange(e.target.value)}
+          required
           disabled={busy}
           className="w-full text-[10px] sm:text-xs"
         />
       </div>
-      
+
       <div className="grid gap-2">
         <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="pdf">
           PDF <span className="text-[10px] sm:text-xs text-gray-500">(yalnızca dönüştürmek için; sunucuya yüklenmez)</span>
         </label>
-        <Input 
-          id="pdf" 
-          type="file" 
-          accept="application/pdf" 
-          onChange={handlePdfChange} 
-          required 
+        <Input
+          id="pdf"
+          type="file"
+          accept="application/pdf"
+          onChange={handlePdfChange}
+          required
           disabled={busy}
           className="w-full text-[10px] sm:text-xs"
           aria-invalid={pdfValidation.error ? "true" : "false"}
@@ -355,16 +355,16 @@ export function UploadForm({
           </p>
         )}
       </div>
-      
+
       <div className="grid gap-2">
         <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="cover">
           Kapak <span className="text-[10px] sm:text-xs text-gray-500">(opsiyonel)</span>
         </label>
-        <Input 
-          id="cover" 
-          type="file" 
-          accept="image/*" 
-          onChange={handleCoverChange} 
+        <Input
+          id="cover"
+          type="file"
+          accept="image/*"
+          onChange={handleCoverChange}
           disabled={busy}
           className="w-full text-[10px] sm:text-xs"
           aria-invalid={coverValidation.error ? "true" : "false"}
@@ -381,17 +381,17 @@ export function UploadForm({
           </p>
         )}
       </div>
-      
+
       {busy && (
         <>
-          <ProgressBar 
-            value={coverProgress} 
+          <ProgressBar
+            value={coverProgress}
             label="Kapak yükleme ilerlemesi"
             showPercentage={true}
           />
-          
-          <ProgressBar 
-            value={pagesProgress} 
+
+          <ProgressBar
+            value={pagesProgress}
             label="Sayfa yükleme ilerlemesi"
             showPercentage={true}
             fileCount={totalPages > 0 ? { done: pagesDone, total: totalPages } : undefined}

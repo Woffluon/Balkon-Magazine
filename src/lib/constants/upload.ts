@@ -13,10 +13,10 @@ import { env } from '@/lib/config/env'
 export const IMAGE_CONFIG = {
   /** WebP quality for converted images (0.0 - 1.0) */
   WEBP_QUALITY: 0.9,
-  
+
   /** Default image format for storage */
   FORMAT: 'image/webp' as const,
-  
+
   /** File extension for converted images */
   EXTENSION: '.webp' as const,
 } as const
@@ -27,10 +27,10 @@ export const IMAGE_CONFIG = {
 export const PDF_CONFIG = {
   /** Target height in pixels for PDF page rendering */
   TARGET_HEIGHT: 1200,
-  
+
   /** PDF.js worker source URL - uses pre-validated environment variable */
   WORKER_SRC: env.NEXT_PUBLIC_PDFJS_WORKER_URL,
-  
+
   /** Canvas rendering context type */
   CONTEXT_TYPE: '2d' as const,
 } as const
@@ -39,18 +39,18 @@ export const PDF_CONFIG = {
  * Upload limits and constraints
  */
 export const UPLOAD_LIMITS = {
-  /** Maximum file size for server action uploads (50MB in bytes) */
-  MAX_BODY_SIZE: 50 * 1024 * 1024,
-  
+  /** Maximum file size for server action uploads (500MB in bytes) */
+  MAX_BODY_SIZE: 500 * 1024 * 1024,
+
   /** Maximum file size for server action uploads (human-readable) */
-  MAX_BODY_SIZE_MB: 50,
-  
+  MAX_BODY_SIZE_MB: 500,
+
   /** Maximum number of pages allowed in a PDF */
   MAX_PDF_PAGES: 500,
-  
-  /** Maximum individual file size for client uploads (100MB in bytes) */
-  MAX_CLIENT_FILE_SIZE: 100 * 1024 * 1024,
-  
+
+  /** Maximum individual file size for client uploads (500MB in bytes) */
+  MAX_CLIENT_FILE_SIZE: 500 * 1024 * 1024,
+
   /**
    * Number of concurrent page uploads to process in parallel
    * 

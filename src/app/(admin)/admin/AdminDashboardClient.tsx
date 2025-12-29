@@ -1,7 +1,9 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { BarChart3 } from 'lucide-react'
 import MagazineTable from './MagazineTable'
 import { UserMenu } from './UserMenu'
 import type { Magazine } from '@/types/magazine'
@@ -32,6 +34,13 @@ export function AdminDashboardClient({ magazines, userEmail }: AdminDashboardCli
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-gray-900">Dergi Yönetimi</h1>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <UserMenu userEmail={userEmail} />
+            <Link href="/admin/analytics">
+              <Button variant="outline" className="w-full sm:w-auto gap-2">
+                <BarChart3 className="w-4 h-4" />
+                <span className="hidden sm:inline">Analitik</span>
+                <span className="inline sm:hidden">Analiz</span>
+              </Button>
+            </Link>
             <UploadDialog />
           </div>
         </div>
