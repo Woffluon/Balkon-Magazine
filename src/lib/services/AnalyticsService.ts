@@ -13,7 +13,7 @@ export interface AnalyticsSession {
 export interface AnalyticsEvent {
     session_id: string
     event_type: 'interaction'
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
 }
 
 class AnalyticsService {
@@ -62,7 +62,7 @@ class AnalyticsService {
         }
     }
 
-    public trackEvent(eventType: 'interaction', data: { metadata?: any } = {}) {
+    public trackEvent(eventType: 'interaction', data: { metadata?: Record<string, unknown> } = {}) {
         if (!this.currentSessionId) return
 
         this.queue.push({

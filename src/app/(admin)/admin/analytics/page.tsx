@@ -23,8 +23,9 @@ export default async function AnalyticsPage(props: Props) {
     // Since we need to filter EVENTS based on SESSION data (magazine_id), 
     // we first get relevant session IDs if a filter is applied.
 
-    let sessionIds: string[] | null = null
+    // let sessionIds: string[] | null = null
 
+    /*
     if (magazineId && magazineId !== 'all') {
         const { data: sessions } = await supabase
             .from('analytics_sessions')
@@ -33,6 +34,7 @@ export default async function AnalyticsPage(props: Props) {
 
         sessionIds = sessions?.map(s => s.id) || []
     }
+    */
 
     // 1. Fetch Summary Stats
     // Total Views (Page Views)

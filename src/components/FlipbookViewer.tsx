@@ -6,10 +6,9 @@ import Image from 'next/image'
 import { ChevronLeft, ChevronRight, Lock, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { useResponsiveDimensions } from '@/hooks/useResponsiveDimensions'
 import { logger } from '@/lib/services/Logger'
-import { ErrorHandler } from '@/lib/errors/errorHandler'
+// import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { APP_CONFIG } from '@/lib/config/app-config'
 import {
-  executeAsyncOperation,
   createStandardizedPromise,
   isNumber
 } from '@/lib/utils/asyncPatterns'
@@ -136,7 +135,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
         } else if (keyboardEvent.key === 'ArrowLeft') {
           bookRef.current.pageFlip().flipPrev()
         }
-      } catch (error) {
+      } catch {
         // Handle error silently
       }
     }
@@ -144,10 +143,10 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     return () => window.removeEventListener('keydown', handleKeyboardNavigation)
   }, [pages.length, isLocked])
 
-  if (!pages.length) return <div>No Pages</div>
-
   // -- Zoom Control --
   const zoomRef = useRef<{ zoomIn: () => void; zoomOut: () => void; reset: () => void }>(null)
+
+  if (!pages.length) return <div>No Pages</div>
 
   const handleZoomIn = () => zoomRef.current?.zoomIn()
   const handleZoomOut = () => zoomRef.current?.zoomOut()

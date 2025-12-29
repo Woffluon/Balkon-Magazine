@@ -4,7 +4,7 @@ import { analyticsService } from '@/lib/services/AnalyticsService'
 
 
 export function useMagazineAnalytics(magazineId: string) {
-    const isTabActiveRef = useRef<boolean>(true)
+    // const isTabActiveRef = useRef<boolean>(true)
     const sessionInitializedRef = useRef<string | null>(null)
 
     // Initialize Session
