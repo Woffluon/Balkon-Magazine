@@ -489,7 +489,7 @@ Copyright © 2025 Efe Arabacı
 
 <div align="center">
 
-**Built with ❤️ for Sezai Karakoç Anadolu Lisesi**
+**Made by Efe Arabacı**
 
 **Balkon Dergisi** — Where students find their voice.
 
