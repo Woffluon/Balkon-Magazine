@@ -36,6 +36,8 @@ function AdminLoading() {
  * 
  * Requirements: 15.3, 15.4
  */
+import ReactQueryProvider from '@/providers/ReactQueryProvider'
+
 export default function AdminLayout({
   children,
 }: {
@@ -43,9 +45,11 @@ export default function AdminLayout({
 }) {
   return (
     <div className="min-h-screen bg-muted/40">
-      <Suspense fallback={<AdminLoading />}>
-        {children}
-      </Suspense>
+      <ReactQueryProvider>
+        <Suspense fallback={<AdminLoading />}>
+          {children}
+        </Suspense>
+      </ReactQueryProvider>
     </div>
   )
 }
