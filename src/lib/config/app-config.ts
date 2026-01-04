@@ -22,7 +22,7 @@ export const MAGAZINE_CONFIG = {
     /** Base height for aspect ratio calculation */
     height: 1200,
   },
-  
+
   /**
    * Viewport and display dimensions
    */
@@ -39,8 +39,13 @@ export const MAGAZINE_CONFIG = {
     defaultHeight: 900,
     /** Default loading placeholder height (pixels) */
     loadingHeight: 700,
+    /** Padding to maintain around the magazine (pixels) */
+    padding: {
+      mobile: 16,
+      desktop: 32,
+    },
   },
-  
+
   /**
    * Page preloading configuration for performance optimization
    */
@@ -64,12 +69,12 @@ export const UPLOAD_CONFIG = {
    * PDF processing settings
    */
   pdf: {
-    /** Target height in pixels for PDF page rendering (for high-quality output) */
-    targetHeight: 1200,
+    /** Target height in pixels for PDF page rendering (increased to 2400 for Retina support) */
+    targetHeight: 2400,
     /** Canvas rendering context type */
     contextType: '2d' as const,
   },
-  
+
   /**
    * Image processing and conversion settings
    */
@@ -81,7 +86,7 @@ export const UPLOAD_CONFIG = {
     /** File extension for converted images */
     extension: '.webp' as const,
   },
-  
+
   /**
    * File upload limits and constraints
    */
@@ -116,7 +121,7 @@ export const STORAGE_CONFIG = {
     /** Duplex setting for large file uploads */
     duplex: 'half' as const,
   },
-  
+
   /**
    * File listing and pagination settings
    */
@@ -126,7 +131,7 @@ export const STORAGE_CONFIG = {
     /** Default limit for storage operations */
     defaultLimit: 100,
   },
-  
+
   /**
    * File naming conventions and patterns
    */
@@ -159,7 +164,7 @@ export const SYSTEM_CONFIG = {
     /** Whether to include stack traces in development */
     includeStackTrace: true,
   },
-  
+
   /**
    * Logging configuration
    */
@@ -173,7 +178,7 @@ export const SYSTEM_CONFIG = {
     /** Timezone for log timestamps */
     timezone: 'tr-TR',
   },
-  
+
   /**
    * Performance and monitoring settings
    */
@@ -185,7 +190,7 @@ export const SYSTEM_CONFIG = {
     /** Maximum function length threshold (lines) */
     maxFunctionLength: 50,
   },
-  
+
   /**
    * Time conversion constants
    */
@@ -227,24 +232,24 @@ export const CONFIG_VALIDATORS = {
    * Validates that a number is within the viewport width constraints
    */
   isValidViewportWidth: (width: number): boolean => {
-    return width >= MAGAZINE_CONFIG.viewport.minWidth && 
-           width <= MAGAZINE_CONFIG.viewport.maxWidth
+    return width >= MAGAZINE_CONFIG.viewport.minWidth &&
+      width <= MAGAZINE_CONFIG.viewport.maxWidth
   },
-  
+
   /**
    * Validates that a quality value is within acceptable range
    */
   isValidImageQuality: (quality: number): boolean => {
     return quality >= 0 && quality <= 1
   },
-  
+
   /**
    * Validates that a file size is within upload limits
    */
   isValidFileSize: (size: number): boolean => {
     return size <= UPLOAD_CONFIG.limits.maxClientFileSize
   },
-  
+
   /**
    * Validates that a page count is within acceptable limits
    */
@@ -264,21 +269,21 @@ export const CONFIG_HELPERS = {
   getAspectRatio: (): number => {
     return MAGAZINE_CONFIG.aspectRatio.width / MAGAZINE_CONFIG.aspectRatio.height
   },
-  
+
   /**
    * Get the maximum viewport height based on window height
    */
   getMaxViewportHeight: (windowHeight: number): number => {
     return Math.floor(windowHeight * MAGAZINE_CONFIG.viewport.heightRatio)
   },
-  
+
   /**
    * Get the cache control header value
    */
   getCacheControlHeader: (): string => {
     return String(STORAGE_CONFIG.bucket.cacheControlSeconds)
   },
-  
+
   /**
    * Get formatted page filename with proper padding
    */
@@ -286,7 +291,7 @@ export const CONFIG_HELPERS = {
     const { pagePrefix, pagePadding, paddingChar, extension } = STORAGE_CONFIG.fileNaming
     return `${pagePrefix}${String(pageNumber).padStart(pagePadding, paddingChar)}${extension}`
   },
-  
+
   /**
    * Get the preload range for a given current page
    */
@@ -294,7 +299,7 @@ export const CONFIG_HELPERS = {
     const { pagesAhead, pagesBehind } = MAGAZINE_CONFIG.preload
     const start = Math.max(1, currentPage - pagesBehind)
     const end = Math.min(totalPages, currentPage + pagesAhead)
-    
+
     return Array.from({ length: end - start + 1 }, (_, i) => start + i)
   },
 } as const

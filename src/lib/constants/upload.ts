@@ -25,8 +25,11 @@ export const IMAGE_CONFIG = {
  * PDF processing configuration
  */
 export const PDF_CONFIG = {
-  /** Target height in pixels for PDF page rendering */
-  TARGET_HEIGHT: 1200,
+  /** 
+   * Target height in pixels for PDF page rendering 
+   * Increased to 2400 to support high-fidelity zoom on Retina displays
+   */
+  TARGET_HEIGHT: 2400,
 
   /** PDF.js worker source URL - uses pre-validated environment variable */
   WORKER_SRC: env.NEXT_PUBLIC_PDFJS_WORKER_URL,

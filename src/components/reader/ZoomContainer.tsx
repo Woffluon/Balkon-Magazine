@@ -98,25 +98,29 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
                 e.stopPropagation()
             }
         } else if (e.touches.length === 1) {
-            // Start Pan (only if zoomed or locked)
+            // Start Pan (enabled if zoomed OR locked)
             const currentScale = stateRef.current.scale
 
-            // If locked, strictly prevent default to stop page turning
+            // If locked, we allow panning even at scale 1 (per requirement 3 modification)
+            // But we MUST stop propagation to prevent page flip
             if (locked) {
                 if (e.cancelable) {
-                    e.preventDefault()
-                    e.stopPropagation()
+                    // We don't preventDefault immediately for locked unless we are sure it's a horizontal drag?
+                    // Actually, to prevent flip, we might need to consume the event.
+                    // But for now, let's treat it as a pan start.
                 }
-                return
+                // Don't return early! Fall through to drag logic
+                if (e.cancelable) e.stopPropagation() // Stop flipbook from seeing this
+            } else {
+                if (currentScale === 1) return // Let normal scroll/flip happen if not zoomed and not locked
             }
-
-            if (currentScale === 1) return // Let normal scroll happen if not zoomed and not locked
 
             setIsDragging(true)
             stateRef.current.startDragPosition = { x: e.touches[0].clientX, y: e.touches[0].clientY }
             stateRef.current.lastPosition = { ...stateRef.current.position }
 
-            if (e.cancelable) {
+            // If we are dragging (zoomed or locked), prevent default to stop browser scroll
+            if ((currentScale > 1 || locked) && e.cancelable) {
                 e.preventDefault()
                 e.stopPropagation()
             }
@@ -141,15 +145,6 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
             updateScale(stateRef.current.initialScale * scaleChange)
 
         } else if (e.touches.length === 1) {
-            // If locked, swallow events
-            if (locked) {
-                if (e.cancelable) {
-                    e.preventDefault()
-                    e.stopPropagation()
-                }
-                return
-            }
-
             if (stateRef.current.isDragging) {
                 // Panning
                 if (e.cancelable) {
@@ -166,7 +161,7 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
                 })
             }
         }
-    }, [disabled, locked, updateScale])
+    }, [disabled, updateScale])
 
     const handleTouchEnd = useCallback(() => {
         setIsDragging(false)
@@ -179,8 +174,9 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
         if (!el) return
 
         // We use non-passive listeners to be able to call preventDefault()
-        // which completely stops the browser's native scrolling/zooming/navigation
-        const options = { passive: false }
+        // We use non-passive listeners to be able to call preventDefault()
+        // and capture: true to intercept events before they reach the flipbook
+        const options = { passive: false, capture: true }
 
         el.addEventListener('wheel', handleWheel, options)
         el.addEventListener('touchstart', handleTouchStart, options)
@@ -188,10 +184,10 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
         el.addEventListener('touchend', handleTouchEnd, options)
 
         return () => {
-            el.removeEventListener('wheel', handleWheel)
-            el.removeEventListener('touchstart', handleTouchStart)
-            el.removeEventListener('touchmove', handleTouchMove)
-            el.removeEventListener('touchend', handleTouchEnd)
+            el.removeEventListener('wheel', handleWheel, true)
+            el.removeEventListener('touchstart', handleTouchStart, true)
+            el.removeEventListener('touchmove', handleTouchMove, true)
+            el.removeEventListener('touchend', handleTouchEnd, true)
         }
     }, [handleWheel, handleTouchStart, handleTouchMove, handleTouchEnd])
 
@@ -204,22 +200,26 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
         }
     }, [disabled, onZoomChange])
 
-    // Auto-reset position if scale goes back to 1
+    // Auto-reset position if scale goes back to 1 (unless locked, we might want to keep it? No, reset is safer)
     useEffect(() => {
-        if (scale === 1) {
+        if (scale === 1 && !locked) {
             setPosition({ x: 0, y: 0 })
         }
-    }, [scale])
+    }, [scale, locked])
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (disabled) return
+
+        // If locked, we prevent default to stop page flip, but allow dragging logic below
         if (locked) {
             e.preventDefault()
             e.stopPropagation()
-            return
+            // Continue to drag logic...
+        } else {
+            if (scale === 1) return
         }
-        if (scale === 1) return
 
+        // Prevent default for dragging
         e.preventDefault()
         e.stopPropagation()
 
@@ -254,12 +254,13 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
         <div
             ref={containerRef}
             className={`relative w-full h-full overflow-hidden ${locked || scale > 1 ? 'touch-none' : ''}`}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
+            // Use Capture phase for Mouse events to intercept before children
+            onMouseDownCapture={handleMouseDown}
+            onMouseMoveCapture={handleMouseMove}
+            onMouseUpCapture={handleMouseUp}
             onMouseLeave={handleMouseUp}
             style={{
-                cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : (locked ? 'not-allowed' : 'auto')
+                cursor: scale > 1 || locked ? (isDragging ? 'grabbing' : 'grab') : 'auto'
             }}
         >
             <div
@@ -272,9 +273,9 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
                     height: '100%',
                     backfaceVisibility: 'hidden',
                     perspective: 1000,
-                    // When locked, disable pointer events on children completely
-                    pointerEvents: locked ? 'none' : 'auto',
-                    // Center content
+                    // When locked, we still want to capture events on parent, but children shouldn't be interactable
+                    // But if we use Capture listeners on parent and stopPropagation, children won't receive them anyway.
+                    // So we can leave pointerEvents: auto on children.
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
@@ -282,17 +283,6 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
             >
                 {children}
             </div>
-
-            {/* Transparent Overlay when locked to catch all events */}
-            {locked && (
-                <div
-                    className="absolute inset-0 z-50 cursor-not-allowed"
-                    onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                    }}
-                />
-            )}
         </div>
     )
 })

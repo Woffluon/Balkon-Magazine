@@ -201,7 +201,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
       <div
         ref={containerRef}
         className="relative w-full overflow-hidden bg-neutral-50 rounded-xl shadow-inner border border-neutral-100"
-        style={{ height: dimensions.h }}
+        style={{ height: dimensions.containerHeight }}
       >
         <ZoomContainer
           ref={zoomRef}
@@ -219,7 +219,10 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             maxShadowOpacity={0}
             drawShadow={false}
             usePortrait
-            mobileScrollSupport={!isLocked} // Native support disable attempt
+            // Strict gesture interaction rules:
+            // - Disable internal scroll triggers if locked (parent handles move)
+            // - Disable internal scroll triggers if zoomed (parent handles pan)
+            mobileScrollSupport={!isLocked && zoomLevel === 1}
             onFlip={onFlip}
           // When locked, we try to restrict events via parent, but passing props helps if supported
           >
@@ -271,7 +274,9 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
 
       {/* Mobile Tap Zones Disclaimer */}
       <p className="mt-4 text-xs text-neutral-400">
-        {isLocked ? 'Sayfa kilitli. Kilidi açarak çevirebilirsiniz.' : 'Büyütmek için tekerleği kullanın veya parmaklarınızla sıkıştırın.'}
+        {isLocked
+          ? 'Sayfa kilitli. Sürükleyerek taşıyabilirsiniz.'
+          : 'Büyütmek için tekerleği kullanın veya parmaklarınızla sıkıştırın.'}
       </p>
     </div>
   )

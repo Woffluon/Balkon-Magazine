@@ -15,6 +15,7 @@ export interface AspectRatio {
 export interface Dimensions {
   w: number
   h: number
+  containerHeight: number
 }
 
 /**
@@ -34,7 +35,7 @@ export interface Dimensions {
  * const dims = useResponsiveDimensions(containerRef, { w: 848, h: 1200 })
  * 
  * return (
- *   <div ref={containerRef}>
+ *   <div ref={containerRef} style={{ height: dims.containerHeight }}>
  *     <FlipBook width={dims.w} height={dims.h} />
  *   </div>
  * )
@@ -48,7 +49,8 @@ export function useResponsiveDimensions(
 ): Dimensions {
   const [dims, setDims] = useState<Dimensions>({
     w: APP_CONFIG.magazine.viewport.defaultWidth,
-    h: APP_CONFIG.magazine.viewport.defaultHeight
+    h: APP_CONFIG.magazine.viewport.defaultHeight,
+    containerHeight: APP_CONFIG.magazine.viewport.defaultHeight
   })
 
   useEffect(() => {
@@ -69,9 +71,17 @@ export function useResponsiveDimensions(
         const el = containerRef.current
         if (!el) return
 
-        // Calculate maximum width from container, with reasonable bounds
+        // Calculate padding based on viewport width
+        const isMobile = window.innerWidth < 768
+        const padding = isMobile ? APP_CONFIG.magazine.viewport.padding.mobile : APP_CONFIG.magazine.viewport.padding.desktop
+        const totalHorizontalPadding = padding * 2
+        const totalVerticalPadding = padding * 2
+
+        // Calculate maximum width from container, with reasonable bounds and padding
         const { minWidth, maxWidth, defaultWidth } = APP_CONFIG.magazine.viewport
-        const maxW = Math.max(minWidth, Math.min(maxWidth, el.clientWidth || defaultWidth))
+        // Ensure we don't go below zero
+        const availableWidth = Math.max(0, (el.clientWidth || defaultWidth) - totalHorizontalPadding)
+        const maxW = Math.max(minWidth, Math.min(maxWidth, availableWidth))
 
         // Use visualViewport API for accurate viewport height (handles mobile keyboard)
         const visualViewport =
@@ -85,20 +95,24 @@ export function useResponsiveDimensions(
             ? window.innerHeight
             : defaultHeight
 
-        // Calculate maximum height using configured ratio (Requirement 4.3)
-        const maxH = Math.floor(viewportH * heightRatio)
+        // The outer container height should be the full viewport ratio height
+        const containerH = Math.floor(viewportH * heightRatio)
+
+        // The book height is constrained by padding
+        // Ensure book height doesn't exceed containerH - padding
+        const maxBookH = Math.floor(containerH - totalVerticalPadding)
 
         // Calculate height from width based on aspect ratio
         const hFromW = Math.floor((maxW * aspectRatio.h) / aspectRatio.w)
 
         // Maintain aspect ratio while respecting viewport constraints (Requirement 4.3)
-        if (hFromW > maxH) {
+        if (hFromW > maxBookH) {
           // Height constraint is limiting, calculate width from height
-          const wFromH = Math.floor((maxH * aspectRatio.w) / aspectRatio.h)
-          setDims({ w: wFromH, h: maxH })
+          const wFromH = Math.floor((maxBookH * aspectRatio.w) / aspectRatio.h)
+          setDims({ w: wFromH, h: maxBookH, containerHeight: containerH })
         } else {
           // Width constraint is limiting, use calculated height
-          setDims({ w: maxW, h: hFromW })
+          setDims({ w: maxW, h: hFromW, containerHeight: containerH })
         }
       }, 100) // 100ms debounce delay for performance
     }
