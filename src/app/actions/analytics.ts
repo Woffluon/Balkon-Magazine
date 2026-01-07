@@ -1,7 +1,8 @@
 'use server'
 
-import { analyticsService } from '@/lib/services/AnalyticsService'
+import { analyticsAdminService } from '@/lib/services/AnalyticsAdminService'
 import { AnalyticsFilters } from '@/types/analytics'
+import { requireAdmin } from '@/lib/services/authorization'
 
 export async function fetchAnalyticsData(filters: AnalyticsFilters) {
     // Convert Filters to the format AnalyticsService expects
@@ -24,5 +25,6 @@ export async function fetchAnalyticsData(filters: AnalyticsFilters) {
     // So Client resolves "Today" -> "2023-10-27T00:00:00+03:00".
     // Helper logic should be passed.
 
-    return await analyticsService.getAnalyticsData(filters)
+    await requireAdmin()
+    return await analyticsAdminService.getAnalyticsData(filters)
 }

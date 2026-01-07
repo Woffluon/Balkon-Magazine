@@ -1,7 +1,7 @@
 import dynamic from 'next/dynamic'
 import FlipbookViewerSkeleton from '@/components/FlipbookViewerSkeleton'
 import { FlipbookViewerErrorBoundary } from '@/components/FlipbookViewerErrorBoundary'
-import { createClient } from '@/lib/supabase/server'
+import { createPublicClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
@@ -51,7 +51,7 @@ export async function generateStaticParams() {
 }
 
 export default async function DergiPage({ params }: { params: Promise<{ sayi: string }> }) {
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const { sayi: sayiStr } = await params
   
   // Validate URL parameter
@@ -190,7 +190,7 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 sm:p-8">
           {imageUrls.length > 0 ? (
             <FlipbookViewerErrorBoundary issueNumber={sayi}>
-              <FlipbookViewer imageUrls={imageUrls} />
+              <FlipbookViewer imageUrls={imageUrls} magazineId={magazine.id} />
             </FlipbookViewerErrorBoundary>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
@@ -249,7 +249,7 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
   const description = `${magazine.title} - Sezai Karakoç Anadolu Lisesi öğrenci dergisi ${sayi}. sayısı`
 
   // Generate full storage URL for cover image
-  const supabase = await createClient()
+  const supabase = createPublicClient()
   const storageService = new SupabaseStorageService(supabase)
   const coverImageUrl = magazine.cover_image_url 
     ? storageService.getPublicUrl(magazine.cover_image_url)
