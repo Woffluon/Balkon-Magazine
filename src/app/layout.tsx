@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AppShell } from "@/components/AppShell";
 import { Toaster } from "@/components/ui/toaster";
 import { GlobalErrorHandlerProvider } from "@/components/GlobalErrorHandlerProvider";
@@ -271,6 +272,7 @@ export default function RootLayout({
         <GlobalErrorHandlerProvider />
         <Toaster />
         <AppShell>{children}</AppShell>
+        <SpeedInsights />
       </body>
     </html>
   );
