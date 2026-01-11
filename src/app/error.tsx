@@ -4,19 +4,6 @@ import { useEffect } from 'react'
 import { logger } from '@/lib/services/Logger'
 import { env } from '@/lib/config/env'
 
-/**
- * Root Error Boundary
- * 
- * Catches all unhandled errors in the application root.
- * Provides recovery options and logs errors appropriately.
- * Shows detailed error information in development mode only.
- * 
- * Requirements: 2.1
- * - Displays root error boundary with recovery options
- * - Logs errors with context
- * - Shows error details in development mode only
- * - Styled consistently with app design
- */
 export default function RootError({
   error,
   reset,

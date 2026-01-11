@@ -12,7 +12,7 @@ import { env } from '@/lib/config/env'
  */
 export const IMAGE_CONFIG = {
   /** WebP quality for converted images (0.0 - 1.0) */
-  WEBP_QUALITY: 0.9,
+  WEBP_QUALITY: 0.95,
 
   /** Default image format for storage */
   FORMAT: 'image/webp' as const,
@@ -27,9 +27,9 @@ export const IMAGE_CONFIG = {
 export const PDF_CONFIG = {
   /** 
    * Target height in pixels for PDF page rendering 
-   * Increased to 2400 to support high-fidelity zoom on Retina displays
+   * Increased to 3600 to support high-fidelity zoom on Retina displays
    */
-  TARGET_HEIGHT: 2400,
+  TARGET_HEIGHT: 3600,
 
   /** PDF.js worker source URL - uses pre-validated environment variable */
   WORKER_SRC: env.NEXT_PUBLIC_PDFJS_WORKER_URL,

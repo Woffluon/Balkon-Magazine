@@ -6,31 +6,12 @@ import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineR
 import { ErrorHandler, Result } from '@/lib/errors/errorHandler'
 import { logger } from '@/lib/services/Logger'
 
-/**
- * Retrieves all published magazines with request-level caching
- * Uses the repository pattern to abstract database access
- * Cached for 60 seconds with 'magazines' tag for on-demand revalidation
- * 
- * Implements retry logic (Requirements 6.2):
- * - Repository layer handles retries automatically
- * - Retries up to 3 times on transient failures
- * - Uses exponential backoff (1s, 2s, 4s)
- * - Returns data immediately on successful retry
- * 
- * Implements error handling (Requirement 1.2):
- * - Wraps database operations in try-catch
- * - Returns Result<Magazine[]> instead of throwing
- * - Logs errors with function context
- * 
- * @returns Promise resolving to Result containing array of published magazines or error
- */
 export const getPublishedMagazines = unstable_cache(
   async (): Promise<Result<Magazine[]>> => {
     try {
       const supabase = createPublicClient()
       const repository = new SupabaseMagazineRepository(supabase)
       
-      // Repository already has retry logic built-in (Requirements 6.2)
       const allMagazines = await repository.findAll()
       
       // Filter for published magazines

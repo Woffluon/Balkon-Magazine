@@ -125,6 +125,10 @@ export class PDFProcessor implements IFileProcessor {
       )
     }
     
+    // High quality rendering settings
+    canvasContext.imageSmoothingEnabled = true
+    canvasContext.imageSmoothingQuality = 'high'
+    
     try {
       // Calculate scale to achieve target height
       const viewport = page.getViewport({ scale: 1 })
