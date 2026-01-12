@@ -79,6 +79,22 @@ export const AnimatedGridSection = React.memo(function AnimatedGridSection({
   
   const gridRef = useRef<HTMLDivElement>(null)
 
+  // Find the latest magazine by issue number (or publication date if issue numbers are not sequential)
+  // Requirement: Detect the "latest" magazine programmatically
+  const latestMagazineId = useMemo(() => {
+    if (validatedMagazines.length === 0) return null
+    
+    // Sort by issue_number descending, then publication_date descending as fallback
+    const sorted = [...validatedMagazines].sort((a, b) => {
+      if (b.issue_number !== a.issue_number) {
+        return b.issue_number - a.issue_number
+      }
+      return new Date(b.publication_date).getTime() - new Date(a.publication_date).getTime()
+    })
+    
+    return sorted[0].id
+  }, [validatedMagazines])
+
   const revealVariants = useMemo(() => ({
     visible: (i: number) => ({
       y: 0,
@@ -163,7 +179,10 @@ export const AnimatedGridSection = React.memo(function AnimatedGridSection({
               <div className="relative">
                 {/* Card wrapper with clean border */}
                 <div className="relative bg-white rounded-xl p-3 shadow-lg border border-gray-100 transition-all duration-500 group-hover:shadow-2xl group-hover:-translate-y-3 group-hover:border-red-200">
-                  <MagazineCard magazine={magazine} />
+                  <MagazineCard 
+                    magazine={magazine} 
+                    isLatest={magazine.id === latestMagazineId}
+                  />
                 </div>
               </div>
             </TimelineContent>
