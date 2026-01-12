@@ -21,7 +21,3 @@ export { useUploadPersistence } from './useUploadPersistence'
 export type { UploadState } from './useUploadPersistence'
 export { useWakeLock } from './useWakeLock'
 export type { UseWakeLockReturn } from './useWakeLock'
-
-// Responsive dimensions hook
-export { useResponsiveDimensions } from './useResponsiveDimensions'
-export type { AspectRatio, Dimensions } from './useResponsiveDimensions'

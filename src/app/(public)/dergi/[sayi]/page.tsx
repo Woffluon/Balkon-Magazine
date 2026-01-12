@@ -24,10 +24,10 @@ export const revalidate = 3600 // Revalidate every hour (ISR)
  */
 export async function generateStaticParams() {
   const { getPublishedMagazines } = await import('@/lib/magazines')
-  
+
   try {
     const result = await getPublishedMagazines()
-    
+
     // Check if result is successful
     if (!result.success) {
       logger.error('Error generating static params', {
@@ -36,7 +36,7 @@ export async function generateStaticParams() {
       })
       return []
     }
-    
+
     return result.data.map((magazine) => ({
       sayi: magazine.issue_number.toString(),
     }))
@@ -53,7 +53,7 @@ export async function generateStaticParams() {
 export default async function DergiPage({ params }: { params: Promise<{ sayi: string }> }) {
   const supabase = createPublicClient()
   const { sayi: sayiStr } = await params
-  
+
   // Validate URL parameter
   const sayi = validatePageNumber(sayiStr)
   if (sayi === null) {
@@ -73,7 +73,7 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
       } catch (error) {
         const { logger } = await import('@/lib/services/Logger')
         const { ErrorHandler } = await import('@/lib/errors/errorHandler')
-        
+
         const appError = ErrorHandler.handleUnknownError(error)
         logger.error('Failed to fetch magazine by issue', {
           operation: 'getMagazineByIssue',
@@ -81,11 +81,11 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
           error: appError.message,
           code: appError.code,
         })
-        
+
         return { success: false as const, error: appError }
       }
     })(),
-    
+
     // Fetch storage files with error handling
     // Requirements: 1.3 - Wrap storage operations in try-catch and handle partial failures
     (async () => {
@@ -96,13 +96,13 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
       } catch (error) {
         const { logger } = await import('@/lib/services/Logger')
         const { ErrorHandler } = await import('@/lib/errors/errorHandler')
-        
+
         const appError = ErrorHandler.handleStorageError(
           error instanceof Error ? error : new Error(String(error)),
           'list',
           STORAGE_PATHS.getPagesPath(sayi)
         )
-        
+
         logger.warn('Failed to list page files, will fallback to cover image', {
           operation: 'listPageFiles',
           issueNumber: sayi,
@@ -110,7 +110,7 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
           error: appError.message,
           code: appError.code,
         })
-        
+
         // Don't throw - this is a partial failure
         // Return empty array to fallback to cover image
         return { success: true as const, data: [] }
@@ -131,12 +131,12 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
 
   // Process files to generate image URLs
   let imageUrls: string[] = []
-  
+
   if (files.length > 0) {
     // Sort files by page number using utility function
     // Requirements: 9.4, 9.5
     const sorted = sortFilesByNumber(files)
-    
+
     imageUrls = sorted.map((f) => storageService.getPublicUrl(`${sayi}/pages/${f.name}`))
   } else if (!magazine.pdf_url && magazine.cover_image_url) {
     // Fallback to cover image if no pages found
@@ -145,10 +145,10 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
 
   // Structured data for SEO (JSON-LD)
   // Requirements: 9.5
-  const coverImageUrl = magazine.cover_image_url 
+  const coverImageUrl = magazine.cover_image_url
     ? storageService.getPublicUrl(magazine.cover_image_url)
     : null
-  
+
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'PublicationIssue',
@@ -167,39 +167,50 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
   }
 
   return (
-    <main className="w-full min-h-screen bg-[#f9f9f9]">
+    <main className="immersive-reader-container">
       {/* JSON-LD Structured Data for SEO */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
-      <div className="responsive-container py-8 sm:py-12 lg:py-16">
-        {/* Header Section */}
-        <div className="mb-8 sm:mb-12">
-          <div className="text-center">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+
+      {/* Minimalistic Floating Header */}
+      <header className="fixed top-0 left-0 w-full z-50 p-4 sm:p-6 pointer-events-none">
+        <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
+          <div className="pointer-events-auto bg-black/40 backdrop-blur-md px-4 py-2 rounded-lg border border-white/10 shadow-2xl">
+            <h1 className="text-sm sm:text-base font-bold text-white tracking-tight">
               {magazine.title}
             </h1>
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-full border border-red-200">
-              <span className="font-medium">{sayi}. Sayı</span>
-            </div>
+          </div>
+
+          <div className="pointer-events-auto bg-red-600 px-4 py-2 rounded-lg shadow-xl border border-red-500">
+            <span className="text-xs sm:text-sm font-black text-white uppercase tracking-widest">
+              Sayı {sayi}
+            </span>
           </div>
         </div>
-        
-        {/* Magazine Viewer */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 sm:p-8">
+      </header>
+
+      {/* Reader Centerpiece - Fixed Height/Width via CSS Aspect Ratio */}
+      <div className="w-full flex-1 flex items-center justify-center p-4 sm:p-8">
+        <div className="reader-aspect-ratio-box">
           {imageUrls.length > 0 ? (
             <FlipbookViewerErrorBoundary issueNumber={sayi}>
               <FlipbookViewer imageUrls={imageUrls} magazineId={magazine.id} />
             </FlipbookViewerErrorBoundary>
           ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-900 rounded-lg">
               <div className="text-4xl mb-4">📚</div>
-              <div className="text-lg font-medium mb-2">Henüz sayfa yüklenmedi</div>
-              <div className="text-sm">Bu sayı için sayfa görselleri henüz hazırlanıyor.</div>
+              <div className="text-lg font-medium">Henüz sayfa yüklenmedi</div>
             </div>
           )}
         </div>
+      </div>
+
+      {/* Background Decorator */}
+      <div className="absolute inset-0 z-[-1] opacity-20 pointer-events-none overflow-hidden">
+        <div className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-red-600/20 blur-[120px] rounded-full"></div>
+        <div className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-blue-600/10 blur-[120px] rounded-full"></div>
       </div>
     </main>
   )
@@ -211,13 +222,13 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
  */
 export async function generateMetadata({ params }: { params: Promise<{ sayi: string }> }) {
   const { sayi: sayiStr } = await params
-  
+
   // Validate URL parameter
   const sayi = validatePageNumber(sayiStr)
   if (sayi === null) {
     return {}
   }
-  
+
   // Use cached getMagazineByIssue for improved performance (Requirements 8.1-8.5)
   // Requirements: 1.2 - Wrap database queries in try-catch
   let magazine: Awaited<ReturnType<typeof getMagazineByIssue>> | null = null
@@ -226,7 +237,7 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
   } catch (error) {
     const { logger } = await import('@/lib/services/Logger')
     const { ErrorHandler } = await import('@/lib/errors/errorHandler')
-    
+
     const appError = ErrorHandler.handleUnknownError(error)
     logger.error('Failed to fetch magazine metadata', {
       operation: 'generateMetadata',
@@ -234,7 +245,7 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
       error: appError.message,
       code: appError.code,
     })
-    
+
     // Return empty metadata on error
     return {}
   }
@@ -244,14 +255,14 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
   // Get base URL from environment or fallback to localhost
   const baseUrl = env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const canonicalUrl = `${baseUrl}/dergi/${sayi}`
-  
+
   const title = `${magazine.title} - Balkon Dergisi`
   const description = `${magazine.title} - Sezai Karakoç Anadolu Lisesi öğrenci dergisi ${sayi}. sayısı`
 
   // Generate full storage URL for cover image
   const supabase = createPublicClient()
   const storageService = new SupabaseStorageService(supabase)
-  const coverImageUrl = magazine.cover_image_url 
+  const coverImageUrl = magazine.cover_image_url
     ? storageService.getPublicUrl(magazine.cover_image_url)
     : null
 

@@ -80,12 +80,14 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
 }
 
 @layer utilities {
+
   /* Screen reader only utility - hides content visually but keeps it accessible */
   .sr-only {
     position: absolute;
@@ -98,39 +100,39 @@
     white-space: nowrap;
     border-width: 0;
   }
-  
+
   .hero-scale {
     @apply lg:scale-105 xl:scale-105;
   }
-  
+
   @media (max-width: 1023px) {
     .hero-scale {
       transform: none;
     }
   }
-  
+
   /* Enhanced responsive utilities */
   .responsive-container {
     @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
-  
+
   .responsive-grid {
     @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-5;
   }
-  
+
   .responsive-text {
     @apply text-sm sm:text-base md:text-lg lg:text-xl;
   }
-  
+
   .responsive-heading {
     @apply text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl;
   }
-  
+
   /* Magazine Grid Enhancements */
   .magazine-grid-glow {
     position: relative;
   }
-  
+
   .magazine-grid-glow::before {
     content: '';
     position: absolute;
@@ -145,38 +147,42 @@
     filter: blur(8px);
     transition: opacity 0.3s ease;
   }
-  
+
   .magazine-grid-glow:hover::before {
     opacity: 0.7;
   }
-  
+
   /* Artistic animations */
   .animate-float {
     animation: float 6s ease-in-out infinite;
   }
-  
+
   @keyframes float {
-    0%, 100% {
+
+    0%,
+    100% {
       transform: translateY(0px);
     }
+
     50% {
       transform: translateY(-10px);
     }
   }
-  
+
   .animate-glow {
     animation: glow 2s ease-in-out infinite alternate;
   }
-  
+
   @keyframes glow {
     from {
       box-shadow: 0 0 5px #ef4444, 0 0 10px #ef4444, 0 0 15px #ef4444;
     }
+
     to {
       box-shadow: 0 0 10px #ef4444, 0 0 20px #ef4444, 0 0 30px #ef4444;
     }
   }
-  
+
   /* Line clamp utility */
   .line-clamp-2 {
     display: -webkit-box;
@@ -184,31 +190,31 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  
+
   /* Custom scrollbar styling */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-track {
     background: #f1f1f1;
     border-radius: 3px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
     background: #ef4444;
     border-radius: 3px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: #dc2626;
   }
-  
+
   /* Balkon themed decorations */
   .balkon-decoration {
     position: relative;
   }
-  
+
   .balkon-decoration::before {
     content: '✱';
     position: absolute;
@@ -218,7 +224,7 @@
     font-size: 16px;
     animation: spin 4s linear infinite;
   }
-  
+
   .balkon-decoration::after {
     content: '❋';
     position: absolute;
@@ -228,20 +234,65 @@
     font-size: 14px;
     animation: pulse 2s ease-in-out infinite;
   }
-  
+
   /* Enhanced hover effects */
   .magazine-card {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  
+
   .magazine-card:hover {
     transform: translateY(-8px) scale(1.02);
   }
-  
+
   /* Artistic borders */
   .artistic-border {
     border-image: linear-gradient(45deg, #ef4444, #3b82f6, #eab308) 1;
     border-width: 2px;
     border-style: solid;
+  }
+
+  /* Immersive Reader Utilities */
+  .reader-lock-scroll {
+    overflow: hidden !important;
+    height: 100vh !important;
+    position: fixed !important;
+    width: 100% !important;
+  }
+
+  .immersive-reader-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100dvh;
+    background: #0f1115;
+    /* Dark neutral background for immersion */
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .reader-aspect-ratio-box {
+    position: relative;
+    width: 100%;
+    /* Default: Single Page (Mobile/Tablet) */
+    max-width: min(90vw, calc(90dvh * (848/1200)));
+    aspect-ratio: 848 / 1200;
+    margin: auto;
+    background: #1a1d23;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Desktop: Double Page Spread */
+  @media (min-width: 1024px) {
+    .reader-aspect-ratio-box {
+      max-width: min(95vw, calc(85dvh * (1696/1200)));
+      aspect-ratio: 1696 / 1200;
+    }
   }
 }

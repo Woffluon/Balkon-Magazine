@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { ChevronLeft, ChevronRight, Lock, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
-import { useResponsiveDimensions } from '@/hooks/useResponsiveDimensions'
 import { logger } from '@/lib/services/Logger'
 // import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { APP_CONFIG } from '@/lib/config/app-config'
@@ -52,7 +51,6 @@ function validateImageUrls(urls: unknown): string[] {
 
 export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'default-mag' }: FlipbookViewerProps) {
   const pages = useMemo(() => validateImageUrls(imageUrls), [imageUrls])
-  const containerRef = useRef<HTMLDivElement>(null)
   const bookRef = useRef<PageFlipHandle | null>(null)
   const [currentPage, setCurrentPage] = useState(0)
   const [preloadedPages, setPreloadedPages] = useState<Set<number>>(new Set())
@@ -62,15 +60,26 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
   // -- Reader State --
   const [isLocked, setIsLocked] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(1)
+  const [isMobile, setIsMobile] = useState(false)
 
   // -- Analytics --
   useMagazineAnalytics(magazineId)
 
-  // Use custom hook for responsive dimensions
-  const dimensions = useResponsiveDimensions(containerRef, {
-    w: APP_CONFIG.magazine.aspectRatio.width,
-    h: APP_CONFIG.magazine.aspectRatio.height
-  })
+  // Responsive spread detection & Scroll lock
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024)
+    }
+
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    document.body.classList.add('reader-lock-scroll')
+
+    return () => {
+      window.removeEventListener('resize', checkMobile)
+      document.body.classList.remove('reader-lock-scroll')
+    }
+  }, [])
 
   // Image preload
   useEffect(() => {
@@ -127,7 +136,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
   useEffect(() => {
     const handleKeyboardNavigation = (keyboardEvent: KeyboardEvent) => {
       if (!bookRef.current) return
-      if (isLocked) return // Disable keyboard nav if locked
+      if (isLocked) return
 
       try {
         if (keyboardEvent.key === 'ArrowRight') {
@@ -146,63 +155,22 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
   // -- Zoom Control --
   const zoomRef = useRef<{ zoomIn: () => void; zoomOut: () => void; reset: () => void }>(null)
 
-  if (!pages.length) return <div>No Pages</div>
+  if (!pages.length) return <div className="text-white">Geçerli sayfa bulunamadı.</div>
 
   const handleZoomIn = () => zoomRef.current?.zoomIn()
   const handleZoomOut = () => zoomRef.current?.zoomOut()
 
   return (
     <div
-      className="relative w-full flex flex-col items-center"
+      className="w-full h-full flex flex-col items-center justify-center relative select-none touch-none"
       role="region"
       aria-label="Dergi görüntüleyici"
     >
       {/* Live region */}
       <div role="status" aria-live="polite" className="sr-only">{pageAnnouncement}</div>
 
-      {/* Toolbar */}
-      <div className="w-full max-w-4xl flex items-center justify-between mb-4 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-neutral-200 z-30">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-neutral-600">
-            {currentPage + 1} / {pages.length}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsLocked(!isLocked)}
-            className={`p-2 rounded-md transition-colors ${isLocked ? 'bg-amber-100 text-amber-700' : 'hover:bg-neutral-100 text-neutral-600'}`}
-            title={isLocked ? "Sayfa Kilidini Aç" : "Sayfayı Kilitle"}
-          >
-            {isLocked ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
-          </button>
-          <div className="h-4 w-px bg-neutral-200 mx-1" />
-          <button
-            onClick={handleZoomOut}
-            className="p-2 rounded-md hover:bg-neutral-100 text-neutral-600 disabled:opacity-50"
-            title="Küçült"
-          >
-            <ZoomOut className="w-5 h-5" />
-          </button>
-          <span className="text-sm font-medium w-12 text-center text-neutral-700">
-            {Math.round(zoomLevel * 100)}%
-          </span>
-          <button
-            onClick={handleZoomIn}
-            className="p-2 rounded-md hover:bg-neutral-100 text-neutral-600 disabled:opacity-50"
-            title="Büyüt"
-          >
-            <ZoomIn className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Main Viewer Area */}
-      <div
-        ref={containerRef}
-        className="relative w-full overflow-hidden bg-neutral-50 rounded-xl shadow-inner border border-neutral-100"
-        style={{ height: dimensions.containerHeight }}
-      >
+      {/* Main Viewer Area - CSS Driven Stability */}
+      <div className="w-full h-full overflow-hidden relative group">
         <ZoomContainer
           ref={zoomRef}
           minScale={1}
@@ -212,72 +180,124 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
         >
           <SafeFlipBook
             ref={bookRef}
-            width={dimensions.w}
-            height={dimensions.h}
+            width={848}
+            height={1200}
+            size="stretch"
+            minWidth={300}
+            maxWidth={2500}
+            minHeight={400}
+            maxHeight={3000}
             showCover
-            size="fixed"
-            maxShadowOpacity={0}
-            drawShadow={false}
-            usePortrait
-            // Strict gesture interaction rules:
-            // - Disable internal scroll triggers if locked (parent handles move)
-            // - Disable internal scroll triggers if zoomed (parent handles pan)
+            maxShadowOpacity={0.5}
+            drawShadow
+            usePortrait={isMobile}
+            startPage={0}
+            flippingTime={1000}
+            useMouseEvents={!isLocked && zoomLevel === 1}
+            swipeDistance={30}
+            showPageCorners={false}
+            disableFlipByClick={isLocked || zoomLevel > 1}
             mobileScrollSupport={!isLocked && zoomLevel === 1}
             onFlip={onFlip}
-          // When locked, we try to restrict events via parent, but passing props helps if supported
+            className="mx-auto"
+            style={{ margin: '0 auto' }}
           >
             {pages.map((url, index) => {
-              // Preload logic can stay simplified here for brevity
               const { pagesAhead } = APP_CONFIG.magazine.preload
               const shouldLoad = Math.abs(index - currentPage) <= pagesAhead + 1 || preloadedPages.has(index)
 
               return (
-                <div key={index} className="page overflow-hidden" style={{ width: dimensions.w, height: dimensions.h }}>
+                <div key={index} className="page relative bg-neutral-800 shadow-2xl overflow-hidden">
                   {shouldLoad ? (
                     <Image
                       src={url}
-                      alt={`Page ${index + 1}`}
+                      alt={`Sayfa ${index + 1}`}
                       fill
                       priority={Math.abs(index - currentPage) <= 1}
-                      style={{ objectFit: 'contain' }}
+                      style={{ objectFit: 'fill' }} /* Changed to fill to ensure edge-to-edge spread */
+                      sizes="(max-height: 100vh) 80vh, 100vw"
+                      loading={Math.abs(index - currentPage) <= 1 ? "eager" : "lazy"}
                       onError={() => setFailedPages(prev => new Set([...prev, index]))}
                     />
-                  ) : <div className="w-full h-full bg-neutral-100" />}
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+                      <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    </div>
+                  )}
+                  {/* Subtle spine line for double spread realism */}
+                  {!isMobile && index % 2 !== 0 && (
+                    <div className="absolute top-0 right-0 w-px h-full bg-black/10 z-10" />
+                  )}
                 </div>
               )
             })}
           </SafeFlipBook>
         </ZoomContainer>
 
-        {/* Navigation Arrows (Outside Zoom Container to stay fixed in view) */}
-        {!isLocked && (
+        {/* Navigation Overlays (Desktop Only) */}
+        {!isLocked && zoomLevel === 1 && (
           <>
             <button
               type="button"
               onClick={() => bookRef.current?.pageFlip().flipPrev()}
-              className="absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-md transition-all active:scale-95 disabled:opacity-0"
+              className="absolute left-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 disabled:hidden"
               disabled={currentPage === 0}
             >
-              <ChevronLeft className="w-6 h-6" />
+              <ChevronLeft className="w-8 h-8" />
             </button>
             <button
               type="button"
               onClick={() => bookRef.current?.pageFlip().flipNext()}
-              className="absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-md transition-all active:scale-95 disabled:opacity-0"
+              className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 disabled:hidden"
               disabled={currentPage === pages.length - 1}
             >
-              <ChevronRight className="w-6 h-6" />
+              <ChevronRight className="w-8 h-8" />
             </button>
           </>
         )}
       </div>
 
-      {/* Mobile Tap Zones Disclaimer */}
-      <p className="mt-4 text-xs text-neutral-400">
-        {isLocked
-          ? 'Sayfa kilitli. Sürükleyerek taşıyabilirsiniz.'
-          : 'Büyütmek için tekerleği kullanın veya parmaklarınızla sıkıştırın.'}
-      </p>
+      {/* Immersive Toolbar (Fixed at Bottom) */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl transition-all hover:bg-black/80">
+        <div className="flex items-center gap-3 text-white/90 font-bold text-sm">
+          <span>{currentPage + 1}</span>
+          <span className="opacity-40 whitespace-nowrap">/ {pages.length}</span>
+        </div>
+
+        <div className="h-6 w-px bg-white/10" />
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleZoomOut}
+            className="p-2 rounded-full hover:bg-white/10 text-white/80 transition-colors disabled:opacity-20"
+            disabled={zoomLevel <= 1}
+            title="Küçült"
+          >
+            <ZoomOut className="w-5 h-5" />
+          </button>
+          <span className="text-xs font-black text-white w-10 text-center tracking-tighter">
+            {Math.round(zoomLevel * 100)}%
+          </span>
+          <button
+            onClick={handleZoomIn}
+            className="p-2 rounded-full hover:bg-white/10 text-white/80 transition-colors disabled:opacity-20"
+            disabled={zoomLevel >= 4}
+            title="Büyüt"
+          >
+            <ZoomIn className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="h-6 w-px bg-white/10" />
+
+        <button
+          onClick={() => setIsLocked(!isLocked)}
+          className={`p-2 rounded-full transition-all ${isLocked ? 'bg-red-600 text-white shadow-lg shadow-red-600/40' : 'hover:bg-white/10 text-white/80'}`}
+          title={isLocked ? "Kilidi Aç" : "Kilitle"}
+        >
+          {isLocked ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+        </button>
+      </div>
     </div>
   )
 })
