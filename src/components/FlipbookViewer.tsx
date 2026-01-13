@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import { ChevronLeft, ChevronRight, Lock, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Lock, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { logger } from '@/lib/services/Logger'
 // import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { APP_CONFIG } from '@/lib/config/app-config'
@@ -61,6 +61,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
   const [isLocked, setIsLocked] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(1)
   const [isMobile, setIsMobile] = useState(false)
+  const [isToolbarOpen, setIsToolbarOpen] = useState(true)
 
   // -- Analytics --
   useMagazineAnalytics(magazineId)
@@ -240,7 +241,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             <button
               type="button"
               onClick={() => bookRef.current?.pageFlip().flipPrev()}
-              className="absolute left-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 disabled:hidden"
+              className="absolute left-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-100 disabled:hidden"
               disabled={currentPage === 0}
             >
               <ChevronLeft className="w-8 h-8" />
@@ -248,7 +249,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             <button
               type="button"
               onClick={() => bookRef.current?.pageFlip().flipNext()}
-              className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 disabled:hidden"
+              className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-100 disabled:hidden"
               disabled={currentPage === pages.length - 1}
             >
               <ChevronRight className="w-8 h-8" />
@@ -258,45 +259,65 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
       </div>
 
       {/* Immersive Toolbar (Fixed at Bottom) */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl transition-all hover:bg-black/80">
-        <div className="flex items-center gap-3 text-white/90 font-bold text-sm">
-          <span>{currentPage + 1}</span>
-          <span className="opacity-40 whitespace-nowrap">/ {pages.length}</span>
-        </div>
-
-        <div className="h-6 w-px bg-white/10" />
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleZoomOut}
-            className="p-2 rounded-full hover:bg-white/10 text-white/80 transition-colors disabled:opacity-20"
-            disabled={zoomLevel <= 1}
-            title="Küçült"
-          >
-            <ZoomOut className="w-5 h-5" />
-          </button>
-          <span className="text-xs font-black text-white w-10 text-center tracking-tighter">
-            {Math.round(zoomLevel * 100)}%
-          </span>
-          <button
-            onClick={handleZoomIn}
-            className="p-2 rounded-full hover:bg-white/10 text-white/80 transition-colors disabled:opacity-20"
-            disabled={zoomLevel >= 4}
-            title="Büyüt"
-          >
-            <ZoomIn className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="h-6 w-px bg-white/10" />
-
-        <button
-          onClick={() => setIsLocked(!isLocked)}
-          className={`p-2 rounded-full transition-all ${isLocked ? 'bg-red-600 text-white shadow-lg shadow-red-600/40' : 'hover:bg-white/10 text-white/80'}`}
-          title={isLocked ? "Kilidi Aç" : "Kilitle"}
+      <div
+        className={`fixed bottom-6 z-50 px-4 w-full flex ${isToolbarOpen ? 'left-1/2 -translate-x-1/2 justify-center' : 'right-0 justify-end'}`}
+      >
+        <div
+          className={`flex items-center gap-2 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl transition-all hover:bg-black/80 ${isToolbarOpen ? 'px-6 py-3' : 'px-4 py-3'}`}
         >
-          {isLocked ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
-        </button>
+          <button
+            type="button"
+            onClick={() => setIsToolbarOpen(v => !v)}
+            className="p-2 rounded-full hover:bg-white/10 text-white/80 transition-colors"
+            title={isToolbarOpen ? 'Paneli gizle' : 'Paneli göster'}
+            aria-expanded={isToolbarOpen}
+          >
+            {isToolbarOpen ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+          </button>
+
+          <div className={`flex items-center gap-2 text-white/90 font-bold text-sm ${isToolbarOpen ? '' : 'hidden'}`}>
+            <span>{currentPage + 1}</span>
+            <span className="opacity-40 whitespace-nowrap">/ {pages.length}</span>
+          </div>
+
+          <div className={`h-6 w-px bg-white/10 ${isToolbarOpen ? '' : 'hidden'}`} />
+
+          <span className={`text-xs font-black text-white/80 tracking-tight ${isToolbarOpen ? 'hidden' : ''}`}>
+            Kontroller
+          </span>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleZoomOut}
+              className={`p-2 rounded-full hover:bg-white/10 text-white/80 transition-colors disabled:opacity-20 ${isToolbarOpen ? '' : 'hidden'}`}
+              disabled={zoomLevel <= 1}
+              title="Küçült"
+            >
+              <ZoomOut className="w-5 h-5" />
+            </button>
+            <span className="text-xs font-black text-white w-10 text-center tracking-tighter">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              onClick={handleZoomIn}
+              className={`p-2 rounded-full hover:bg-white/10 text-white/80 transition-colors disabled:opacity-20 ${isToolbarOpen ? '' : 'hidden'}`}
+              disabled={zoomLevel >= 4}
+              title="Büyüt"
+            >
+              <ZoomIn className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className={`h-6 w-px bg-white/10 ${isToolbarOpen ? '' : 'hidden'}`} />
+
+          <button
+            onClick={() => setIsLocked(!isLocked)}
+            className={`p-2 rounded-full transition-all ${isLocked ? 'bg-red-600 text-white shadow-lg shadow-red-600/40' : 'hover:bg-white/10 text-white/80'} ${isToolbarOpen ? '' : 'hidden'}`}
+            title={isLocked ? "Kilidi Aç" : "Kilitle"}
+          >
+            {isLocked ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
     </div>
   )
