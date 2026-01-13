@@ -1,21 +1,5 @@
 import { z } from 'zod'
 
-/**
- * Error response Zod schemas for type-safe error handling
- * 
- * Requirements 8.4:
- * - Create Zod schemas for error responses
- * - Validate error responses in API calls
- * - Ensure type safety for error handling
- * 
- * These schemas validate the structure of error responses returned from server actions
- * and API calls, ensuring type safety throughout the error handling flow.
- */
-
-/**
- * Base error object schema
- * Contains the core error information returned in error responses
- */
 export const ErrorObjectSchema = z.object({
   code: z.string().min(1, 'Error code is required'),
   message: z.string().min(1, 'Error message is required'),
