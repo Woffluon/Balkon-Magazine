@@ -3,8 +3,12 @@ import { env } from "./src/lib/env";
 
 const nextConfig: NextConfig = {
   images: {
-    unoptimized: true,
-    domains: ['eeiauxebadeoifomrxeu.supabase.co'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
+      },
+    ],
     formats: ['image/webp', 'image/avif'],
   },
   outputFileTracingRoot: process.cwd(),

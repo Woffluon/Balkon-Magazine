@@ -1,21 +1,6 @@
 import * as Sentry from '@sentry/nextjs'
 import { env } from './src/lib/env'
 
-/**
- * Sentry Edge Configuration
- * 
- * Configures Sentry for edge runtime error tracking with:
- * - Environment-specific settings
- * - PII scrubbing before transmission
- * - Error sampling rates
- * - User context tracking
- * 
- * Requirements: 3.3, 7.1, 7.2, 7.6
- */
-
-/**
- * Scrub PII from any object recursively
- */
 function scrubPII(obj: Record<string, unknown>): Record<string, unknown> {
   const piiFields = [
     'password',

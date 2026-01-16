@@ -15,6 +15,15 @@ const FlipbookViewer = dynamic(() => import('@/components/FlipbookViewer'), {
   loading: () => <FlipbookViewerSkeleton />,
 })
 
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+
 export const revalidate = 3600 // Revalidate every hour (ISR)
 
 /**
@@ -166,6 +175,25 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
     }
   }
 
+  const breadcrumbData = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Anasayfa",
+        "item": env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": `Sayı ${sayi}`,
+        "item": `${env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/dergi/${sayi}`
+      }
+    ]
+  }
+
   return (
     <main className="immersive-reader-container">
       {/* JSON-LD Structured Data for SEO */}
@@ -173,14 +201,30 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbData) }}
+      />
 
       {/* Minimalistic Floating Header */}
       <header className="fixed top-0 left-0 w-full z-50 p-4 sm:p-6 pointer-events-none">
         <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
           <div className="pointer-events-auto bg-black/40 backdrop-blur-md px-4 py-2 rounded-lg border border-white/10 shadow-2xl">
-            <h1 className="text-sm sm:text-base font-bold text-white tracking-tight">
-              {magazine.title}
-            </h1>
+            <Breadcrumb>
+              <BreadcrumbList className="text-white sm:text-base text-sm font-medium">
+                <BreadcrumbItem>
+                  <BreadcrumbLink href="/" className="text-white/70 hover:text-white transition-colors">
+                    Anasayfa
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="text-white/50" />
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="text-white font-bold tracking-tight">
+                    {magazine.title}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
           </div>
 
           <div className="pointer-events-auto bg-red-600 px-4 py-2 rounded-lg shadow-xl border border-red-500">

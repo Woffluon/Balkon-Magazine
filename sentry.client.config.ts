@@ -1,23 +1,6 @@
 import * as Sentry from '@sentry/nextjs'
 import { env } from './src/lib/env'
 
-/**
- * Sentry Client Configuration
- * 
- * Configures Sentry for client-side error tracking with:
- * - Environment-specific settings
- * - PII scrubbing before transmission
- * - Error sampling rates
- * - Performance monitoring
- * - User context tracking
- * - Session replay
- * 
- * Requirements: 3.3, 7.1, 7.2, 7.6
- */
-
-/**
- * Scrub PII from any object recursively
- */
 function scrubPII(obj: Record<string, unknown>): Record<string, unknown> {
   const piiFields = [
     'password',
