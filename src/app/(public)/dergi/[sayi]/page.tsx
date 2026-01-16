@@ -183,13 +183,13 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
         "@type": "ListItem",
         "position": 1,
         "name": "Anasayfa",
-        "item": env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+        "item": env.NEXT_PUBLIC_SITE_URL || 'https://balkondergi.com'
       },
       {
         "@type": "ListItem",
         "position": 2,
         "name": `Sayı ${sayi}`,
-        "item": `${env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/dergi/${sayi}`
+        "item": `${env.NEXT_PUBLIC_SITE_URL || 'https://balkondergi.com'}/dergi/${sayi}`
       }
     ]
   }
@@ -297,7 +297,7 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
   if (!magazine) return {}
 
   // Get base URL from environment or fallback to localhost
-  const baseUrl = env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const baseUrl = env.NEXT_PUBLIC_SITE_URL || 'https://balkondergi.com'
   const canonicalUrl = `${baseUrl}/dergi/${sayi}`
 
   const title = `${magazine.title} - Balkon Dergisi`

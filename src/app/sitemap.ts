@@ -4,8 +4,8 @@ import { MetadataRoute } from 'next'
 import { logger } from '@/lib/services/Logger'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-  
+  const baseUrl = env.NEXT_PUBLIC_SITE_URL || 'https://balkondergi.com'
+
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
@@ -14,10 +14,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1.0,
     },
   ]
-  
+
   try {
     const result = await getPublishedMagazines()
-    
+
     // Check if result is successful
     if (!result.success) {
       logger.error('Failed to fetch magazines for sitemap', {
@@ -26,14 +26,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       })
       return staticRoutes
     }
-    
+
     const magazineRoutes: MetadataRoute.Sitemap = result.data.map((magazine) => ({
       url: `${baseUrl}/dergi/${magazine.issue_number}`,
       lastModified: new Date(magazine.updated_at || magazine.created_at || new Date()),
       changeFrequency: 'monthly' as const,
       priority: 0.8,
     }))
-    
+
     return [...staticRoutes, ...magazineRoutes]
   } catch (error) {
     // If database is unavailable during build, return static routes only

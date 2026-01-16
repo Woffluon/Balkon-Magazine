@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  metadataBase: new URL(env.NEXT_PUBLIC_SITE_URL || 'https://balkondergi.com'),
   title: {
     default: 'Balkon Dergisi - Sezai Karakoç Anadolu Lisesi Öğrenci Dergisi',
     template: '%s | Balkon Dergisi',
@@ -131,7 +131,7 @@ function getSafeUrl(): string {
 
   // If NEXT_PUBLIC_SITE_URL is not set or invalid, use localhost
   if (!siteUrl) {
-    return 'http://localhost:3000';
+    return 'https://balkondergi.com';
   }
 
   // Additional validation: ensure it's a valid URL
@@ -139,7 +139,7 @@ function getSafeUrl(): string {
     new URL(siteUrl);
     return siteUrl;
   } catch {
-    return 'http://localhost:3000';
+    return 'https://balkondergi.com';
   }
 }
 
