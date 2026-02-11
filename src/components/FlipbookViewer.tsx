@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
+// import Image from 'next/image'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Lock, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { logger } from '@/lib/services/Logger'
 // import { ErrorHandler } from '@/lib/errors/errorHandler'
@@ -210,13 +210,10 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
               return (
                 <div key={index} className="page relative bg-neutral-800 shadow-2xl overflow-hidden">
                   {shouldLoad ? (
-                    <Image
+                    <img
                       src={url}
                       alt={`Sayfa ${index + 1}`}
-                      fill
-                      priority={Math.abs(index - currentPage) <= 1}
-                      style={{ objectFit: 'fill' }} /* Changed to fill to ensure edge-to-edge spread */
-                      sizes="(max-height: 100vh) 80vh, 100vw"
+                      className="absolute inset-0 w-full h-full object-fill" /* Replicating fill + objectFit: 'fill' */
                       loading={Math.abs(index - currentPage) <= 1 ? "eager" : "lazy"}
                       onError={() => setFailedPages(prev => new Set([...prev, index]))}
                     />

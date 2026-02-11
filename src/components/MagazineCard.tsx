@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import Image from 'next/image'
+// import Image from 'next/image'
 import React from 'react'
 import type { Magazine } from '@/types/magazine'
 import { getMagazineCoverUrl } from '@/lib/utils/storage'
@@ -127,17 +127,13 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine, isLates
         <div className="relative w-full h-full overflow-hidden rounded-xl">
           {coverUrl ? (
             <>
-              <Image
+              <img
                 src={coverUrl}
                 alt={`${validatedMagazine.title} kapak görseli - Sayı ${validatedMagazine.issue_number}`}
-                fill
-                className="object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
+                className="absolute inset-0 w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
                 style={{ willChange: 'transform' }}
-                sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
-                placeholder="blur"
-                blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YzZjRmNiIvPjwvc3ZnPg=="
                 loading="lazy"
-                onError={(imageError) => {
+                onError={(e) => {
                   // Handle image load error with proper logging (Requirement 4.1)
                   logger.warn('Magazine cover image failed to load', {
                     component: 'MagazineCard',
@@ -145,7 +141,7 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine, isLates
                     magazineId: validatedMagazine.id,
                     issueNumber: validatedMagazine.issue_number,
                     coverUrl,
-                    error: imageError instanceof Event ? 'Image load error' : String(imageError)
+                    error: 'Image load error'
                   })
                 }}
               />
