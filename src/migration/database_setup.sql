@@ -176,6 +176,97 @@ CREATE POLICY "Admin can manage all magazine pages"
     )
   );
 
+-- ============================================================================
+-- 7. MAGAZINE VIEWS TABLE - İstatistik ve Okunma Takibi
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.magazine_views (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    magazine_id UUID NOT NULL REFERENCES public.magazines(id) ON DELETE CASCADE,
+    viewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    session_id UUID,
+    viewer_ip TEXT, 
+    user_agent TEXT
+);
+
+-- İndeksler
+CREATE INDEX IF NOT EXISTS idx_magazine_views_magazine_id ON public.magazine_views(magazine_id);
+CREATE INDEX IF NOT EXISTS idx_magazine_views_viewed_at ON public.magazine_views(viewed_at);
+CREATE INDEX IF NOT EXISTS idx_magazine_views_session_id ON public.magazine_views(session_id);
+CREATE INDEX IF NOT EXISTS idx_magazine_views_composite ON public.magazine_views(magazine_id, viewed_at);
+
+-- RLS'yi etkinleştir
+ALTER TABLE public.magazine_views ENABLE ROW LEVEL SECURITY;
+
+-- Mevcut policy'leri kaldır (çakışmayı önlemek için)
+DROP POLICY IF EXISTS "Anyone can insert a view" ON public.magazine_views;
+DROP POLICY IF EXISTS "Admins can view all records" ON public.magazine_views;
+
+-- Anonim ve normal kullanıcılar görüntülenme ekleyebilir
+CREATE POLICY "Anyone can insert a view"
+  ON public.magazine_views
+  FOR INSERT
+  TO public, anon
+  WITH CHECK (true);
+
+-- Sadece adminler görüntülenme kayıtlarını okuyabilir
+CREATE POLICY "Admins can view all records"
+  ON public.magazine_views
+  FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_profiles
+      WHERE user_profiles.user_id = auth.uid()
+        AND user_profiles.role = 'admin'
+    )
+  );
+
+-- ============================================================================
+-- 8. RPC FUNCTIONS
+-- ============================================================================
+
+-- Görüntülenme tetikleyici RPC fonksiyonu
+CREATE OR REPLACE FUNCTION public.increment_magazine_view(
+    p_magazine_id UUID,
+    p_session_id UUID DEFAULT NULL,
+    p_viewer_ip TEXT DEFAULT NULL,
+    p_user_agent TEXT DEFAULT NULL
+) 
+RETURNS VOID 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    -- Sıkı Kontrol: Eğer session_id sağlandıysa, son 24 saat içindeki izlenmeleri kontrol et
+    IF p_session_id IS NOT NULL THEN
+        IF EXISTS (
+            SELECT 1 FROM public.magazine_views
+            WHERE magazine_id = p_magazine_id 
+              AND session_id = p_session_id 
+              AND viewed_at > (NOW() - INTERVAL '24 hours')
+        ) THEN
+            -- Son 24 saat içinde bu session ile zaten okunmuş, kaydetme
+            RETURN;
+        END IF;
+    -- Yedek Kontrol: Eğer session_id yoksa ama IP varsa (Cookie'yi engelleyenler için)
+    ELSIF p_viewer_ip IS NOT NULL THEN
+        IF EXISTS (
+            SELECT 1 FROM public.magazine_views
+            WHERE magazine_id = p_magazine_id 
+              AND viewer_ip = p_viewer_ip 
+              AND viewed_at > (NOW() - INTERVAL '1 hour') -- IP için daha kısa süre (ortak ağlar/okul interneti sebebiyle)
+        ) THEN
+            -- Son 1 saat içinde bu IP ile zaten okunmuş, kaydetme
+            RETURN;
+        END IF;
+    END IF;
+
+    -- Yeni görüntülenmeyi kaydet
+    INSERT INTO public.magazine_views (magazine_id, session_id, viewer_ip, user_agent)
+    VALUES (p_magazine_id, p_session_id, p_viewer_ip, p_user_agent);
+END;
+$$;
 
 
 -- ============================================================================
@@ -250,11 +341,13 @@ DO $$
 DECLARE
   magazine_count INTEGER;
   profile_count INTEGER;
+  views_count INTEGER;
   bucket_exists BOOLEAN;
 BEGIN
   -- Tablo sayılarını kontrol et
   SELECT COUNT(*) INTO magazine_count FROM public.magazines;
   SELECT COUNT(*) INTO profile_count FROM public.user_profiles;
+  SELECT COUNT(*) INTO views_count FROM public.magazine_views;
   
   -- Bucket varlığını kontrol et
   SELECT EXISTS(SELECT 1 FROM storage.buckets WHERE id = 'magazines') INTO bucket_exists;
@@ -262,6 +355,7 @@ BEGIN
   RAISE NOTICE '=== KURULUM TAMAMLANDI ===';
   RAISE NOTICE 'Magazines tablosu: % kayıt', magazine_count;
   RAISE NOTICE 'User profiles tablosu: % kayıt', profile_count;
+  RAISE NOTICE 'Magazine views tablosu: % kayıt', views_count;
   RAISE NOTICE 'Storage bucket: %', CASE WHEN bucket_exists THEN 'Oluşturuldu' ELSE 'HATA!' END;
   RAISE NOTICE 'Version sütunu ve indeksler eklendi';
   RAISE NOTICE 'RLS policy''leri yapılandırıldı';

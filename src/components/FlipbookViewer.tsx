@@ -78,6 +78,23 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     }
   }, [])
 
+  // Analytics View Tracking
+  useEffect(() => {
+    // Only track if we have a valid magazineId that isn't the default one
+    if (magazineId && magazineId !== 'default-mag') {
+      // Import dynamically to keep client bundle small initially
+      import('@/app/actions/analytics-actions').then(({ trackMagazineView }) => {
+        trackMagazineView(magazineId).catch((err) => {
+          logger.warn('Failed to track magazine view in Flipbook', {
+            component: 'FlipbookViewer',
+            magazineId,
+            error: err
+          })
+        })
+      })
+    }
+  }, [magazineId])
+
   // Image preload
   useEffect(() => {
     const abortController = new AbortController()
