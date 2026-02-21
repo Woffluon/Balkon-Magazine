@@ -14,7 +14,6 @@ import {
 import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 import type { PageFlipHandle, FlipEvent } from 'react-pageflip'
 import { ZoomContainer } from '@/components/reader/ZoomContainer'
-import { useMagazineAnalytics } from '@/hooks/useMagazineAnalytics'
 
 const SafeFlipBook = dynamic(() => import('react-pageflip'), {
   ssr: false,
@@ -62,9 +61,6 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
   const [zoomLevel, setZoomLevel] = useState(1)
   const [isMobile, setIsMobile] = useState(false)
   const [isToolbarOpen, setIsToolbarOpen] = useState(true)
-
-  // -- Analytics --
-  useMagazineAnalytics(magazineId)
 
   // Responsive spread detection & Scroll lock
   useEffect(() => {
