@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
 import { useSupabaseClient } from './useSupabaseClient'
-import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
+import { StorageFactory } from '@/lib/services/storage/StorageFactory'
 import type { IStorageService } from '@/lib/services/storage/IStorageService'
 
 /**
  * Custom hook that provides a memoized storage service instance
  * 
- * Creates a SupabaseStorageService with the browser Supabase client.
+ * Creates an appropriate IStorageService implementation (Supabase or R2) based on config.
  * The service instance is memoized to prevent unnecessary recreations
  * across component re-renders.
  * 
@@ -30,6 +30,6 @@ export function useStorageService(): IStorageService {
   const supabase = useSupabaseClient()
 
   return useMemo(() => {
-    return new SupabaseStorageService(supabase)
+    return StorageFactory.getStorageService(supabase)
   }, [supabase])
 }

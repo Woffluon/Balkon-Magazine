@@ -3,7 +3,7 @@ import FlipbookViewerSkeleton from '@/components/FlipbookViewerSkeleton'
 import { FlipbookViewerErrorBoundary } from '@/components/FlipbookViewerErrorBoundary'
 import { createPublicClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
-import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
+import { StorageFactory } from '@/lib/services/storage/StorageFactory'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { getMagazineByIssue } from '@/lib/magazines'
 import { logger } from '@/lib/services/Logger'
@@ -69,7 +69,7 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
     return notFound()
   }
 
-  const storageService = new SupabaseStorageService(supabase)
+  const storageService = StorageFactory.getStorageService(supabase)
 
   // Parallelize independent queries for better performance
   // Requirements: 1.2 - Use Promise.all for independent queries
@@ -305,7 +305,7 @@ export async function generateMetadata({ params }: { params: Promise<{ sayi: str
 
   // Generate full storage URL for cover image
   const supabase = createPublicClient()
-  const storageService = new SupabaseStorageService(supabase)
+  const storageService = StorageFactory.getStorageService(supabase)
   const coverImageUrl = magazine.cover_image_url
     ? storageService.getPublicUrl(magazine.cover_image_url)
     : null

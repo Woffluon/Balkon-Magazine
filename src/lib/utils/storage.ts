@@ -6,6 +6,8 @@ import { env } from '@/lib/config/env'
  */
 
 const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL
+const STORAGE_PROVIDER = env.NEXT_PUBLIC_STORAGE_PROVIDER
+const R2_PUBLIC_URL = env.NEXT_PUBLIC_R2_PUBLIC_URL
 const STORAGE_BUCKET = 'magazines'
 
 /**
@@ -14,11 +16,19 @@ const STORAGE_BUCKET = 'magazines'
  * @returns Full public URL to the storage file
  */
 export function getStorageUrl(path: string | null | undefined): string | null {
-  if (!path || !SUPABASE_URL) return null
+  if (!path) return null
   
   // Remove leading slash if present
   const cleanPath = path.startsWith('/') ? path.slice(1) : path
+
+  if (STORAGE_PROVIDER === 'r2') {
+    if (!R2_PUBLIC_URL) return null
+    // If public URL has trailing slash, handle it to prevent double slash
+    const baseUrl = R2_PUBLIC_URL.endsWith('/') ? R2_PUBLIC_URL.slice(0, -1) : R2_PUBLIC_URL
+    return `${baseUrl}/${cleanPath}`
+  }
   
+  if (!SUPABASE_URL) return null
   return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${cleanPath}`
 }
 

@@ -16,6 +16,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { TransactionManager } from './TransactionManager'
 import { StorageService } from './storage/StorageService'
+import { StorageFactory } from './storage/StorageFactory'
 import { executeSupabaseQuery } from '@/lib/utils/supabaseClientUtils'
 import { executeAsyncOperation } from '@/lib/utils/asyncPatterns'
 import {
@@ -44,7 +45,7 @@ export class MagazineService {
     private supabase: SupabaseClient,
     storage?: StorageService
   ) {
-    this.storage = storage ?? new StorageService(supabase)
+    this.storage = storage ?? new StorageService(StorageFactory.getStorageService(supabase))
   }
 
   /**

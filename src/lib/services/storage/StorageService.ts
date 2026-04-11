@@ -12,7 +12,8 @@
  * @module StorageService
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { IStorageService } from './IStorageService'
+import { StorageFactory } from './StorageFactory'
 import { withRetry } from '@/lib/utils/retry'
 import { processBatch } from '@/lib/utils/batchProcessor'
 import { STORAGE_CONFIG } from '@/lib/constants/storage'
@@ -27,12 +28,13 @@ import { logger } from '../Logger'
  */
 export class StorageService {
   private bucketName: string
+  private storageService: IStorageService
 
   constructor(
-    private supabase: SupabaseClient,
-    bucketName?: string
+    storageService?: IStorageService
   ) {
-    this.bucketName = bucketName ?? STORAGE_CONFIG.BUCKET
+    this.bucketName = STORAGE_CONFIG.BUCKET
+    this.storageService = storageService ?? StorageFactory.getStorageService()
   }
 
   /**
@@ -65,18 +67,9 @@ export class StorageService {
       
       await withRetry(
         async () => {
-          const { error } = await this.supabase.storage
-            .from(bucket)
-            .upload(path, file, { upsert: true })
-          
-          if (error) {
-            logger.error('File upload failed', {
-              bucket,
-              path,
-              error: error.message
-            })
-            throw new Error(error.message)
-          }
+          // IStorageService automatically throws StorageError on failure
+          await this.storageService.upload(path, file, { upsert: true })
+
           
           logger.info('File uploaded successfully', {
             bucket,
@@ -135,19 +128,17 @@ export class StorageService {
           batchSize: currentBatch.length
         })
         
-        const { error } = await this.supabase.storage
-          .from(bucket)
-          .remove(currentBatch)
-        
-        if (error) {
+        try {
+          await this.storageService.delete(currentBatch)
+        } catch (error) {
           logger.error(`Batch ${batchNumber} delete failed`, {
             bucket,
             batchNumber,
             batchSize: currentBatch.length,
-            error: error.message
+            error: error instanceof Error ? error.message : String(error)
           })
           throw new Error(
-            `Batch ${batchNumber} delete failed: ${error.message}`
+            `Batch ${batchNumber} delete failed: ${error instanceof Error ? error.message : String(error)}`
           )
         }
         
@@ -172,38 +163,34 @@ export class StorageService {
     prefix: string,
     limit: number = 1000
   ): Promise<{ files: string[]; directories: string[] }> {
-    const { data, error } = await this.supabase.storage
-      .from(bucket)
-      .list(prefix, {
-        limit,
-        sortBy: { column: 'name', order: 'asc' }
-      })
-    
-    if (error) {
+    try {
+      const data = await this.storageService.list(prefix, { limit })
+      
+      const files: string[] = []
+      const directories: string[] = []
+      
+      for (const item of data ?? []) {
+        // IStorageService returning { name: '...', id: '...' | null }
+        const fullPath = prefix ? `${prefix}/${item.name}` : item.name
+        
+        if (item.id) {
+          // It's a file
+          files.push(fullPath)
+        } else {
+          // It's a directory
+          directories.push(fullPath)
+        }
+      }
+      
+      return { files, directories }
+    } catch (error) {
       logger.error('Directory listing failed', {
         bucket,
         prefix,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       })
-      throw new Error(error.message)
+      throw new Error(error instanceof Error ? error.message : String(error))
     }
-    
-    const files: string[] = []
-    const directories: string[] = []
-    
-    for (const item of data ?? []) {
-      const fullPath = prefix ? `${prefix}/${item.name}` : item.name
-      
-      if (item.id) {
-        // It's a file
-        files.push(fullPath)
-      } else {
-        // It's a directory
-        directories.push(fullPath)
-      }
-    }
-    
-    return { files, directories }
   }
 
   /**
@@ -309,39 +296,33 @@ export class StorageService {
       await processBatch(
         moves,
         async ({ from, to }) => {
-          const { error: moveErr } = await this.supabase.storage
-            .from(bucket)
-            .move(from, to)
-          
-          if (moveErr) {
+          try {
+            await this.storageService.move(from, to)
+          } catch (moveErr) {
             logger.warn('Direct move failed, using copy+delete fallback', {
               from,
               to,
-              error: moveErr.message
+              error: moveErr instanceof Error ? moveErr.message : String(moveErr)
             })
             
             // Fallback: copy + delete
-            const { error: copyErr } = await this.supabase.storage
-              .from(bucket)
-              .copy(from, to)
-            
-            if (copyErr) {
+            try {
+              await this.storageService.copy(from, to)
+            } catch (copyErr) {
               logger.error('File move failed', {
                 from,
                 to,
-                error: copyErr.message
+                error: copyErr instanceof Error ? copyErr.message : String(copyErr)
               })
-              throw new Error(`Failed to move ${from}: ${copyErr.message}`)
+              throw new Error(`Failed to move ${from}: ${copyErr instanceof Error ? copyErr.message : String(copyErr)}`)
             }
             
-            const { error: delErr } = await this.supabase.storage
-              .from(bucket)
-              .remove([from])
-            
-            if (delErr) {
+            try {
+              await this.storageService.delete([from])
+            } catch (delErr) {
               logger.warn(`Failed to delete ${from} after copy`, {
                 from,
-                error: delErr.message
+                error: delErr instanceof Error ? delErr.message : String(delErr)
               })
             }
           }

@@ -10,7 +10,7 @@ import {
   RenameMagazineSchema
 } from '@/lib/validators/formDataSchemas'
 import { MagazineService } from '@/lib/services/MagazineService'
-import { SupabaseStorageService } from '@/lib/services/storage/SupabaseStorageService'
+import { StorageFactory } from '@/lib/services/storage/StorageFactory'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { rateLimiter } from '@/lib/services/rateLimiting'
 import { verifyCSRFOrigin, requireAdmin } from '@/lib/services/authorization'
@@ -389,7 +389,7 @@ async function performLogUpload(path: string, blob: Blob, issueNumber: number) {
     component: 'AdminActions',
     operation: 'performLogUpload'
   })
-  const storageService = new SupabaseStorageService(supabase)
+  const storageService = StorageFactory.getStorageService(supabase)
   
   await storageService.upload(path, blob, {
     contentType: 'text/plain',
@@ -503,7 +503,7 @@ async function performFileUpload(path: string, fileData: ArrayBuffer, contentTyp
     component: 'AdminActions',
     operation: 'performFileUpload'
   })
-  const storageService = new SupabaseStorageService(supabase)
+  const storageService = StorageFactory.getStorageService(supabase)
   
   // Convert ArrayBuffer to Blob for upload
   const blob = new Blob([fileData], { type: contentType })

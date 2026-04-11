@@ -32,6 +32,16 @@ const nextConfig: NextConfig = {
     const supabaseUrl = new URL(env.NEXT_PUBLIC_SUPABASE_URL);
     const supabaseDomain = supabaseUrl.hostname;
 
+    // Extract R2 domain if configured
+    let r2Domain = '';
+    if (env.NEXT_PUBLIC_R2_PUBLIC_URL) {
+      try {
+        r2Domain = new URL(env.NEXT_PUBLIC_R2_PUBLIC_URL).hostname;
+      } catch (e) {
+        // Ignore invalid URL
+      }
+    }
+
     // Content Security Policy
     const cspHeader = [
       "default-src 'self'",
@@ -39,7 +49,7 @@ const nextConfig: NextConfig = {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https://fonts.gstatic.com",
-      `connect-src 'self' https://${supabaseDomain} https://*.supabase.co`,
+      `connect-src 'self' https://${supabaseDomain} https://*.supabase.co${r2Domain ? ` https://${r2Domain}` : ''}`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

@@ -20,6 +20,18 @@ const envSchema = z.object({
     .string()
     .min(1, 'NEXT_PUBLIC_SUPABASE_ANON_KEY cannot be empty'),
   
+  // Storage Provider configuration
+  NEXT_PUBLIC_STORAGE_PROVIDER: z
+    .enum(['supabase', 'r2'])
+    .default('supabase'),
+  
+  // Cloudflare R2 configuration
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+  NEXT_PUBLIC_R2_PUBLIC_URL: z.string().optional(),
+  
   // Node environment (required)
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
@@ -58,6 +70,12 @@ function validateEnv(): Env {
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
     NEXT_PUBLIC_GOOGLE_VERIFICATION: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION,
     NEXT_PUBLIC_PDFJS_WORKER_URL: process.env.NEXT_PUBLIC_PDFJS_WORKER_URL,
+    NEXT_PUBLIC_STORAGE_PROVIDER: process.env.NEXT_PUBLIC_STORAGE_PROVIDER,
+    R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+    R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+    R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
+    NEXT_PUBLIC_R2_PUBLIC_URL: process.env.NEXT_PUBLIC_R2_PUBLIC_URL,
   }
 
   const result = envSchema.safeParse(envVars)

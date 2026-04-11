@@ -56,3 +56,6 @@ errors.txt
 pdf.worker.min.mjs
 reports
 .turbo
+
+# Custom
+.agents
