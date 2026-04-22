@@ -19,6 +19,12 @@ export default async function AnalyticsPage() {
 
     const userEmail = user?.email || ''
 
+    // Fetch all magazines for the filter dropdown
+    const { data: magazines } = await supabase
+        .from('magazines')
+        .select('id, title, issue_number')
+        .order('issue_number', { ascending: false })
+
     // Fetch initial analytics data (last 30 days)
     const result = await getAnalyticsDashboardData(30)
 
@@ -60,5 +66,11 @@ export default async function AnalyticsPage() {
         )
     }
 
-    return <AnalyticsDashboardClient initialData={result.data} userEmail={userEmail} />
+    return (
+        <AnalyticsDashboardClient
+            initialData={result.data}
+            userEmail={userEmail}
+            magazines={magazines || []}
+        />
+    )
 }

@@ -81,7 +81,7 @@ export async function trackMagazineView(magazineId: string): Promise<Result<void
  * Analytics Data Types
  */
 export interface MagazineViewStats {
-    magazine_id: string
+    id: string
     title: string
     issue_number: number
     total_views: number
@@ -90,109 +90,68 @@ export interface MagazineViewStats {
 export interface DailyViewStats {
     date: string
     views: number
+    unique_views: number
+}
+
+export interface DeviceStats {
+    device: string
+    count: number
 }
 
 export interface AnalyticsDashboardData {
+    total_views: number
+    unique_visitors: number
+    daily_stats: DailyViewStats[]
+    top_magazines: MagazineViewStats[]
+    device_stats: DeviceStats[]
+    // For legacy support/compatibility if needed
     totalViewsAllTime: number
-    viewsLast30Days: number
-    topMagazines: MagazineViewStats[]
-    dailyViews: DailyViewStats[]
 }
 
 /**
  * Fetches analytics data for the admin dashboard.
- * Requires authentication.
+ * Supports filtering by days or specific date range and magazine.
  */
-export async function getAnalyticsDashboardData(days: number = 30): Promise<Result<AnalyticsDashboardData>> {
+export async function getAnalyticsDashboardData(
+    daysOrRange: number | { start: string; end: string } = 30,
+    magazineId: string | null = null
+): Promise<Result<AnalyticsDashboardData>> {
     try {
         const supabase = await getAuthenticatedClient()
 
-        // 1. Get total views for all time
-        const { count: totalViewsAllTime, error: totalErr } = await supabase
-            .from('magazine_views')
-            .select('*', { count: 'exact', head: true })
+        let startDateStr: string
+        let endDateStr: string = new Date().toISOString()
 
-        if (totalErr) throw totalErr
-
-        // 2. Get views for the specified date range (default 30 days)
-        const startDate = new Date()
-        startDate.setDate(startDate.getDate() - days)
-        const startDateStr = startDate.toISOString()
-
-        const { count: viewsGivenRange, error: rangeErr } = await supabase
-            .from('magazine_views')
-            .select('*', { count: 'exact', head: true })
-            .gte('viewed_at', startDateStr)
-
-        if (rangeErr) throw rangeErr
-
-        // 3. Get top magazines by view count
-        // Normally we'd do a GROUP BY in Supabase using an RPC or a View
-        // Since we don't have a view yet, we can fetch all relevant views and group them in memory 
-        // Optimization: If dataset grows large, this needs a DB View. For now, doing it via a simple fetch.
-        const { data: allMagazines, error: magErr } = await supabase
-            .from('magazines')
-            .select('id, title, issue_number')
-
-        if (magErr) throw magErr
-
-        const { data: recentViews, error: recentErr } = await supabase
-            .from('magazine_views')
-            .select('magazine_id, viewed_at')
-            .gte('viewed_at', startDateStr)
-
-        if (recentErr) throw recentErr
-
-        // Process top magazines
-        const magStatsMap: Record<string, MagazineViewStats> = {}
-
-        // Initialize map
-        allMagazines.forEach(mag => {
-            magStatsMap[mag.id] = {
-                magazine_id: mag.id,
-                title: mag.title,
-                issue_number: mag.issue_number,
-                total_views: 0
-            }
-        })
-
-        // Prepare Daily Views Array
-        const dailyViewsMap: Record<string, number> = {}
-        for (let i = days - 1; i >= 0; i--) {
-            const d = new Date()
-            d.setDate(d.getDate() - i)
-            const dateStr = d.toISOString().split('T')[0] // YYYY-MM-DD
-            dailyViewsMap[dateStr] = 0
+        if (typeof daysOrRange === 'number') {
+            const startDate = new Date()
+            startDate.setDate(startDate.getDate() - daysOrRange)
+            startDateStr = startDate.toISOString()
+        } else {
+            startDateStr = daysOrRange.start
+            endDateStr = daysOrRange.end
         }
 
-        // Tally up the views
-        recentViews?.forEach(view => {
-            // Tally magazine stats
-            if (magStatsMap[view.magazine_id]) {
-                magStatsMap[view.magazine_id].total_views++
-            }
-
-            // Tally daily stats
-            const viewDate = new Date(view.viewed_at).toISOString().split('T')[0]
-            if (dailyViewsMap[viewDate] !== undefined) {
-                dailyViewsMap[viewDate]++
-            }
+        // 1. Call the new advanced analytics RPC
+        const { data: analyticsData, error: rpcErr } = await supabase.rpc('get_advanced_analytics', {
+            p_start_date: startDateStr,
+            p_end_date: endDateStr,
+            p_magazine_id: magazineId
         })
 
-        const topMagazines = Object.values(magStatsMap)
-            .sort((a, b) => b.total_views - a.total_views)
-            .slice(0, 5) // Top 5
-
-        const dailyViews = Object.entries(dailyViewsMap).map(([date, views]) => ({ date, views }))
-
-        const dashboardData: AnalyticsDashboardData = {
-            totalViewsAllTime: totalViewsAllTime || 0,
-            viewsLast30Days: viewsGivenRange || 0,
-            topMagazines,
-            dailyViews
+        if (rpcErr) {
+            logger.error('Failed to call get_advanced_analytics RPC', {
+                operation: 'getAnalyticsDashboardData',
+                error: rpcErr
+            })
+            throw rpcErr
         }
 
-        return ErrorHandler.success(dashboardData)
+        const result: AnalyticsDashboardData = {
+            ...analyticsData,
+            totalViewsAllTime: analyticsData.total_views_all_time || 0
+        }
+
+        return ErrorHandler.success(result)
     } catch (error) {
         const appError = ErrorHandler.handleUnknownError(error)
         logger.error('Failed to fetch analytics data', {

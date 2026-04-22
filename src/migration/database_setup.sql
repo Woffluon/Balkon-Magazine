@@ -269,6 +269,106 @@ END;
 $$;
 
 
+-- Gelişmiş İstatistik Verilerini Getiren RPC
+CREATE OR REPLACE FUNCTION public.get_advanced_analytics(
+    p_start_date TIMESTAMPTZ,
+    p_end_date TIMESTAMPTZ,
+    p_magazine_id UUID DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_total_views BIGINT;
+    v_unique_visitors BIGINT;
+    v_daily_stats JSONB;
+    v_top_magazines JSONB;
+    v_device_stats JSONB;
+    v_total_all_time BIGINT;
+    v_result JSONB;
+BEGIN
+    -- 0. Genel Toplam (Tüm zamanlar)
+    SELECT COUNT(*) INTO v_total_all_time FROM public.magazine_views;
+
+    -- 1. Toplam İzlenme ve Tekil Ziyaretçi (Seçili aralık ve dergi için)
+    SELECT 
+        COUNT(*),
+        COUNT(DISTINCT COALESCE(session_id::text, viewer_ip))
+    INTO v_total_views, v_unique_visitors
+    FROM public.magazine_views
+    WHERE viewed_at >= p_start_date 
+      AND viewed_at <= p_end_date
+      AND (p_magazine_id IS NULL OR magazine_id = p_magazine_id);
+
+    -- 2. Günlük İstatistikler (Boş günleri doldurarak)
+    SELECT jsonb_agg(d) INTO v_daily_stats
+    FROM (
+        SELECT 
+            gs.date::date as date,
+            COUNT(v.id) as views,
+            COUNT(DISTINCT COALESCE(v.session_id::text, v.viewer_ip)) as unique_views
+        FROM generate_series(p_start_date::date, p_end_date::date, '1 day'::interval) gs(date)
+        LEFT JOIN public.magazine_views v ON v.viewed_at::date = gs.date::date
+            AND (p_magazine_id IS NULL OR v.magazine_id = p_magazine_id)
+        GROUP BY 1
+        ORDER BY 1
+    ) d;
+
+    -- 3. En Çok Okunan Dergiler (Sadece genel aramada anlamlı)
+    IF p_magazine_id IS NULL THEN
+        SELECT jsonb_agg(t) INTO v_top_magazines
+        FROM (
+            SELECT 
+                m.id,
+                m.title,
+                m.issue_number,
+                COUNT(v.id) as total_views
+            FROM public.magazines m
+            LEFT JOIN public.magazine_views v ON m.id = v.magazine_id
+            WHERE v.viewed_at >= p_start_date 
+              AND v.viewed_at <= p_end_date
+            GROUP BY m.id, m.title, m.issue_number
+            ORDER BY total_views DESC
+            LIMIT 10
+        ) t;
+    ELSE
+        v_top_magazines := '[]'::jsonb;
+    END IF;
+
+    -- 4. Cihaz İstatistikleri
+    SELECT jsonb_agg(dev) INTO v_device_stats
+    FROM (
+        SELECT 
+            CASE 
+                WHEN user_agent ILIKE '%iphone%' OR user_agent ILIKE '%android%mobile%' THEN 'Mobil'
+                WHEN user_agent ILIKE '%ipad%' OR user_agent ILIKE '%tablet%' OR user_agent ILIKE '%android%' THEN 'Tablet'
+                ELSE 'Masaüstü'
+            END as device,
+            COUNT(*) as count
+        FROM public.magazine_views
+        WHERE viewed_at >= p_start_date 
+          AND viewed_at <= p_end_date
+          AND (p_magazine_id IS NULL OR magazine_id = p_magazine_id)
+        GROUP BY 1
+        ORDER BY count DESC
+    ) dev;
+
+    -- Sonuçları Birleştir
+    v_result := jsonb_build_object(
+        'total_views', COALESCE(v_total_views, 0),
+        'unique_visitors', COALESCE(v_unique_visitors, 0),
+        'daily_stats', COALESCE(v_daily_stats, '[]'::jsonb),
+        'top_magazines', COALESCE(v_top_magazines, '[]'::jsonb),
+        'device_stats', COALESCE(v_device_stats, '[]'::jsonb),
+        'total_views_all_time', COALESCE(v_total_all_time, 0)
+    );
+
+    RETURN v_result;
+END;
+$$;
+
+
 -- ============================================================================
 -- 9. STORAGE BUCKET KURULUMU
 -- ============================================================================
