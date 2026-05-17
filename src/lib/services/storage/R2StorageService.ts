@@ -5,6 +5,7 @@ import { STORAGE_CONFIG } from '@/lib/constants/storage'
 import { assertStorageFileArray } from '@/lib/guards'
 import { withRetry } from '@/lib/utils/retry'
 import { env } from '@/lib/env'
+import { getR2ServerEnv } from '@/lib/config/serverEnv'
 
 /**
  * Cloudflare R2 Storage Service Implementation
@@ -17,19 +18,21 @@ export class R2StorageService implements IStorageService {
   private publicUrl: string
 
   constructor(bucketName?: string) {
-    this.bucketName = bucketName ?? env.R2_BUCKET_NAME ?? STORAGE_CONFIG.BUCKET
+    const r2Env = getR2ServerEnv()
+
+    this.bucketName = bucketName ?? r2Env.R2_BUCKET_NAME ?? STORAGE_CONFIG.BUCKET
     this.publicUrl = env.NEXT_PUBLIC_R2_PUBLIC_URL ?? ''
 
-    if (!env.R2_ACCOUNT_ID || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) {
+    if (!r2Env.R2_ACCOUNT_ID || !r2Env.R2_ACCESS_KEY_ID || !r2Env.R2_SECRET_ACCESS_KEY) {
       console.warn('R2 configuration is missing some environment variables. Storage calls will fail.');
     }
 
     this.client = new S3Client({
       region: 'auto',
-      endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      endpoint: `https://${r2Env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
       credentials: {
-        accessKeyId: env.R2_ACCESS_KEY_ID ?? '',
-        secretAccessKey: env.R2_SECRET_ACCESS_KEY ?? '',
+        accessKeyId: r2Env.R2_ACCESS_KEY_ID ?? '',
+        secretAccessKey: r2Env.R2_SECRET_ACCESS_KEY ?? '',
       },
       // Cloudflare R2 might not strictly require path style, but often recommended
       forcePathStyle: true, 

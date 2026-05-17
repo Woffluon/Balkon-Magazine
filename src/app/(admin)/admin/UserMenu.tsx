@@ -20,9 +20,14 @@ type UserMenuProps = {
 
 export function UserMenu({ userEmail }: UserMenuProps) {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
 
   const handleLogout = async () => {
-    await logout()
+    setLogoutError(null)
+    const result = await logout()
+    if (result?.error) {
+      setLogoutError(result.error)
+    }
   }
 
   return (
@@ -49,6 +54,11 @@ export function UserMenu({ userEmail }: UserMenuProps) {
             Şifre Değiştir
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          {logoutError && (
+            <DropdownMenuLabel className="text-xs font-normal text-red-600">
+              {logoutError}
+            </DropdownMenuLabel>
+          )}
           <DropdownMenuItem onClick={handleLogout} variant="destructive">
             <LogOut />
             Çıkış Yap

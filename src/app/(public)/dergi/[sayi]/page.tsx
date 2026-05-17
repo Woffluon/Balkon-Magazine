@@ -1,4 +1,5 @@
 import dynamic from 'next/dynamic'
+import { headers } from 'next/headers'
 import FlipbookViewerSkeleton from '@/components/FlipbookViewerSkeleton'
 import { FlipbookViewerErrorBoundary } from '@/components/FlipbookViewerErrorBoundary'
 import { createPublicClient } from '@/lib/supabase/server'
@@ -8,6 +9,7 @@ import { STORAGE_PATHS } from '@/lib/constants/storage'
 import { getMagazineByIssue } from '@/lib/magazines'
 import { logger } from '@/lib/services/Logger'
 import { env } from '@/lib/config/env'
+import { escapeJsonLd } from '@/lib/security/jsonLd'
 import { validatePageNumber } from '@/lib/validators/urlValidation'
 import { sortFilesByNumber } from '@/lib/utils/fileSort'
 
@@ -62,6 +64,7 @@ export async function generateStaticParams() {
 export default async function DergiPage({ params }: { params: Promise<{ sayi: string }> }) {
   const supabase = createPublicClient()
   const { sayi: sayiStr } = await params
+  const nonce = (await headers()).get('x-nonce') ?? undefined
 
   // Validate URL parameter
   const sayi = validatePageNumber(sayiStr)
@@ -198,13 +201,17 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
     <main className="immersive-reader-container">
       {/* JSON-LD Structured Data for SEO */}
       <script
+        nonce={nonce}
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
+      >
+        {escapeJsonLd(structuredData)}
+      </script>
       <script
+        nonce={nonce}
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbData) }}
-      />
+      >
+        {escapeJsonLd(breadcrumbData)}
+      </script>
 
       {/* Minimalistic Floating Header */}
       <header className="fixed top-0 left-0 w-full z-50 p-4 sm:p-6 pointer-events-none">

@@ -127,13 +127,14 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine, isLates
         <div className="relative w-full h-full overflow-hidden rounded-xl">
           {coverUrl ? (
             <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- Storage provider returns already optimized WebP cover assets. */}
               <img
                 src={coverUrl}
                 alt={`${validatedMagazine.title} kapak görseli - Sayı ${validatedMagazine.issue_number}`}
                 className="absolute inset-0 w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
                 style={{ willChange: 'transform' }}
                 loading="lazy"
-                onError={(e) => {
+                onError={() => {
                   // Handle image load error with proper logging (Requirement 4.1)
                   logger.warn('Magazine cover image failed to load', {
                     component: 'MagazineCard',

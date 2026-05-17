@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import { Toaster } from "@/components/ui/toaster";
 import { GlobalErrorHandlerProvider } from "@/components/GlobalErrorHandlerProvider";
 import { env } from "@/lib/config/env";
+import { escapeJsonLd } from "@/lib/security/jsonLd";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -110,18 +112,6 @@ export const metadata: Metadata = {
 };
 
 /**
- * Escapes HTML entities in JSON-LD structured data to prevent XSS attacks
- * 
- * @param json - The JSON object to escape
- * @returns Escaped JSON string safe for embedding in HTML
- */
-function escapeJsonLd(json: object): string {
-  return JSON.stringify(json)
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e');
-}
-
-/**
  * Gets a validated site URL with fallback to localhost
  * 
  * @returns Valid site URL or localhost default
@@ -143,11 +133,12 @@ function getSafeUrl(): string {
   }
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   const safeUrl = getSafeUrl();
 
   const structuredData = {
@@ -262,11 +253,11 @@ export default function RootLayout({
         {/* Structured Data for Sezai Karakoç Anadolu Lisesi Balkon Magazine */}
         <Script
           id="structured-data"
+          nonce={nonce}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: escapeJsonLd(structuredData)
-          }}
-        />
+        >
+          {escapeJsonLd(structuredData)}
+        </Script>
         {/* Global error handler for uncaught errors and promise rejections */}
         <GlobalErrorHandlerProvider />
         <Toaster />

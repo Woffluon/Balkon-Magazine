@@ -55,6 +55,11 @@ const PII_FIELD_NAMES = [
   'ssn',
   'socialSecurity',
   'social_security',
+  'userAgent',
+  'url',
+  'href',
+  'query',
+  'queryString',
 ]
 
 /**
@@ -255,6 +260,11 @@ class LoggerService {
 
       // Sanitize string values
       if (typeof value === 'string') {
+        if (key.toLowerCase().includes('url') || key.toLowerCase().includes('href')) {
+          sanitized[key] = sanitizeUrl(value)
+          continue
+        }
+
         let sanitizedValue = value
 
         // Apply PII patterns
@@ -328,6 +338,15 @@ class LoggerService {
       // Silently fail if Sentry is not available
       // This prevents errors in development or if Sentry is not configured
     }
+  }
+}
+
+function sanitizeUrl(value: string): string {
+  try {
+    const url = new URL(value)
+    return `${url.origin}${url.pathname}`
+  } catch {
+    return '[REDACTED]'
   }
 }
 

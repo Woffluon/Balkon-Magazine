@@ -3,6 +3,51 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { env } from '@/lib/config/env'
 import { logger } from '@/lib/services/Logger'
 
+function createNonce(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return btoa(String.fromCharCode(...bytes))
+}
+
+function buildCspHeader(nonce: string): string {
+  const supabaseDomain = new URL(env.NEXT_PUBLIC_SUPABASE_URL).hostname
+  const connectSources = [`'self'`, `https://${supabaseDomain}`, 'https://*.supabase.co']
+
+  if (env.NEXT_PUBLIC_R2_PUBLIC_URL) {
+    try {
+      connectSources.push(`https://${new URL(env.NEXT_PUBLIC_R2_PUBLIC_URL).hostname}`)
+    } catch {
+      logger.warn('Invalid R2 public URL ignored for CSP', {
+        operation: 'middleware.csp',
+      })
+    }
+  }
+
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' https://cdn.jsdelivr.net`,
+    `style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com`,
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    `connect-src ${connectSources.join(' ')}`,
+    "object-src 'none'",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ')
+}
+
+function applySecurityHeaders(response: NextResponse, nonce: string): NextResponse {
+  response.headers.set('Content-Security-Policy', buildCspHeader(nonce))
+  response.headers.set('x-nonce', nonce)
+  return response
+}
+
+function redirectWithSecurityHeaders(path: string, request: NextRequest, nonce: string): NextResponse {
+  return applySecurityHeaders(NextResponse.redirect(new URL(path, request.url)), nonce)
+}
+
 /**
  * Middleware for authentication and session management
  * 
@@ -18,9 +63,13 @@ import { logger } from '@/lib/services/Logger'
  * Settings > Auth > JWT Expiry = 3600 seconds (1 hour)
  */
 export async function middleware(request: NextRequest) {
+  const nonce = createNonce()
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-nonce', nonce)
+
   let response = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: requestHeaders,
     },
   })
 
@@ -42,7 +91,7 @@ export async function middleware(request: NextRequest) {
           })
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: requestHeaders,
             },
           })
           response.cookies.set({
@@ -59,7 +108,7 @@ export async function middleware(request: NextRequest) {
           })
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: requestHeaders,
             },
           })
           response.cookies.set({
@@ -72,93 +121,55 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  let session = null
+  let user = null
 
-  // Wrap getSession in try-catch to handle auth failures gracefully
+  // Wrap user verification in try-catch to handle auth failures gracefully
   try {
-    const { data, error } = await supabase.auth.getSession()
+    const { data, error } = await supabase.auth.getUser()
     
     if (error) {
-      logger.error('Failed to get session in middleware', {
-        operation: 'middleware.getSession',
+      logger.error('Failed to verify user in middleware', {
+        operation: 'middleware.getUser',
         pathname,
-        url: request.url,
         error: error.message,
         errorCode: error.status,
       })
       
       // Fallback: treat as unauthenticated and redirect to login
       if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
-        return NextResponse.redirect(new URL('/admin/login', request.url))
+        return redirectWithSecurityHeaders('/admin/login', request, nonce)
       }
       
-      return response
+      return applySecurityHeaders(response, nonce)
     }
     
-    session = data.session
+    user = data.user
   } catch (error) {
     // Handle unexpected errors during session retrieval
-    logger.error('Unexpected error in middleware during session retrieval', {
-      operation: 'middleware.getSession',
+    logger.error('Unexpected error in middleware during user verification', {
+      operation: 'middleware.getUser',
       pathname,
-      url: request.url,
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     })
     
     // Fallback: treat as unauthenticated and redirect to login
     if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
-      return NextResponse.redirect(new URL('/admin/login', request.url))
+      return redirectWithSecurityHeaders('/admin/login', request, nonce)
     }
     
-    return response
+    return applySecurityHeaders(response, nonce)
   }
 
-  // Check if session needs refresh (within 5 minutes of expiration)
-  if (session) {
-    const expiresAt = session.expires_at
-    if (expiresAt) {
-      const now = Math.floor(Date.now() / 1000) // Current time in seconds
-      const timeUntilExpiry = expiresAt - now
-      const fiveMinutes = 5 * 60 // 300 seconds
-      
-      // If session expires in less than 5 minutes, refresh it
-      if (timeUntilExpiry < fiveMinutes && timeUntilExpiry > 0) {
-        try {
-          const { error: refreshError } = await supabase.auth.refreshSession()
-          
-          if (refreshError) {
-            logger.warn('Failed to refresh session in middleware', {
-              operation: 'middleware.refreshSession',
-              pathname,
-              url: request.url,
-              error: refreshError.message,
-              errorCode: refreshError.status,
-              timeUntilExpiry,
-            })
-          }
-        } catch (error) {
-          logger.error('Unexpected error during session refresh in middleware', {
-            operation: 'middleware.refreshSession',
-            pathname,
-            url: request.url,
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined,
-          })
-        }
-      }
-    }
+  if (!user && pathname.startsWith('/admin') && pathname !== '/admin/login') {
+    return redirectWithSecurityHeaders('/admin/login', request, nonce)
   }
 
-  if (!session && pathname.startsWith('/admin') && pathname !== '/admin/login') {
-    return NextResponse.redirect(new URL('/admin/login', request.url))
+  if (user && pathname === '/admin/login') {
+    return redirectWithSecurityHeaders('/admin', request, nonce)
   }
 
-  if (session && pathname === '/admin/login') {
-    return NextResponse.redirect(new URL('/admin', request.url))
-  }
-
-  return response
+  return applySecurityHeaders(response, nonce)
 }
 
 /**
@@ -170,6 +181,8 @@ export async function middleware(request: NextRequest) {
  * Requirements: 15.4
  */
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|favicon.png|og-image.jpg|pdf.worker.min.mjs).*)',
+  ],
 }
 

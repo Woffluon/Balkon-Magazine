@@ -49,6 +49,13 @@ function scrubPII(obj: Record<string, unknown>): Record<string, unknown> {
   return scrubbed
 }
 
+function getUserAgentFamily(userAgent: string): string {
+  const normalized = userAgent.toLowerCase()
+  if (normalized.includes('iphone') || normalized.includes('android mobile')) return 'mobile'
+  if (normalized.includes('ipad') || normalized.includes('tablet') || normalized.includes('android')) return 'tablet'
+  return 'desktop'
+}
+
 // Only initialize Sentry in production
 if (env.NODE_ENV === 'production') {
   Sentry.init({
@@ -108,13 +115,14 @@ if (env.NODE_ENV === 'production') {
           event.request.query_string = params.toString()
         }
 
-        // Add user context (session ID, user agent, URL)
+        // Add minimized browser context
         // Requirement 7.2: Error tracking includes user context
         if (event.request.url) {
           event.contexts = event.contexts || {}
+          const pathname = new URL(event.request.url).pathname
           event.contexts.browser = {
-            url: event.request.url,
-            userAgent: event.request.headers?.['User-Agent'] || navigator.userAgent,
+            pathname,
+            userAgentFamily: getUserAgentFamily(navigator.userAgent),
           }
         }
       }

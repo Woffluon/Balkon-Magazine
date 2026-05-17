@@ -149,9 +149,7 @@ export default function UploadDialog() {
   useEffect(() => {
     const savedState = loadState()
     if (savedState && savedState.isActive) {
-      updateField('title', savedState.title)
       updateField('issue', savedState.issue)
-      updateField('date', savedState.date)
       updateCoverProgress(savedState.coverProgress)
       // Note: We can't restore file objects from localStorage
       // User will need to re-select files

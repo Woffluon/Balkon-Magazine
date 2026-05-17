@@ -1,5 +1,13 @@
 import { z } from 'zod'
 
+const httpUrl = z
+  .string()
+  .url('Geçerli bir URL girin.')
+  .refine((value) => {
+    const protocol = new URL(value).protocol
+    return protocol === 'http:' || protocol === 'https:'
+  }, 'URL http:// veya https:// ile başlamalıdır.')
+
 /**
  * FormData validation schema for magazine creation/update operations
  * Handles FormData-specific validation with proper type coercion
@@ -44,14 +52,14 @@ export const MagazineFormSchema = z.object({
     .optional()
     .transform((inputValue) => inputValue === '' ? undefined : inputValue)
     .pipe(
-      z.string().url('PDF adresi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional()
+      httpUrl.optional()
     ),
   cover_image_url: z
     .string()
     .optional()
     .transform((inputValue) => inputValue === '' ? undefined : inputValue)
     .pipe(
-      z.string().url('Kapak resmi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional()
+      httpUrl.optional()
     ),
   page_count: z
     .coerce

@@ -1,9 +1,10 @@
 import { getAuthenticatedClient } from '@/lib/supabase/server'
 import { getAnalyticsDashboardData } from '@/app/actions/analytics-actions'
 import { AnalyticsDashboardClient } from './AnalyticsDashboardClient'
-import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { logger } from '@/lib/services/Logger'
+import { requireAdmin } from '@/lib/services/authorization'
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 
 export const metadata: Metadata = {
     title: 'İstatistikler - Balkon Dergisi',
@@ -14,10 +15,18 @@ export const metadata: Metadata = {
 }
 
 export default async function AnalyticsPage() {
-    const supabase = await getAuthenticatedClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let authContext: Awaited<ReturnType<typeof requireAdmin>>
 
-    const userEmail = user?.email || ''
+    try {
+        authContext = await requireAdmin()
+    } catch (error) {
+        if (error instanceof Error && error.name === 'AuthorizationError') {
+            redirect('/admin/login')
+        }
+        throw error
+    }
+    const supabase = await getAuthenticatedClient()
+    const userEmail = authContext.userEmail
 
     // Fetch all magazines for the filter dropdown
     const { data: magazines } = await supabase
@@ -32,7 +41,7 @@ export default async function AnalyticsPage() {
         if (result.error.code !== 'UNAUTHORIZED') {
             logger.error('Failed to fetch analytics data in admin page', {
                 page: 'admin/analytics/page',
-                userId: user?.id,
+                userId: authContext.userId,
                 userEmail,
                 error: result.error,
             })

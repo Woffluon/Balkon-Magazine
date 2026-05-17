@@ -223,6 +223,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
               return (
                 <div key={index} className="page relative bg-neutral-800 shadow-2xl overflow-hidden">
                   {shouldLoad ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Pageflip needs raw img sizing and lazy page-level loading.
                     <img
                       src={url}
                       alt={`Sayfa ${index + 1}`}

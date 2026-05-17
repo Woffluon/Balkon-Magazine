@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath, revalidateTag } from 'next/cache'
-import { requireAuth } from '@/lib/middleware/authMiddleware'
 import { createStandardizedSupabaseClient } from '@/lib/utils/supabaseClientUtils'
 import { parseFormDataWithZod } from '@/lib/validators/formDataParser'
 import {
@@ -12,9 +11,11 @@ import {
 import { MagazineService } from '@/lib/services/MagazineService'
 import { StorageFactory } from '@/lib/services/storage/StorageFactory'
 import { STORAGE_PATHS } from '@/lib/constants/storage'
+import { IMAGE_CONFIG, UPLOAD_LIMITS } from '@/lib/constants/upload'
 import { rateLimiter } from '@/lib/services/rateLimiting'
 import { verifyCSRFOrigin, requireAdmin } from '@/lib/services/authorization'
 import { APP_CONFIG } from '@/lib/config/app-config'
+import { ValidationError } from '@/lib/errors/AppError'
 import type { Result } from '@/lib/errors/errorHandler'
 
 /**
@@ -362,6 +363,15 @@ async function prepareLogData(issue: string, content: string) {
   
   const decimalBase = 10
   const issueNumber = parseInt(issue, decimalBase)
+  if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+    throw new ValidationError(
+      'Invalid issue number',
+      'issue',
+      'positive_integer',
+      'Sayı numarası geçerli bir pozitif tam sayı olmalıdır.'
+    )
+  }
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const path = STORAGE_PATHS.getLogsPath(issueNumber, timestamp)
   
@@ -371,36 +381,7 @@ async function prepareLogData(issue: string, content: string) {
     path
   })
   
-  const data = new TextEncoder().encode(content)
-  const blob = new Blob([data], { type: 'text/plain' })
-  
-  return { path, blob, issueNumber }
-}
-
-/**
- * Performs the log upload operation
- * Handles the core business logic of uploading log content
- */
-async function performLogUpload(path: string, blob: Blob, issueNumber: number) {
-  const { logger } = await import('@/lib/services/Logger')
-  
-  const supabase = await createStandardizedSupabaseClient({
-    context: 'server-auth',
-    component: 'AdminActions',
-    operation: 'performLogUpload'
-  })
-  const storageService = StorageFactory.getStorageService(supabase)
-  
-  await storageService.upload(path, blob, {
-    contentType: 'text/plain',
-    upsert: true
-  })
-  
-  logger.info('Upload log saved successfully', {
-    operation: 'saveUploadLog',
-    issueNumber,
-    path
-  })
+  return { path, issueNumber, contentLength: content.length }
 }
 
 /**
@@ -424,8 +405,15 @@ export async function saveUploadLog(issue: string, content: string): Promise<Res
   const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
   try {
-    const { path, blob, issueNumber } = await prepareLogData(issue, content)
-    await performLogUpload(path, blob, issueNumber)
+    await requireAdmin()
+    await verifyCSRFOrigin()
+    const { path, issueNumber, contentLength } = await prepareLogData(issue, content)
+    logger.info('Upload log captured server-side', {
+      operation: 'saveUploadLog',
+      issueNumber,
+      path,
+      contentLength
+    })
     
     return ErrorHandler.success(path)
   } catch (error) {
@@ -447,7 +435,7 @@ export async function saveUploadLog(issue: string, content: string): Promise<Res
  * Also revalidates the home page to reflect any changes
  */
 export async function revalidateMagazinePage(issueNumber: number) {
-  await requireAuth()
+  await requireAdmin()
   
   revalidatePath(`/dergi/${issueNumber}`)
   revalidatePath('/') // Also revalidate home page
@@ -461,7 +449,7 @@ export async function revalidateMagazinePage(issueNumber: number) {
  * Use this after publishing/unpublishing magazines or updating magazine metadata
  */
 export async function revalidateMagazines() {
-  await requireAuth()
+  await requireAdmin()
   
   revalidateTag('magazines')
   revalidatePath('/') // Also revalidate home page
@@ -473,7 +461,7 @@ export async function revalidateMagazines() {
  * Validates authentication for file upload
  * Separates authentication concerns from upload logic
  */
-async function validateFileUploadRequest(path: string, contentType: string, fileSize: number) {
+async function validateFileUploadRequest(path: string, fileData: ArrayBuffer, contentType: string) {
   const { logger } = await import('@/lib/services/Logger')
   
   // Require admin role for file uploads
@@ -481,13 +469,65 @@ async function validateFileUploadRequest(path: string, contentType: string, file
   
   // Verify CSRF origin
   await verifyCSRFOrigin()
+
+  if (fileData.byteLength <= 0 || fileData.byteLength > UPLOAD_LIMITS.MAX_BODY_SIZE) {
+    throw new ValidationError(
+      'Invalid upload size',
+      'fileSize',
+      'max',
+      `Dosya boyutu 1 byte ile ${UPLOAD_LIMITS.MAX_BODY_SIZE_MB} MB arasında olmalıdır.`
+    )
+  }
+
+  validateMagazineImagePath(path)
+
+  if (contentType !== IMAGE_CONFIG.FORMAT) {
+    throw new ValidationError(
+      'Invalid upload MIME type',
+      'contentType',
+      'mime',
+      'Yalnızca WebP görseller yüklenebilir.'
+    )
+  }
+
+  if (!hasWebPMagicBytes(fileData)) {
+    throw new ValidationError(
+      'Invalid WebP signature',
+      'fileData',
+      'magic_bytes',
+      'Dosya içeriği geçerli bir WebP görseli değil.'
+    )
+  }
   
   logger.debug('Starting file upload', {
     operation: 'uploadFileToStorage',
     path,
     contentType,
-    size: fileSize
+    size: fileData.byteLength
   })
+}
+
+function validateMagazineImagePath(path: string): void {
+  if (!/^\d+\/(?:kapak\.webp|pages\/sayfa_\d{3}\.webp)$/.test(path)) {
+    throw new ValidationError(
+      'Invalid storage path',
+      'path',
+      'format',
+      'Dosya yolu yalnızca dergi kapak veya sayfa görseli olabilir.'
+    )
+  }
+}
+
+function hasWebPMagicBytes(fileData: ArrayBuffer): boolean {
+  if (fileData.byteLength < 12) {
+    return false
+  }
+
+  const bytes = new Uint8Array(fileData, 0, 12)
+  const riff = String.fromCharCode(...bytes.slice(0, 4))
+  const webp = String.fromCharCode(...bytes.slice(8, 12))
+
+  return riff === 'RIFF' && webp === 'WEBP'
 }
 
 /**
@@ -558,7 +598,7 @@ export async function uploadFileToStorage(
   const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
   try {
-    await validateFileUploadRequest(path, contentType, fileData.byteLength)
+    await validateFileUploadRequest(path, fileData, contentType)
     await performFileUpload(path, fileData, contentType)
     
     return ErrorHandler.success(undefined)

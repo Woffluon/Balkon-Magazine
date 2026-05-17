@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { logger } from '@/lib/services/Logger'
-import { loadValidatedState, UploadStateSchema } from '@/lib/utils/storageValidation'
+import { UploadStateSchema } from '@/lib/utils/storageValidation'
 import type { UploadState } from '@/lib/utils/storageValidation'
 
 // Re-export UploadState type for backward compatibility
@@ -16,9 +16,22 @@ interface UseUploadPersistenceReturn {
 }
 
 /**
- * LocalStorage key for upload state persistence
+ * SessionStorage key for upload progress persistence
  */
 const UPLOAD_STATE_KEY = 'balkon-upload-state'
+
+function sanitizeUploadState(state: UploadState): UploadState {
+  return {
+    title: '',
+    issue: state.issue,
+    date: '',
+    coverProgress: state.coverProgress,
+    pagesProgress: state.pagesProgress,
+    logs: [],
+    isActive: state.isActive,
+    startTime: state.startTime,
+  }
+}
 
 /**
  * Custom hook for persisting upload state to localStorage
@@ -57,7 +70,7 @@ const UPLOAD_STATE_KEY = 'balkon-upload-state'
  */
 export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn {
   /**
-   * Saves upload state to localStorage
+   * Saves upload state to sessionStorage
    * 
    * Serializes the state object to JSON and stores it in localStorage.
    * Handles errors gracefully (e.g., quota exceeded, private browsing).
@@ -66,10 +79,9 @@ export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn 
    */
   const saveState = useCallback((state: UploadState): void => {
     try {
-      const serialized = JSON.stringify(state)
-      localStorage.setItem(UPLOAD_STATE_KEY, serialized)
+      const serialized = JSON.stringify(sanitizeUploadState(state))
+      sessionStorage.setItem(UPLOAD_STATE_KEY, serialized)
     } catch (error) {
-      // Handle localStorage errors (quota exceeded, private browsing, etc.)
       logger.error('Failed to save upload state', {
         error,
         operation: 'upload_state_save'
@@ -78,7 +90,7 @@ export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn 
   }, [])
 
   /**
-   * Loads upload state from localStorage with validation
+   * Loads upload state from sessionStorage with validation
    * 
    * Uses Zod schema validation to ensure data integrity.
    * Returns null if no state exists, validation fails, or if deserialization fails.
@@ -91,18 +103,36 @@ export function useUploadPersistence(busy: boolean): UseUploadPersistenceReturn 
    * @returns The persisted upload state, or null if not found or invalid
    */
   const loadState = useCallback((): UploadState | null => {
-    return loadValidatedState(UPLOAD_STATE_KEY, UploadStateSchema)
+    try {
+      const saved = sessionStorage.getItem(UPLOAD_STATE_KEY)
+      if (!saved) return null
+
+      const result = UploadStateSchema.safeParse(JSON.parse(saved))
+      if (!result.success) {
+        sessionStorage.removeItem(UPLOAD_STATE_KEY)
+        return null
+      }
+
+      return result.data
+    } catch (error) {
+      logger.warn('Failed to load upload state', {
+        operation: 'upload_state_load',
+        error: error instanceof Error ? error.message : String(error),
+      })
+      sessionStorage.removeItem(UPLOAD_STATE_KEY)
+      return null
+    }
   }, [])
 
   /**
-   * Clears upload state from localStorage
+   * Clears upload state from sessionStorage
    * 
    * Removes the persisted state completely.
    * Should be called when upload completes successfully or is cancelled.
    */
   const clearState = useCallback((): void => {
     try {
-      localStorage.removeItem(UPLOAD_STATE_KEY)
+      sessionStorage.removeItem(UPLOAD_STATE_KEY)
     } catch (error) {
       logger.error('Failed to clear upload state', {
         error,

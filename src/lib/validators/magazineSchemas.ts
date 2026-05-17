@@ -8,7 +8,15 @@ import { MagazineSchema, UUIDSchema } from './schemas'
  * Requirements:
  * - 2.2: Validate URL format and reject invalid URLs
  */
-const urlOrEmpty = z.string().url('Geçersiz URL').optional().or(z.literal(''))
+const httpUrl = z
+  .string()
+  .url('Geçersiz URL')
+  .refine((value) => {
+    const protocol = new URL(value).protocol
+    return protocol === 'http:' || protocol === 'https:'
+  }, 'URL http:// veya https:// ile başlamalıdır')
+
+const urlOrEmpty = httpUrl.optional().or(z.literal(''))
 
 /**
  * Zod schema for magazine input validation
@@ -90,8 +98,8 @@ export const MagazineDeleteSchema = z.object({
  * - 4.4: Publication date in ISO 8601 format (YYYY-MM-DD)
  */
 export const createMagazineSchema = MagazineSchema.extend({
-  cover_image_url: z.string().url('Kapak resmi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional().or(z.literal('')),
-  pdf_url: z.string().url('PDF adresi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional().or(z.literal('')),
+  cover_image_url: httpUrl.optional().or(z.literal('')),
+  pdf_url: httpUrl.optional().or(z.literal('')),
   page_count: z.number().int('Sayfa sayısı tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.').positive('Sayfa sayısı pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.').optional(),
   is_published: z.boolean().default(true)
 })
@@ -107,8 +115,8 @@ export const createMagazineSchema = MagazineSchema.extend({
  * - 4.4: Publication date in ISO 8601 format (YYYY-MM-DD)
  */
 export const updateMagazineSchema = MagazineSchema.partial().extend({
-  cover_image_url: z.string().url('Kapak resmi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional().or(z.literal('')),
-  pdf_url: z.string().url('PDF adresi geçerli bir URL olmalıdır. Lütfen http:// veya https:// ile başlayan bir adres girin.').optional().or(z.literal('')),
+  cover_image_url: httpUrl.optional().or(z.literal('')),
+  pdf_url: httpUrl.optional().or(z.literal('')),
   page_count: z.number().int('Sayfa sayısı tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.').positive('Sayfa sayısı pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.').optional(),
   is_published: z.boolean().optional()
 })

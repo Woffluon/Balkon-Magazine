@@ -68,6 +68,21 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
 -- RLS'yi etkinleştir
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
+CREATE OR REPLACE FUNCTION public.current_user_is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_profiles
+    WHERE user_id = auth.uid()
+      AND role = 'admin'
+  );
+$$;
+
 -- ============================================================================
 -- 3. MAGAZINE PAGES TABLE - Sayfa metadata'sı için (opsiyonel)
 -- ============================================================================
@@ -104,15 +119,12 @@ CREATE POLICY "Anon can select published magazines"
   TO anon
   USING (is_published = TRUE);
 
--- Kimlik doğrulaması yapılmış kullanıcılar dergileri yönetebilir
--- Not: Client-side işlemler için basit policy gerekli
--- Admin rolü server action'larda requireAdmin() ile kontrol ediliyor
-CREATE POLICY "Authenticated can manage magazines"
+CREATE POLICY "Admin can manage all magazines"
   ON public.magazines
   FOR ALL
   TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (public.current_user_is_admin())
+  WITH CHECK (public.current_user_is_admin());
 
 -- ============================================================================
 -- 5. RLS POLİCİES - USER PROFILES
@@ -120,6 +132,7 @@ CREATE POLICY "Authenticated can manage magazines"
 
 DROP POLICY IF EXISTS "Users can view their own profile" ON public.user_profiles;
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.user_profiles;
+DROP POLICY IF EXISTS "Admins can manage user profiles" ON public.user_profiles;
 
 -- Kullanıcılar kendi profillerini görüntüleyebilir
 CREATE POLICY "Users can view their own profile"
@@ -128,13 +141,12 @@ CREATE POLICY "Users can view their own profile"
   TO authenticated
   USING (user_id = auth.uid());
 
--- Kullanıcılar kendi profillerini güncelleyebilir (rol hariç)
-CREATE POLICY "Users can update their own profile"
+CREATE POLICY "Admins can manage user profiles"
   ON public.user_profiles
-  FOR UPDATE
+  FOR ALL
   TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
+  USING (public.current_user_is_admin())
+  WITH CHECK (public.current_user_is_admin());
 
 -- ============================================================================
 -- 6. RLS POLİCİES - MAGAZINE PAGES
@@ -185,9 +197,13 @@ CREATE TABLE IF NOT EXISTS public.magazine_views (
     magazine_id UUID NOT NULL REFERENCES public.magazines(id) ON DELETE CASCADE,
     viewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     session_id UUID,
-    viewer_ip TEXT, 
-    user_agent TEXT
+    viewer_ip_hash TEXT,
+    user_agent_family TEXT
 );
+
+ALTER TABLE public.magazine_views
+  ADD COLUMN IF NOT EXISTS viewer_ip_hash TEXT,
+  ADD COLUMN IF NOT EXISTS user_agent_family TEXT;
 
 -- İndeksler
 CREATE INDEX IF NOT EXISTS idx_magazine_views_magazine_id ON public.magazine_views(magazine_id);
@@ -202,25 +218,12 @@ ALTER TABLE public.magazine_views ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Anyone can insert a view" ON public.magazine_views;
 DROP POLICY IF EXISTS "Admins can view all records" ON public.magazine_views;
 
--- Anonim ve normal kullanıcılar görüntülenme ekleyebilir
-CREATE POLICY "Anyone can insert a view"
-  ON public.magazine_views
-  FOR INSERT
-  TO public, anon
-  WITH CHECK (true);
-
 -- Sadece adminler görüntülenme kayıtlarını okuyabilir
 CREATE POLICY "Admins can view all records"
   ON public.magazine_views
   FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.user_profiles
-      WHERE user_profiles.user_id = auth.uid()
-        AND user_profiles.role = 'admin'
-    )
-  );
+  USING (public.current_user_is_admin());
 
 -- ============================================================================
 -- 8. RPC FUNCTIONS
@@ -230,14 +233,25 @@ CREATE POLICY "Admins can view all records"
 CREATE OR REPLACE FUNCTION public.increment_magazine_view(
     p_magazine_id UUID,
     p_session_id UUID DEFAULT NULL,
-    p_viewer_ip TEXT DEFAULT NULL,
-    p_user_agent TEXT DEFAULT NULL
+    p_viewer_ip_hash TEXT DEFAULT NULL,
+    p_user_agent_family TEXT DEFAULT NULL
 ) 
 RETURNS VOID 
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.magazines
+        WHERE id = p_magazine_id
+          AND is_published = TRUE
+    ) THEN
+        RAISE EXCEPTION 'Magazine is not public'
+            USING ERRCODE = '42501';
+    END IF;
+
     -- Sıkı Kontrol: Eğer session_id sağlandıysa, son 24 saat içindeki izlenmeleri kontrol et
     IF p_session_id IS NOT NULL THEN
         IF EXISTS (
@@ -249,25 +263,27 @@ BEGIN
             -- Son 24 saat içinde bu session ile zaten okunmuş, kaydetme
             RETURN;
         END IF;
-    -- Yedek Kontrol: Eğer session_id yoksa ama IP varsa (Cookie'yi engelleyenler için)
-    ELSIF p_viewer_ip IS NOT NULL THEN
+    -- Yedek Kontrol: Eğer session_id yoksa ama IP hash varsa (Cookie'yi engelleyenler için)
+    ELSIF p_viewer_ip_hash IS NOT NULL THEN
         IF EXISTS (
             SELECT 1 FROM public.magazine_views
             WHERE magazine_id = p_magazine_id 
-              AND viewer_ip = p_viewer_ip 
+              AND viewer_ip_hash = p_viewer_ip_hash
               AND viewed_at > (NOW() - INTERVAL '1 hour') -- IP için daha kısa süre (ortak ağlar/okul interneti sebebiyle)
         ) THEN
-            -- Son 1 saat içinde bu IP ile zaten okunmuş, kaydetme
+            -- Son 1 saat içinde bu IP hash ile zaten okunmuş, kaydetme
             RETURN;
         END IF;
     END IF;
 
     -- Yeni görüntülenmeyi kaydet
-    INSERT INTO public.magazine_views (magazine_id, session_id, viewer_ip, user_agent)
-    VALUES (p_magazine_id, p_session_id, p_viewer_ip, p_user_agent);
+    INSERT INTO public.magazine_views (magazine_id, session_id, viewer_ip_hash, user_agent_family)
+    VALUES (p_magazine_id, p_session_id, p_viewer_ip_hash, p_user_agent_family);
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.increment_magazine_view(UUID, UUID, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.increment_magazine_view(UUID, UUID, TEXT, TEXT) TO anon, authenticated;
 
 -- Gelişmiş İstatistik Verilerini Getiren RPC
 CREATE OR REPLACE FUNCTION public.get_advanced_analytics(
@@ -278,6 +294,7 @@ CREATE OR REPLACE FUNCTION public.get_advanced_analytics(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
     v_total_views BIGINT;
@@ -288,13 +305,18 @@ DECLARE
     v_total_all_time BIGINT;
     v_result JSONB;
 BEGIN
+    IF NOT public.current_user_is_admin() THEN
+        RAISE EXCEPTION 'Admin role required'
+            USING ERRCODE = '42501';
+    END IF;
+
     -- 0. Genel Toplam (Tüm zamanlar)
     SELECT COUNT(*) INTO v_total_all_time FROM public.magazine_views;
 
     -- 1. Toplam İzlenme ve Tekil Ziyaretçi (Seçili aralık ve dergi için)
     SELECT 
         COUNT(*),
-        COUNT(DISTINCT COALESCE(session_id::text, viewer_ip))
+        COUNT(DISTINCT COALESCE(session_id::text, viewer_ip_hash))
     INTO v_total_views, v_unique_visitors
     FROM public.magazine_views
     WHERE viewed_at >= p_start_date 
@@ -307,7 +329,7 @@ BEGIN
         SELECT 
             gs.date::date as date,
             COUNT(v.id) as views,
-            COUNT(DISTINCT COALESCE(v.session_id::text, v.viewer_ip)) as unique_views
+            COUNT(DISTINCT COALESCE(v.session_id::text, v.viewer_ip_hash)) as unique_views
         FROM generate_series(p_start_date::date, p_end_date::date, '1 day'::interval) gs(date)
         LEFT JOIN public.magazine_views v ON v.viewed_at::date = gs.date::date
             AND (p_magazine_id IS NULL OR v.magazine_id = p_magazine_id)
@@ -341,9 +363,8 @@ BEGIN
     FROM (
         SELECT 
             CASE 
-                WHEN user_agent ILIKE '%iphone%' OR user_agent ILIKE '%android%mobile%' THEN 'Mobil'
-                WHEN user_agent ILIKE '%ipad%' OR user_agent ILIKE '%tablet%' OR user_agent ILIKE '%android%' THEN 'Tablet'
-                ELSE 'Masaüstü'
+                WHEN user_agent_family IN ('Mobil', 'Tablet', 'Masaüstü') THEN user_agent_family
+                ELSE 'Bilinmeyen'
             END as device,
             COUNT(*) as count
         FROM public.magazine_views
@@ -368,6 +389,10 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.get_advanced_analytics(TIMESTAMPTZ, TIMESTAMPTZ, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_advanced_analytics(TIMESTAMPTZ, TIMESTAMPTZ, UUID) TO authenticated;
+REVOKE ALL ON FUNCTION public.current_user_is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.current_user_is_admin() TO authenticated;
 
 -- ============================================================================
 -- 9. STORAGE BUCKET KURULUMU
@@ -377,6 +402,11 @@ $$;
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('magazines', 'magazines', TRUE)
 ON CONFLICT (id) DO UPDATE SET public = TRUE;
+
+-- Upload logları public obje alanından ayrı, private bucket'ta tutulur
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('magazine-upload-logs', 'magazine-upload-logs', FALSE)
+ON CONFLICT (id) DO UPDATE SET public = FALSE;
 
 -- Mevcut storage policy'lerini kaldır
 DROP POLICY IF EXISTS "Anon can read magazine images" ON storage.objects;
@@ -388,17 +418,23 @@ CREATE POLICY "Anon can read magazine images"
   ON storage.objects
   FOR SELECT
   TO anon
-  USING (bucket_id = 'magazines');
+  USING (
+    bucket_id = 'magazines'
+    AND name ~ '^[0-9]+/(kapak\.webp|pages/sayfa_[0-9]{3}\.webp)$'
+  );
 
--- Kimlik doğrulaması yapılmış kullanıcıların dergi görsellerini yönetmesine izin ver
--- Not: Client-side upload'lar için basit policy gerekli
--- Admin rolü server action'larda requireAdmin() ile kontrol ediliyor
-CREATE POLICY "Authenticated can manage magazine images"
+CREATE POLICY "Admin can manage magazine images"
   ON storage.objects
   FOR ALL
   TO authenticated
-  USING (bucket_id = 'magazines')
-  WITH CHECK (bucket_id = 'magazines');
+  USING (
+    bucket_id IN ('magazines', 'magazine-upload-logs')
+    AND public.current_user_is_admin()
+  )
+  WITH CHECK (
+    bucket_id IN ('magazines', 'magazine-upload-logs')
+    AND public.current_user_is_admin()
+  );
 
 -- ============================================================================
 -- 10. OTOMATİK USER PROFILE OLUŞTURMA TRİGGER'I
@@ -423,14 +459,13 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================================
--- 11. MEVCUT KULLANICILARI ADMİN YAP
+-- 11. MEVCUT KULLANICILAR İÇİN VARSAYILAN PROFİL OLUŞTUR
 -- ============================================================================
 
--- Tüm mevcut kullanıcılar için admin profilleri ekle
--- Bu, mevcut tüm kullanıcıları admin yapar
+-- Mevcut kullanıcıları admin yapma; eksik profilleri güvenli varsayılan role ile ekle
 INSERT INTO public.user_profiles (user_id, role)
-SELECT id, 'admin' FROM auth.users
-ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
+SELECT id, 'user' FROM auth.users
+ON CONFLICT (user_id) DO NOTHING;
 
 -- ============================================================================
 -- 12. KURULUM DOĞRULAMA

@@ -14,6 +14,10 @@ export type LoginState = {
   error?: string
 }
 
+export type LogoutState = {
+  error?: string
+}
+
 /**
  * Extract client IP address from request headers
  * Checks multiple headers in order of preference
@@ -87,32 +91,30 @@ export async function login(
   redirect('/admin')
 }
 
-export async function logout(): Promise<void> {
+export async function logout(): Promise<LogoutState> {
   try {
     const supabase = await getServerClient()
     const { error } = await supabase.auth.signOut()
     
     if (error) {
-      // Log the error but continue with redirect
       const { logger } = await import('@/lib/services/Logger')
       logger.error('Logout sign-out failed', {
         operation: 'logout',
         error: error.message,
         errorCode: error.status,
       })
+      return { error: 'Çıkış işlemi tamamlanamadı. Lütfen tekrar deneyin.' }
     }
   } catch (error) {
-    // Log unexpected errors but ensure we still redirect
     const { logger } = await import('@/lib/services/Logger')
     logger.error('Logout operation failed', {
       operation: 'logout',
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
     })
+    return { error: 'Çıkış işlemi tamamlanamadı. Lütfen tekrar deneyin.' }
   }
   
-  // Always redirect to login, even if sign-out failed
-  // This ensures session cleanup on the client side
   redirect('/admin/login')
 }
 

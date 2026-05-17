@@ -88,9 +88,9 @@ export async function getServerClient(): Promise<SupabaseClient> {
 export async function getAuthenticatedClient(): Promise<SupabaseClient> {
   const supabase = await createClient()
   
-  const { data: { session }, error } = await supabase.auth.getSession()
+  const { data: { user }, error } = await supabase.auth.getUser()
   
-  if (error || !session) {
+  if (error || !user) {
     redirect('/admin/login')
   }
   

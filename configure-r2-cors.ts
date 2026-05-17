@@ -4,7 +4,8 @@ const {
   R2_ACCESS_KEY_ID,
   R2_SECRET_ACCESS_KEY,
   R2_ACCOUNT_ID,
-  R2_BUCKET_NAME
+  R2_BUCKET_NAME,
+  R2_ALLOWED_ORIGINS = "https://balkondergi.com"
 } = process.env;
 
 if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ACCOUNT_ID || !R2_BUCKET_NAME) {
@@ -24,17 +25,17 @@ const s3 = new S3Client({
 async function configureCORS() {
   console.log(`${R2_BUCKET_NAME} için CORS yapılandırması başlatılıyor...`);
 
+  const allowedOrigins = R2_ALLOWED_ORIGINS
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0)
+    .map((origin) => new URL(origin).origin);
+
   const corsRules = [
     {
-      AllowedHeaders: ["*"],
+      AllowedHeaders: ["Range", "Content-Type"],
       AllowedMethods: ["GET", "HEAD"],
-      AllowedOrigins: [
-        "http://localhost:3000",
-        "https://balkondergi.com",
-        "https://*.balkondergi.com",
-        "https://*.pages.dev",
-        "https://*.vercel.app"
-      ],
+      AllowedOrigins: allowedOrigins,
       ExposeHeaders: ["ETag", "Content-Type", "Content-Length"],
       MaxAgeSeconds: 3600,
     },
@@ -49,10 +50,10 @@ async function configureCORS() {
     });
 
     await s3.send(command);
-    console.log("✅ Başarılı: CORS politikası Cloudflare R2'ye başarıyla uygulandı.");
+    console.log("Başarılı: CORS politikası Cloudflare R2'ye başarıyla uygulandı.");
     console.log("İzin verilen Originler:", corsRules[0].AllowedOrigins.join(", "));
   } catch (error) {
-    console.error("❌ Hata: CORS yapılandırması uygulanırken bir sorun oluştu:");
+    console.error("Hata: CORS yapılandırması uygulanırken bir sorun oluştu:");
     console.error(error);
     process.exit(1);
   }

@@ -1,9 +1,44 @@
 'use server'
 
+import { createHash } from 'node:crypto'
 import { headers, cookies } from 'next/headers'
 import { getAuthenticatedClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/services/Logger'
 import { ErrorHandler, type Result } from '@/lib/errors/errorHandler'
+import { rateLimiter } from '@/lib/services/rateLimiting'
+import { requireAdmin } from '@/lib/services/authorization'
+
+const VIEWER_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isUuid(value: string): boolean {
+    return UUID_PATTERN.test(value)
+}
+
+function hashAnalyticsValue(value: string): string {
+    const daySalt = new Date().toISOString().slice(0, 10)
+    return createHash('sha256')
+        .update(`${daySalt}:${value}`)
+        .digest('hex')
+}
+
+function getUserAgentFamily(userAgent: string): string {
+    const normalized = userAgent.toLowerCase()
+
+    if (normalized.includes('iphone') || normalized.includes('android mobile')) {
+        return 'Mobil'
+    }
+
+    if (normalized.includes('ipad') || normalized.includes('tablet') || normalized.includes('android')) {
+        return 'Tablet'
+    }
+
+    if (!userAgent || userAgent === 'unknown-ua') {
+        return 'Bilinmeyen'
+    }
+
+    return 'Masaüstü'
+}
 
 /**
  * Tracks a magazine view. To be called from the public magazine reader page.
@@ -11,6 +46,11 @@ import { ErrorHandler, type Result } from '@/lib/errors/errorHandler'
  */
 export async function trackMagazineView(magazineId: string): Promise<Result<void>> {
     try {
+        if (!isUuid(magazineId)) {
+            const validationError = ErrorHandler.handleUnknownError(new Error('Invalid magazine id'))
+            return ErrorHandler.failure(validationError)
+        }
+
         const headerList = await headers()
 
         // Extract IP and User Agent for rudimentary tracking/spam prevention
@@ -23,16 +63,22 @@ export async function trackMagazineView(magazineId: string): Promise<Result<void
         }
 
         const userAgent = headerList.get('user-agent') || 'unknown-ua'
+        const rateLimitKey = `${magazineId}:${viewerIp}`
+
+        if (!rateLimiter.checkViewTrackingLimit(rateLimitKey)) {
+            return ErrorHandler.success(undefined)
+        }
+
+        rateLimiter.recordViewTrackingAttempt(rateLimitKey)
 
         // Cookie / Session management
         const cookieStore = await cookies()
         let sessionId = cookieStore.get('viewer_session')?.value
 
-        if (!sessionId) {
+        if (!sessionId || !isUuid(sessionId)) {
             sessionId = crypto.randomUUID()
-            // Tarayıcıya 1 yıllık anonim session cookie'si atıyoruz
             cookieStore.set('viewer_session', sessionId, {
-                maxAge: 60 * 60 * 24 * 365,
+                maxAge: VIEWER_COOKIE_MAX_AGE_SECONDS,
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'lax',
@@ -50,8 +96,8 @@ export async function trackMagazineView(magazineId: string): Promise<Result<void
         const { error } = await supabase.rpc('increment_magazine_view', {
             p_magazine_id: magazineId,
             p_session_id: sessionId,
-            p_viewer_ip: viewerIp,
-            p_user_agent: userAgent
+            p_viewer_ip_hash: hashAnalyticsValue(viewerIp),
+            p_user_agent_family: getUserAgentFamily(userAgent)
         })
 
         if (error) {
@@ -117,6 +163,7 @@ export async function getAnalyticsDashboardData(
     magazineId: string | null = null
 ): Promise<Result<AnalyticsDashboardData>> {
     try {
+        await requireAdmin()
         const supabase = await getAuthenticatedClient()
 
         let startDateStr: string

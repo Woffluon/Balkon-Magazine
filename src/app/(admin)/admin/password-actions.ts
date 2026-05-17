@@ -3,6 +3,8 @@
 import { getAuthenticatedClient } from '@/lib/supabase/server'
 import { passwordChangeSchema } from '@/lib/validators/magazineSchemas'
 import { ValidationError, AuthenticationError } from '@/lib/errors/AppError'
+import { verifyCSRFOrigin } from '@/lib/services/authorization'
+import { rateLimiter } from '@/lib/services/rateLimiting'
 
 export type PasswordChangeState = {
   success?: boolean
@@ -45,6 +47,17 @@ export async function changePassword(
       )
     }
 
+    await verifyCSRFOrigin()
+
+    if (!rateLimiter.checkPasswordChangeLimit(user.id)) {
+      const resetTime = rateLimiter.getPasswordChangeResetTime(user.id)
+      const minutesRemaining = resetTime ? Math.ceil(resetTime / 60000) : 15
+      return {
+        success: false,
+        error: `Çok fazla şifre değiştirme denemesi. Lütfen ${minutesRemaining} dakika sonra tekrar deneyin.`
+      }
+    }
+
     // Verify current password by attempting to sign in
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: user.email,
@@ -52,6 +65,7 @@ export async function changePassword(
     })
 
     if (signInError) {
+      rateLimiter.recordPasswordChangeAttempt(user.id)
       // Use generic error message from catalog to avoid revealing security details
       // Don't expose whether the current password was wrong
       const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
@@ -68,6 +82,7 @@ export async function changePassword(
     })
 
     if (updateError) {
+      rateLimiter.recordPasswordChangeAttempt(user.id)
       // Use error catalog for consistent error messaging
       const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
       const errorEntry = getErrorEntry('GENERAL_OPERATION_FAILED')
@@ -76,6 +91,8 @@ export async function changePassword(
         error: errorEntry.userMessage
       }
     }
+
+    rateLimiter.resetPasswordChangeAttempts(user.id)
 
     return {
       success: true

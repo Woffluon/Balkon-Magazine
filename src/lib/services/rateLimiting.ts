@@ -25,16 +25,28 @@ interface RateLimitStore {
 export class RateLimiter {
   private loginAttempts: RateLimitStore = {}
   private uploadAttempts: RateLimitStore = {}
+  private passwordChangeAttempts: RateLimitStore = {}
+  private viewTrackingAttempts: RateLimitStore = {}
 
   // Configuration
   private readonly LOGIN_CONFIG: RateLimitConfig = {
-    maxAttempts: 999999, // Disabled - effectively unlimited
+    maxAttempts: 5,
     windowMs: 15 * 60 * 1000, // 15 minutes
   }
 
   private readonly UPLOAD_CONFIG: RateLimitConfig = {
     maxAttempts: 10,
     windowMs: 60 * 60 * 1000, // 1 hour
+  }
+
+  private readonly PASSWORD_CHANGE_CONFIG: RateLimitConfig = {
+    maxAttempts: 5,
+    windowMs: 15 * 60 * 1000, // 15 minutes
+  }
+
+  private readonly VIEW_TRACKING_CONFIG: RateLimitConfig = {
+    maxAttempts: 60,
+    windowMs: 5 * 60 * 1000, // 5 minutes
   }
 
   // Cleanup interval (run every 5 minutes)
@@ -93,6 +105,33 @@ export class RateLimiter {
    */
   resetUploadAttempts(userId: string): void {
     delete this.uploadAttempts[userId]
+  }
+
+  checkPasswordChangeLimit(userId: string): boolean {
+    return this.checkLimit(userId, this.passwordChangeAttempts, this.PASSWORD_CHANGE_CONFIG)
+  }
+
+  recordPasswordChangeAttempt(userId: string): void {
+    this.recordAttempt(userId, this.passwordChangeAttempts, this.PASSWORD_CHANGE_CONFIG)
+  }
+
+  resetPasswordChangeAttempts(userId: string): void {
+    delete this.passwordChangeAttempts[userId]
+  }
+
+  getPasswordChangeResetTime(userId: string): number | null {
+    const entry = this.passwordChangeAttempts[userId]
+    if (!entry) return null
+    const remaining = entry.resetTime - Date.now()
+    return remaining > 0 ? remaining : null
+  }
+
+  checkViewTrackingLimit(key: string): boolean {
+    return this.checkLimit(key, this.viewTrackingAttempts, this.VIEW_TRACKING_CONFIG)
+  }
+
+  recordViewTrackingAttempt(key: string): void {
+    this.recordAttempt(key, this.viewTrackingAttempts, this.VIEW_TRACKING_CONFIG)
   }
 
   /**
@@ -188,6 +227,18 @@ export class RateLimiter {
     for (const key in this.uploadAttempts) {
       if (now >= this.uploadAttempts[key].resetTime) {
         delete this.uploadAttempts[key]
+      }
+    }
+
+    for (const key in this.passwordChangeAttempts) {
+      if (now >= this.passwordChangeAttempts[key].resetTime) {
+        delete this.passwordChangeAttempts[key]
+      }
+    }
+
+    for (const key in this.viewTrackingAttempts) {
+      if (now >= this.viewTrackingAttempts[key].resetTime) {
+        delete this.viewTrackingAttempts[key]
       }
     }
   }

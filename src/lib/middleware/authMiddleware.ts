@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import type { Session } from '@supabase/supabase-js'
+import type { User } from '@supabase/supabase-js'
 
 /**
  * Requires authentication for server actions and API routes.
  * Redirects to /admin/login if user is not authenticated.
  * 
- * @returns The authenticated session
+ * @returns The authenticated user
  * @throws Redirects to login page if not authenticated
  * 
  * @example
@@ -17,22 +17,22 @@ import type { Session } from '@supabase/supabase-js'
  * }
  * ```
  */
-export async function requireAuth(): Promise<Session> {
+export async function requireAuth(): Promise<User> {
   const supabase = await createClient()
-  const { data: { session }, error } = await supabase.auth.getSession()
+  const { data: { user }, error } = await supabase.auth.getUser()
   
-  if (error || !session) {
+  if (error || !user) {
     redirect('/admin/login')
   }
   
-  return session
+  return user
 }
 
 /**
- * Optionally gets the current authentication session without redirecting.
+ * Optionally gets the current authenticated user without redirecting.
  * Returns null if user is not authenticated.
  * 
- * @returns The session if authenticated, null otherwise
+ * @returns The user if authenticated, null otherwise
  * 
  * @example
  * ```typescript
@@ -46,8 +46,8 @@ export async function requireAuth(): Promise<Session> {
  * }
  * ```
  */
-export async function getOptionalAuth(): Promise<Session | null> {
+export async function getOptionalAuth(): Promise<User | null> {
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
+  const { data: { user } } = await supabase.auth.getUser()
+  return user
 }

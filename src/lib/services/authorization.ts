@@ -11,6 +11,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { headers } from 'next/headers'
 import { logger } from '@/lib/services/Logger'
+import { env } from '@/lib/config/env'
 
 /**
  * Authorization context returned after successful admin verification
@@ -18,7 +19,7 @@ import { logger } from '@/lib/services/Logger'
 export interface AuthorizationContext {
   userId: string
   userEmail: string
-  userRole: string
+  userRole: 'admin'
 }
 
 /**
@@ -54,7 +55,7 @@ export async function requireAdmin(): Promise<AuthorizationContext> {
   const { logger } = await import('@/lib/services/Logger')
   const { getErrorEntry } = await import('@/lib/constants/errorCatalog')
   
-  // Get authenticated user (more secure than getSession)
+  // Get authenticated user from Supabase Auth
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   
   if (userError || !user) {
@@ -94,8 +95,7 @@ export async function requireAdmin(): Promise<AuthorizationContext> {
   
   logger.debug('User role verified', { userId, role: profile.role })
   
-  // Accept both 'admin' and 'user' roles
-  if (profile.role !== 'admin' && profile.role !== 'user') {
+  if (profile.role !== 'admin') {
     logger.warn('User attempted admin access without proper role', {
       operation: 'requireAdmin',
       userId,
@@ -126,7 +126,7 @@ export async function requireAdmin(): Promise<AuthorizationContext> {
 export async function verifyCSRFOrigin(): Promise<boolean> {
   const headersList = await headers()
   const origin = headersList.get('origin')
-  const host = headersList.get('host')
+  const allowedOrigins = getAllowedOrigins()
   
   // If no origin header, check referer as fallback
   if (!origin) {
@@ -137,7 +137,7 @@ export async function verifyCSRFOrigin(): Promise<boolean> {
     
     try {
       const refererUrl = new URL(referer)
-      if (refererUrl.host !== host) {
+      if (!allowedOrigins.has(refererUrl.origin)) {
         throw new CSRFError('CSRF validation failed: Referer host mismatch')
       }
       return true
@@ -149,12 +149,34 @@ export async function verifyCSRFOrigin(): Promise<boolean> {
   // Validate origin matches host
   try {
     const originUrl = new URL(origin)
-    if (originUrl.host !== host) {
+    if (!allowedOrigins.has(originUrl.origin)) {
       throw new CSRFError('CSRF validation failed: Origin host mismatch')
     }
     return true
   } catch {
     throw new CSRFError('CSRF validation failed: Invalid origin URL')
+  }
+}
+
+function getAllowedOrigins(): Set<string> {
+  const origins = new Set<string>()
+  addOrigin(origins, env.NEXT_PUBLIC_SITE_URL || 'https://balkondergi.com')
+
+  if (env.NODE_ENV !== 'production') {
+    addOrigin(origins, 'http://localhost:3000')
+    addOrigin(origins, 'http://127.0.0.1:3000')
+  }
+
+  return origins
+}
+
+function addOrigin(origins: Set<string>, url: string): void {
+  try {
+    origins.add(new URL(url).origin)
+  } catch {
+    logger.warn('Invalid CSRF allowlist URL ignored', {
+      operation: 'csrf_allowlist',
+    })
   }
 }
 
@@ -168,35 +190,10 @@ export async function verifyCSRFOrigin(): Promise<boolean> {
 export async function refreshSessionIfNeeded(): Promise<boolean> {
   const supabase = await createClient()
   
-  const { data: { session }, error } = await supabase.auth.getSession()
+  const { data: { user }, error } = await supabase.auth.getUser()
   
-  if (error || !session) {
+  if (error || !user) {
     return false
-  }
-  
-  // Check if session is within 5 minutes (300 seconds) of expiration
-  const expiresAt = session.expires_at
-  if (!expiresAt) {
-    return false
-  }
-  
-  const now = Math.floor(Date.now() / 1000) // Current time in seconds
-  const timeUntilExpiry = expiresAt - now
-  const fiveMinutes = 5 * 60 // 300 seconds
-  
-  // If session expires in less than 5 minutes, refresh it
-  if (timeUntilExpiry < fiveMinutes && timeUntilExpiry > 0) {
-    const { error: refreshError } = await supabase.auth.refreshSession()
-    
-    if (refreshError) {
-      logger.error('Failed to refresh session', {
-        error: refreshError,
-        operation: 'session_refresh'
-      })
-      return false
-    }
-    
-    return true
   }
   
   return false

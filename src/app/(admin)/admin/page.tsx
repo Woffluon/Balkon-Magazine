@@ -3,9 +3,11 @@ import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineR
 import { AdminDashboardClient } from './AdminDashboardClient'
 import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { logger } from '@/lib/services/Logger'
+import { requireAdmin } from '@/lib/services/authorization'
 import type { Metadata } from 'next'
 import type { Result } from '@/lib/errors/errorHandler'
 import type { Magazine } from '@/types/magazine'
+import { redirect } from 'next/navigation'
 
 export const metadata: Metadata = {
   title: 'Admin Paneli - Balkon Dergisi',
@@ -16,11 +18,19 @@ export const metadata: Metadata = {
 }
 
 export default async function AdminDashboard() {
-  // getAuthenticatedClient will redirect to login if not authenticated
-  const supabase = await getAuthenticatedClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  let authContext: Awaited<ReturnType<typeof requireAdmin>>
 
-  const userEmail = user?.email || ''
+  try {
+    authContext = await requireAdmin()
+  } catch (error) {
+    // Page-level guard: server actions should throw, but pages should redirect to login.
+    if (error instanceof Error && error.name === 'AuthorizationError') {
+      redirect('/admin/login')
+    }
+    throw error
+  }
+  const supabase = await getAuthenticatedClient()
+  const userEmail = authContext.userEmail
 
   // Use repository to fetch magazines
   const magazineRepository = new SupabaseMagazineRepository(supabase)
@@ -37,7 +47,7 @@ export default async function AdminDashboard() {
     logger.error('Failed to fetch magazines in admin page', {
       page: 'admin/page',
       operation: 'findAll',
-      userId: user?.id,
+      userId: authContext.userId,
       userEmail,
       error: {
         code: appError.code,

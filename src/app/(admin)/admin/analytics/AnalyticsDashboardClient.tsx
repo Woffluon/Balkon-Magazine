@@ -21,8 +21,6 @@ import {
 import {
     Area,
     AreaChart,
-    Bar,
-    BarChart,
     CartesianGrid,
     ResponsiveContainer,
     Tooltip,
@@ -66,7 +64,7 @@ export function AnalyticsDashboardClient({ initialData, userEmail, magazines }: 
             } else {
                 toast.error('Veriler güncellenirken bir hata oluştu.')
             }
-        } catch (error) {
+        } catch {
             toast.error('Beklenmeyen bir hata oluştu.')
         } finally {
             setLoading(false)
@@ -415,7 +413,7 @@ export function AnalyticsDashboardClient({ initialData, userEmail, magazines }: 
                                 <CardContent>
                                     <div className="space-y-4">
                                         {data.top_magazines.length > 0 ? (
-                                            data.top_magazines.slice(0, 5).map((mag, idx) => (
+                                            data.top_magazines.slice(0, 5).map((mag) => (
                                                 <div key={mag.id} className="flex items-center justify-between group cursor-default">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 group-hover:bg-red-50 group-hover:text-red-600 transition-colors">

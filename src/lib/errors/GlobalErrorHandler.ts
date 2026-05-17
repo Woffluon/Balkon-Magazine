@@ -60,14 +60,14 @@ export class GlobalErrorHandler {
 
     logger.error('Uncaught error', {
       message,
-      filename,
+      filename: this.stripUrlDetails(filename),
       lineno,
       colno,
       stack: error?.stack,
       errorName: error?.name,
       errorMessage: error?.message,
-      url: window.location.href,
-      userAgent: navigator.userAgent,
+      pathname: window.location.pathname,
+      userAgentFamily: this.getUserAgentFamily(navigator.userAgent),
     })
 
     // Don't prevent default behavior - let the browser handle it too
@@ -85,8 +85,8 @@ export class GlobalErrorHandler {
 
     logger.error('Unhandled promise rejection', {
       ...errorInfo,
-      url: window.location.href,
-      userAgent: navigator.userAgent,
+      pathname: window.location.pathname,
+      userAgentFamily: this.getUserAgentFamily(navigator.userAgent),
     })
 
     // Don't prevent default behavior - let the browser handle it too
@@ -121,6 +121,29 @@ export class GlobalErrorHandler {
       message: 'Unknown error',
       reason: String(reason),
     }
+  }
+
+  private stripUrlDetails(value: string): string {
+    try {
+      const url = new URL(value)
+      return url.pathname
+    } catch {
+      return value
+    }
+  }
+
+  private getUserAgentFamily(userAgent: string): string {
+    const normalized = userAgent.toLowerCase()
+
+    if (normalized.includes('iphone') || normalized.includes('android mobile')) {
+      return 'mobile'
+    }
+
+    if (normalized.includes('ipad') || normalized.includes('tablet') || normalized.includes('android')) {
+      return 'tablet'
+    }
+
+    return 'desktop'
   }
 }
 

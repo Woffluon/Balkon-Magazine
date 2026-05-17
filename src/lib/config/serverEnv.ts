@@ -8,7 +8,15 @@ const serverEnvSchema = z.object({
     .min(1, 'SUPABASE_SERVICE_ROLE_KEY cannot be empty'),
 })
 
+const r2ServerEnvSchema = z.object({
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+})
+
 export type ServerEnv = z.infer<typeof serverEnvSchema>
+export type R2ServerEnv = z.infer<typeof r2ServerEnvSchema>
 
 let cached: ServerEnv | null = null
 
@@ -37,4 +45,13 @@ export function getServerEnv(): ServerEnv {
   if (cached) return cached
   cached = validateServerEnv()
   return cached
+}
+
+export function getR2ServerEnv(): R2ServerEnv {
+  return r2ServerEnvSchema.parse({
+    R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+    R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+    R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
+  })
 }
