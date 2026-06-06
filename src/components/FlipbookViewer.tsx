@@ -14,6 +14,7 @@ import {
 import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 import type { PageFlipHandle, FlipEvent } from 'react-pageflip'
 import { ZoomContainer } from '@/components/reader/ZoomContainer'
+import { PageJumpInput } from '@/components/reader/PageJumpInput'
 
 const SafeFlipBook = dynamic(() => import('react-pageflip'), {
   ssr: false,
@@ -145,6 +146,32 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     setCurrentPage(pageNumber)
     setPageAnnouncement(`Sayfa ${pageNumber + 1} / ${pages.length}`)
   }, [pages.length])
+
+  const handlePageJump = useCallback((targetPageIndex: number) => {
+    if (!bookRef.current) {
+      logger.warn('Cannot jump to page: bookRef is null', {
+        component: 'FlipbookViewer',
+        operation: 'handlePageJump',
+        targetPageIndex
+      })
+      return
+    }
+
+    try {
+      const pageFlipInstance = bookRef.current.pageFlip()
+      if (!pageFlipInstance) {
+        throw new Error('pageFlip instance is not available')
+      }
+      pageFlipInstance.flip(targetPageIndex)
+    } catch (error) {
+      logger.error('Page jump failed', {
+        component: 'FlipbookViewer',
+        operation: 'handlePageJump',
+        targetPageIndex,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }, [])
 
   // Keyboard Navigation
   useEffect(() => {
@@ -286,10 +313,15 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             {isToolbarOpen ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
           </button>
 
-          <div className={`flex items-center gap-2 text-white/90 font-bold text-sm ${isToolbarOpen ? '' : 'hidden'}`}>
-            <span>{currentPage + 1}</span>
-            <span className="opacity-40 whitespace-nowrap">/ {pages.length}</span>
-          </div>
+          <PageJumpInput
+            currentPage={currentPage}
+            totalPages={pages.length}
+            isLocked={isLocked}
+            zoomLevel={zoomLevel}
+            isVisible={isToolbarOpen}
+            isMobile={isMobile}
+            onPageJump={handlePageJump}
+          />
 
           <div className={`h-6 w-px bg-white/10 ${isToolbarOpen ? '' : 'hidden'}`} />
 
