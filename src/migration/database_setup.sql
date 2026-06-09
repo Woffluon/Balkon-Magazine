@@ -230,6 +230,8 @@ CREATE POLICY "Admins can view all records"
 -- ============================================================================
 
 -- Görüntülenme tetikleyici RPC fonksiyonu
+-- Eski aşırı yüklenmiş imzaları temizlemek için fonksiyonu sil
+DROP FUNCTION IF EXISTS public.increment_magazine_view(UUID, UUID, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION public.increment_magazine_view(
     p_magazine_id UUID,
     p_session_id UUID DEFAULT NULL,

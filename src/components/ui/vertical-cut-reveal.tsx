@@ -1,7 +1,7 @@
-import { type HTMLMotionProps, motion, useInView } from "motion/react"
+import { type HTMLMotionProps, motion, useInView, useReducedMotion } from "motion/react"
 import type React from "react"
 import type { Variants } from "motion/react"
-import { useRef } from "react"
+import { useRef, useMemo } from "react"
 
 type TimelineContentProps<T extends keyof HTMLElementTagNameMap> = {
   children?: React.ReactNode
@@ -13,6 +13,23 @@ type TimelineContentProps<T extends keyof HTMLElementTagNameMap> = {
   once?: boolean
 } & HTMLMotionProps<T>
 
+const defaultSequenceVariants = {
+  visible: (i: number) => ({
+    filter: "blur(0px)",
+    y: 0,
+    opacity: 1,
+    transition: {
+      delay: i * 0.5,
+      duration: 0.5,
+    },
+  }),
+  hidden: {
+    filter: "blur(20px)",
+    y: 0,
+    opacity: 0,
+  },
+}
+
 export const TimelineContent = <T extends keyof HTMLElementTagNameMap = "div">({
   children,
   animationNum,
@@ -23,24 +40,27 @@ export const TimelineContent = <T extends keyof HTMLElementTagNameMap = "div">({
   once=false,
   ...props
 }: TimelineContentProps<T>) => {
-  const defaultSequenceVariants = {
-    visible: (i: number) => ({
-      filter: "blur(0px)",
-      y: 0,
-      opacity: 1,
-      transition: {
-        delay: i * 0.5,
-        duration: 0.5,
-      },
-    }),
-    hidden: {
-      filter: "blur(20px)",
-      y: 0,
-      opacity: 0,
-    },
-  }
 
-  const sequenceVariants = customVariants || defaultSequenceVariants
+  const shouldReduceMotion = useReducedMotion()
+
+  const sequenceVariants = useMemo(() => {
+    if (shouldReduceMotion) {
+      return {
+        visible: {
+          filter: "blur(0px)",
+          y: 0,
+          opacity: 1,
+          transition: { duration: 0 }
+        },
+        hidden: {
+          filter: "blur(0px)",
+          y: 0,
+          opacity: 1,
+        }
+      }
+    }
+    return customVariants || defaultSequenceVariants
+  }, [shouldReduceMotion, customVariants])
 
   const isInView = useInView(timelineRef, {
     once
@@ -93,6 +113,7 @@ export default function VerticalCutReveal({
 }: VerticalCutRevealProps) {
   const ref = useRef<HTMLDivElement>(null)
   const isInView = useInView(ref, { once: true })
+  const shouldReduceMotion = useReducedMotion()
 
   const splitText = splitBy === "words" ? children.split(" ") : children.split("")
   
@@ -113,9 +134,9 @@ export default function VerticalCutReveal({
       {splitText.map((item, index) => (
         <motion.span
           key={index}
-          initial={{ y: 50, opacity: 0 }}
-          animate={isInView ? { y: 0, opacity: 1 } : { y: 50, opacity: 0 }}
-          transition={{
+          initial={shouldReduceMotion ? { y: 0, opacity: 1 } : { y: 50, opacity: 0 }}
+          animate={isInView ? { y: 0, opacity: 1 } : (shouldReduceMotion ? { y: 0, opacity: 1 } : { y: 50, opacity: 0 })}
+          transition={shouldReduceMotion ? { duration: 0 } : {
             ...transition,
             delay: (transition.delay || 0) + getDelay(index),
           }}

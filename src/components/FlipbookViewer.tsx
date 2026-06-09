@@ -15,6 +15,7 @@ import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 import type { PageFlipHandle, FlipEvent } from 'react-pageflip'
 import { ZoomContainer } from '@/components/reader/ZoomContainer'
 import { PageJumpInput } from '@/components/reader/PageJumpInput'
+import { usePassiveEventListener } from '@/lib/performance-utils'
 
 const SafeFlipBook = dynamic(() => import('react-pageflip'), {
   ssr: false,
@@ -52,6 +53,12 @@ function validateImageUrls(urls: unknown): string[] {
 export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'default-mag' }: FlipbookViewerProps) {
   const pages = useMemo(() => validateImageUrls(imageUrls), [imageUrls])
   const bookRef = useRef<PageFlipHandle | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Passive event listeners to prevent scroll delays on mobile touch devices
+  usePassiveEventListener(containerRef, 'touchstart', () => {})
+  usePassiveEventListener(containerRef, 'touchmove', () => {})
+
   const [currentPage, setCurrentPage] = useState(0)
   const [preloadedPages, setPreloadedPages] = useState<Set<number>>(new Set())
   const [failedPages, setFailedPages] = useState<Set<number>>(new Set())
@@ -173,6 +180,17 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     }
   }, [])
 
+  const prefetchNextPageImage = useCallback(() => {
+    const nextIdx = currentPage + 1
+    if (nextIdx < pages.length && !preloadedPages.has(nextIdx) && !failedPages.has(nextIdx)) {
+      const img = new window.Image()
+      img.src = pages[nextIdx]
+      img.onload = () => {
+        setPreloadedPages(prev => new Set([...prev, nextIdx]))
+      }
+    }
+  }, [currentPage, pages, preloadedPages, failedPages])
+
   // Keyboard Navigation
   useEffect(() => {
     const handleKeyboardNavigation = (keyboardEvent: KeyboardEvent) => {
@@ -203,6 +221,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
 
   return (
     <div
+      ref={containerRef}
       className="w-full h-full flex flex-col items-center justify-center relative select-none touch-none"
       role="region"
       aria-label="Dergi görüntüleyici"
@@ -287,6 +306,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             <button
               type="button"
               onClick={() => bookRef.current?.pageFlip().flipNext()}
+              onMouseEnter={prefetchNextPageImage}
               className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-100 disabled:hidden"
               disabled={currentPage === pages.length - 1}
             >

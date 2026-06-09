@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import * as pdfjs from 'pdfjs-dist'
+import type * as PDFJSType from 'pdfjs-dist'
 import { PDF_CONFIG, IMAGE_CONFIG } from '@/lib/constants/upload'
 import { createRenderContext } from '@/types/pdfjs'
 import { logger } from '@/lib/services/Logger'
@@ -49,54 +49,6 @@ export interface UsePDFProcessorReturn {
   error: Error | null
 }
 
-/**
- * Custom hook for PDF processing with progress tracking
- * 
- * Encapsulates PDF parsing logic using pdf.js, extracting pages as WebP images
- * with efficient memory management and progress tracking.
- * 
- * Satisfies Requirement 2.2: PDF parsing, page extraction as images,
- * progress tracking, and efficient memory handling
- * 
- * @returns PDF processing function and state tracking
- * 
- * @example
- * ```tsx
- * function PDFUploader() {
- *   const { processPDF, totalPages, processedPages, isProcessing, error } = usePDFProcessor()
- *   
- *   const handlePDFUpload = async (file: File) => {
- *     try {
- *       const result = await processPDF(file, {
- *         targetHeight: 2000,
- *         quality: 0.85,
- *         onProgress: (current, total) => {
- *           console.log(`Processing page ${current}/${total}`)
- *         }
- *       })
- *       
- *       console.log(`Extracted ${result.pages.length} pages`)
- *       // Upload pages...
- *     } catch (err) {
- *       console.error('PDF processing failed:', err)
- *     }
- *   }
- *   
- *   return (
- *     <div>
- *       <input type="file" accept="application/pdf" onChange={(e) => {
- *         const file = e.target.files?.[0]
- *         if (file) handlePDFUpload(file)
- *       }} />
- *       {isProcessing && (
- *         <div>Processing: {processedPages}/{totalPages} pages</div>
- *       )}
- *       {error && <div>Error: {error.message}</div>}
- *     </div>
- *   )
- * }
- * ```
- */
 export function usePDFProcessor(): UsePDFProcessorReturn {
   const [totalPages, setTotalPages] = useState<number>(0)
   const [processedPages, setProcessedPages] = useState<number>(0)
@@ -105,27 +57,17 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
 
   // Use ref to store PDF document so it persists across renders
   // and can be properly cleaned up
-  const pdfDocRef = useRef<pdfjs.PDFDocumentProxy | null>(null)
+  const pdfDocRef = useRef<PDFJSType.PDFDocumentProxy | null>(null)
 
   /**
    * Renders a single PDF page to a WebP blob
-   * 
-   * Creates a canvas, renders the PDF page to it, and converts to WebP format.
-   * Properly cleans up canvas resources after conversion to prevent memory leaks.
-   * 
-   * @param page - The PDF page to render
-   * @param targetHeight - Target height in pixels
-   * @param quality - WebP quality (0.0 - 1.0)
-   * @returns Promise resolving to the WebP blob
-   * @throws {Error} If canvas context is unavailable or rendering fails
    */
   const renderPageToBlob = useCallback(
     async (
-      page: pdfjs.PDFPageProxy,
+      page: PDFJSType.PDFPageProxy,
       targetHeight: number,
       quality: number
     ): Promise<Blob> => {
-      // Validate inputs using type guards (Requirement 7.2)
       const validatedTargetHeight = ValidationHelpers.validateOrThrow(
         targetHeight,
         TypeGuards.isPositiveNumber,
@@ -154,13 +96,6 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
       }
 
       try {
-        /* logger.debug('Starting PDF page render', {
-          hook: 'usePDFProcessor',
-          operation: 'renderPageToBlob',
-          targetHeight: validatedTargetHeight,
-          quality: validatedQuality
-        }) */
-
         // Calculate scale to achieve target height
         const viewport = page.getViewport({ scale: 1 })
         const scale = validatedTargetHeight / viewport.height
@@ -169,19 +104,9 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
         canvas.width = Math.ceil(scaledViewport.width)
         canvas.height = Math.ceil(scaledViewport.height)
 
-        /* logger.debug('Canvas dimensions calculated', {
-          hook: 'usePDFProcessor',
-          operation: 'renderPageToBlob',
-          canvasWidth: canvas.width,
-          canvasHeight: canvas.height,
-          scale
-        }) */
-
-        // Render PDF page to canvas using type-safe render context
         const renderContext = createRenderContext(canvasContext, scaledViewport, canvas)
         await page.render(renderContext).promise
 
-        // Convert canvas to WebP blob with standardized promise handling (Requirement 7.3)
         return await createStandardizedPromise<Blob>(
           (resolve, reject) => {
             if (!canvas) {
@@ -192,12 +117,6 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
             canvas.toBlob(
               (blob) => {
                 if (blob) {
-                  /* logger.debug('Canvas converted to blob successfully', {
-                    hook: 'usePDFProcessor',
-                    operation: 'renderPageToBlob',
-                    blobSize: blob.size,
-                    blobType: blob.type
-                  }) */
                   resolve(blob)
                 } else {
                   reject(new Error('Failed to convert canvas to blob'))
@@ -207,7 +126,6 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
               validatedQuality
             )
 
-            // Return cleanup function
             return () => {
               if (canvas) {
                 canvas.width = 0
@@ -226,7 +144,6 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
           }
         )
       } finally {
-        // Cleanup canvas resources to prevent memory leaks
         if (canvas) {
           canvas.width = 0
           canvas.height = 0
@@ -238,21 +155,8 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
     []
   )
 
-  /**
-   * Processes a PDF file and extracts all pages as WebP images
-   * 
-   * Loads the PDF using pdf.js, renders each page to a canvas, and converts
-   * to WebP format. Tracks progress and handles memory efficiently by cleaning
-   * up resources after each page.
-   * 
-   * @param file - The PDF file to process
-   * @param options - Processing options
-   * @returns Promise resolving to the processed PDF with all pages
-   * @throws {Error} If PDF loading or rendering fails
-   */
   const processPDF = useCallback(
     async (file: File, options?: PDFProcessorOptions): Promise<ProcessedPDF> => {
-      // Validate inputs using type guards (Requirement 7.2)
       if (!TypeGuards.isFile(file)) {
         const error = new Error('Invalid file parameter: must be File instance')
         logger.error('PDF processing validation failed', {
@@ -264,35 +168,38 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
         throw error
       }
 
-      // Reset state for new processing
       setProcessedPages(0)
       setTotalPages(0)
       setIsProcessing(true)
       setError(null)
 
-      logger.info('Starting PDF processing', {
+      logger.info('Starting PDF processing with dynamic pdfjs-dist', {
         hook: 'usePDFProcessor',
         operation: 'processPDF',
         fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
+        fileSize: file.size
       })
 
       try {
-        // Execute PDF processing with standardized async patterns (Requirement 7.1)
         const processingResult = await executeAsyncOperation(
           async () => {
-            // Set PDF.js worker
+            // 1. Dynamically import pdfjs-dist
+            const pdfjs = await import('pdfjs-dist')
             pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC
 
-            // Load PDF document
             const pdfBuffer = await file.arrayBuffer()
             const pdfDoc = await pdfjs.getDocument({ data: pdfBuffer }).promise
             pdfDocRef.current = pdfDoc
 
-            const pages: Blob[] = []
+            const numPages = ValidationHelpers.validateOrThrow(
+              pdfDoc.numPages,
+              TypeGuards.isPositiveInteger,
+              'positive integer',
+              'pdfDoc.numPages'
+            )
 
-            // Validate processing options with type guards
+            setTotalPages(numPages)
+
             const targetHeight = ValidationHelpers.validateOrDefault(
               options?.targetHeight,
               TypeGuards.isPositiveNumber,
@@ -307,72 +214,65 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
               'options.quality'
             )
 
-            const numPages = ValidationHelpers.validateOrThrow(
-              pdfDoc.numPages,
-              TypeGuards.isPositiveInteger,
-              'positive integer',
-              'pdfDoc.numPages'
-            )
+            const pages: Blob[] = new Array(numPages)
+            let completedCount = 0
 
-            setTotalPages(numPages)
-
-            logger.info('PDF document loaded successfully', {
-              hook: 'usePDFProcessor',
-              operation: 'processPDF',
-              numPages,
-              targetHeight,
-              quality
-            })
-
-            // Process each page with proper error handling
-            for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+            // Helper task to execute page rendering and clean up resources immediately
+            const renderTask = async (pageNumber: number) => {
+              const pdfPage = await pdfDoc.getPage(pageNumber)
               try {
-                const pdfPage = await pdfDoc.getPage(pageNumber)
                 const pageBlob = await renderPageToBlob(pdfPage, targetHeight, quality)
+                pages[pageNumber - 1] = pageBlob
+                completedCount++
+                setProcessedPages(completedCount)
 
-                pages.push(pageBlob)
-                setProcessedPages(pageNumber)
-
-                /* logger.debug('PDF page processed successfully', {
-                  hook: 'usePDFProcessor',
-                  operation: 'processPDF',
-                  pageNumber,
-                  totalPages: numPages,
-                  blobSize: pageBlob.size
-                }) */
-
-                // Call progress callback with validation
                 if (options?.onProgress && typeof options.onProgress === 'function') {
                   try {
-                    options.onProgress(pageNumber, numPages)
-                  } catch (callbackError) {
-                    logger.warn('Progress callback failed', {
-                      hook: 'usePDFProcessor',
-                      operation: 'processPDF',
-                      pageNumber,
-                      error: callbackError instanceof Error ? callbackError.message : String(callbackError)
-                    })
+                    options.onProgress(completedCount, numPages)
+                  } catch {
+                    // Ignore callback error
                   }
                 }
-
-                // Small delay every 5 pages to prevent UI freeze
-                if (pageNumber % 5 === 0) {
-                  await new Promise(resolve => setTimeout(resolve, 10))
+              } finally {
+                // 3. Immediately dispose page resources to save memory
+                try {
+                  pdfPage.cleanup()
+                } catch {
+                  // Silently ignore cleanup errors
                 }
-              } catch (pageError) {
-                const handledError = ErrorHandler.handleUnknownError(pageError)
-                logger.error('PDF page processing failed', {
-                  hook: 'usePDFProcessor',
-                  operation: 'processPDF',
-                  pageNumber,
-                  error: handledError.message
-                })
-                throw handledError
               }
             }
 
+            // 4. Concurrency pool limiting concurrent page rendering to 3
+            const limit = 3
+            const executing: Promise<void>[] = []
+            
+            for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+              const p = renderTask(pageNumber)
+              executing.push(p)
+              
+              if (executing.length >= limit) {
+                // Wait for the fastest task to complete before starting next one
+                await Promise.race(executing.map(pRef => pRef.catch(() => {})))
+                // Clean up references to completed promises in list
+                // (Using index filter of resolving promises)
+              }
+              
+              // Evict finished promises
+              p.then(() => {
+                const idx = executing.indexOf(p)
+                if (idx > -1) executing.splice(idx, 1)
+              }).catch(() => {
+                const idx = executing.indexOf(p)
+                if (idx > -1) executing.splice(idx, 1)
+              })
+            }
+            
+            // Wait for all remaining active rendering tasks
+            await Promise.all(executing)
+
             return {
-              pages,
+              pages: pages.filter(Boolean),
               totalPages: numPages
             }
           },
@@ -388,48 +288,20 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
           throw processingResult.error
         }
 
-        logger.info('PDF processing completed successfully', {
-          hook: 'usePDFProcessor',
-          operation: 'processPDF',
-          fileName: file.name,
-          totalPages: processingResult.data.totalPages,
-          pagesProcessed: processingResult.data.pages.length
-        })
-
         return processingResult.data
       } catch (err) {
-        // Handle errors with standardized error handling (Requirement 4.1)
         const processingError = ErrorHandler.handleUnknownError(err)
-
-        logger.error('PDF processing failed', {
-          hook: 'usePDFProcessor',
-          operation: 'processPDF',
-          fileName: file.name,
-          fileSize: file.size,
-          error: processingError.message,
-          userMessage: processingError.userMessage
-        })
-
         setError(processingError)
         throw processingError
       } finally {
-        // Always cleanup PDF document resources
         if (pdfDocRef.current) {
           try {
             pdfDocRef.current.destroy()
             pdfDocRef.current = null
-
-            logger.debug('PDF document resources cleaned up', {
-              hook: 'usePDFProcessor',
-              operation: 'processPDF',
-              fileName: file.name
-            })
           } catch (cleanupError) {
             logger.warn('PDF document cleanup failed', {
               hook: 'usePDFProcessor',
-              operation: 'processPDF',
-              fileName: file.name,
-              error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+              error: cleanupError
             })
           }
         }

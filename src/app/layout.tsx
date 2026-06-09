@@ -7,16 +7,20 @@ import { Toaster } from "@/components/ui/toaster";
 import { GlobalErrorHandlerProvider } from "@/components/GlobalErrorHandlerProvider";
 import { env } from "@/lib/config/env";
 import { escapeJsonLd } from "@/lib/security/jsonLd";
+import WebVitalsReporter from "@/components/WebVitalsReporter";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -246,10 +250,25 @@ export default async function RootLayout({
         <link rel="icon" href="/favicon.png" type="image/png" sizes="16x16" />
         <link rel="apple-touch-icon" href="/favicon.png" sizes="180x180" />
         <link rel="shortcut icon" href="/favicon.png" />
+
+        {/* Resource Hints */}
+        {env.NEXT_PUBLIC_R2_PUBLIC_URL && (
+          <link rel="preconnect" href={env.NEXT_PUBLIC_R2_PUBLIC_URL} crossOrigin="anonymous" />
+        )}
+        {env.NEXT_PUBLIC_SUPABASE_URL && (
+          <link rel="preconnect" href={env.NEXT_PUBLIC_SUPABASE_URL} crossOrigin="anonymous" />
+        )}
+        <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+        <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+
+        {/* Preload critical assets */}
+        <link rel="preload" href="/hero_image.webp" as="image" fetchPriority="high" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
+        <WebVitalsReporter />
+        <ServiceWorkerRegister />
         {/* Structured Data for Sezai Karakoç Anadolu Lisesi Balkon Magazine */}
         <Script
           id="structured-data"

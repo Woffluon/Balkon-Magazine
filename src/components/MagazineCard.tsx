@@ -6,6 +6,7 @@ import { getMagazineCoverUrl } from '@/lib/utils/storage'
 import { logger } from '@/lib/services/Logger'
 import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
+import OptimizedImage from '@/components/OptimizedImage'
 
 type Props = {
   magazine: Magazine
@@ -127,24 +128,13 @@ export const MagazineCard = React.memo(function MagazineCard({ magazine, isLates
         <div className="relative w-full h-full overflow-hidden rounded-xl">
           {coverUrl ? (
             <>
-              {/* eslint-disable-next-line @next/next/no-img-element -- Storage provider returns already optimized WebP cover assets. */}
-              <img
+              <OptimizedImage
                 src={coverUrl}
                 alt={`${validatedMagazine.title} kapak görseli - Sayı ${validatedMagazine.issue_number}`}
                 className="absolute inset-0 w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
                 style={{ willChange: 'transform' }}
+                fill
                 loading="lazy"
-                onError={() => {
-                  // Handle image load error with proper logging (Requirement 4.1)
-                  logger.warn('Magazine cover image failed to load', {
-                    component: 'MagazineCard',
-                    operation: 'coverImageOnError',
-                    magazineId: validatedMagazine.id,
-                    issueNumber: validatedMagazine.issue_number,
-                    coverUrl,
-                    error: 'Image load error'
-                  })
-                }}
               />
 
               {/* Gradient overlay */}

@@ -456,6 +456,66 @@ The analytics system uses:
 - **Retry Logic** — Failed flushes re-queue (max 100 pending)
 - **Graceful Degradation** — Fallback UUIDs if database unavailable
 
+## ⚡ Performance & Mobile Optimizations
+
+The platform is equipped with enterprise-grade performance optimizations to deliver the best experience on mobile networks (3G/2G) and low-end devices:
+
+1. **Bundle Analysis & Code Splitting**:
+   - JS bundle composition is optimized using `@next/bundle-analyzer`.
+   - Webpack `splitChunks` configuration dynamically separates large libraries (`pdfjs-dist`, `recharts`, `react-pageflip`) into dedicated chunks.
+   - Non-critical pages and components (e.g., Admin Analytics) are lazily loaded via dynamic imports (`next/dynamic`).
+
+2. **Connection-Aware OptimizedImage**:
+   - Network Information API integration scales image quality to 60% on slow networks (2G/3G) or when Data Saver is active, and 90% quality on fast connections.
+   - Gaussian blur SVG filters generate dynamic Base64 blur placeholders to prevent Layout Shifts (CLS).
+   - Priority loading (`priority` and `fetchpriority="high"`) is active for LCP candidate images.
+
+3. **Offline Support & Caching Strategies (Service Worker)**:
+   - Static assets (CSS, JS, Fonts) use a browser-level **Cache-First** strategy.
+   - Magazine pages utilize a **Stale-While-Revalidate** caching mechanism. The image cache is constrained by a 50MB LRU (Least Recently Used) eviction policy.
+   - If connection is lost entirely, a custom-designed `/offline.html` fallback page is presented to the user.
+
+4. **Runtime & Animation Optimizations**:
+   - Custom utility hooks (`useDebounce`, `useThrottle`, and `usePassiveEventListener` for touch/scroll events) are utilized to minimize main thread blocking.
+   - Intensive components and computations are optimized using `React.memo`, `useMemo`, and `useCallback`.
+   - Respects `prefers-reduced-motion` media queries to disable CPU-intensive animations for users requesting reduced motion.
+   - PDF rendering operations are throttled to a maximum concurrency of 3, and memory is reclaimed instantly via page cleanup to prevent browser memory leaks.
+
+5. **Performance Monitoring (Web Vitals) & Budget Control**:
+   - Track Core Web Vitals (LCP, FID, CLS, FCP, TTFB, INP) across all pages using `next/web-vitals`.
+   - Warns on budget overruns in development console, and logs metrics to `/api/analytics/vitals` using `navigator.sendBeacon` in production to be recorded in Supabase.
+   - Performance dashboards are available at `/admin/performance` with visual charts to track metrics over time.
+
+## ⚡ Performans ve Mobil Optimizasyonları
+
+Platform, mobil ağlarda (3G/2G) ve düşük donanımlı cihazlarda en iyi deneyimi sunmak için kurumsal düzeyde performans optimizasyonlarıyla donatılmıştır:
+
+1. **Paket Analizi ve Kod Bölme**:
+   - `@next/bundle-analyzer` entegrasyonu ile JavaScript paket bileşimi optimize edilmiştir.
+   - Webpack `splitChunks` yapılandırması sayesinde büyük kütüphaneler (`pdfjs-dist`, `recharts`, `react-pageflip`) ayrı JavaScript parçalarına bölünmüştür.
+   - Kritik olmayan sayfalar ve bileşenler (örn. Yönetici İstatistikleri) dynamic imports (`next/dynamic`) ile tembelce yüklenir.
+
+2. **Bağlantı Hızına Duyarlı OptimizedImage**:
+   - Network Information API entegrasyonu ile 2G/3G veya veri tasarrufu (save-data) etkin ağlarda görseller %60 kalitede, hızlı ağlarda ise %90 kalitede sunulur.
+   - SVG Gauss Bulanıklığı filtreleri kullanılarak oluşturulan dinamik Base64 görsel yer tutucuları (blur placeholders) ile sayfa düzeni kayması (CLS) önlenir.
+   - LCP adayı görseller için öncelikli yükleme (`priority` ve `fetchpriority="high"`) etkindir.
+
+3. **Çevrimdışı Çalışma ve Önbellek Stratejileri (Service Worker)**:
+   - Statik varlıklar (CSS, JS, Yazı Tipleri) için tarayıcı düzeyinde **Cache-First** stratejisi uygulanır.
+   - Dergi sayfaları görselleri için **Stale-While-Revalidate** önbellek yöntemi kullanılır. Görüntü önbelleği 50MB LRU (en son kullanılan) tahliye politikasıyla sınırlandırılmıştır.
+   - Bağlantı tamamen koptuğunda kullanıcıya özel tasarlanmış `/offline.html` hata sayfası sunulur.
+
+4. **Çalışma Zamanı ve Animasyon İyileştirmeleri**:
+   - `useDebounce`, `useThrottle` ve dokunmatik/kaydırma olaylarının performansını artıran `usePassiveEventListener` özel kancaları (hooks) yazılmıştır.
+   - Pahalı bileşenler ve hesaplamalar için `React.memo`, `useMemo` ve `useCallback` optimizasyonları uygulanmıştır.
+   - `prefers-reduced-motion` ortam sorgusu (media query) algılanarak animasyonları devre dışı bırakma desteği eklenmiştir.
+   - PDF oluşturma/çizim işlemlerinde eş zamanlı işlem limiti 3 olarak sınırlandırılmış ve bellek sızıntılarını önlemek için PDF.js nesneleri anında bellekten temizlenir.
+
+5. **Performans İzleme (Web Vitals) ve Bütçe Kontrolü**:
+   - Tüm sayfalarda LCP, FID, CLS, FCP, TTFB, INP metrikleri `next/web-vitals` ile izlenir.
+   - Geliştirme ortamında bütçe aşımlarında konsola uyarı basılır. Üretim ortamında ise performans metrikleri `navigator.sendBeacon` ile `/api/analytics/vitals` API'sine ve oradan Supabase veritabanına kaydedilir.
+   - Yönetici panelindeki `/admin/performance` ekranından bu metrikler görsel bütçe grafikeriyle izlenebilmektedir.
+
 ---
 
 ## 🤝 Contributing

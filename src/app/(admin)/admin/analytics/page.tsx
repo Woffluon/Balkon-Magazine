@@ -1,6 +1,6 @@
 import { getAuthenticatedClient } from '@/lib/supabase/server'
 import { getAnalyticsDashboardData } from '@/app/actions/analytics-actions'
-import { AnalyticsDashboardClient } from './AnalyticsDashboardClient'
+import { DynamicAnalyticsDashboard } from '@/lib/dynamic-imports'
 import { logger } from '@/lib/services/Logger'
 import { requireAdmin } from '@/lib/services/authorization'
 import type { Metadata } from 'next'
@@ -76,7 +76,7 @@ export default async function AnalyticsPage() {
     }
 
     return (
-        <AnalyticsDashboardClient
+        <DynamicAnalyticsDashboard
             initialData={result.data}
             userEmail={userEmail}
             magazines={magazines || []}

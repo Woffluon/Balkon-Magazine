@@ -1,6 +1,4 @@
-import dynamic from 'next/dynamic'
 import { headers } from 'next/headers'
-import FlipbookViewerSkeleton from '@/components/FlipbookViewerSkeleton'
 import { FlipbookViewerErrorBoundary } from '@/components/FlipbookViewerErrorBoundary'
 import { createPublicClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
@@ -12,10 +10,7 @@ import { env } from '@/lib/config/env'
 import { escapeJsonLd } from '@/lib/security/jsonLd'
 import { validatePageNumber } from '@/lib/validators/urlValidation'
 import { sortFilesByNumber } from '@/lib/utils/fileSort'
-
-const FlipbookViewer = dynamic(() => import('@/components/FlipbookViewer'), {
-  loading: () => <FlipbookViewerSkeleton />,
-})
+import { DynamicFlipbookViewer } from '@/lib/dynamic-imports'
 
 import {
   Breadcrumb,
@@ -247,7 +242,7 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
         <div className="reader-aspect-ratio-box">
           {imageUrls.length > 0 ? (
             <FlipbookViewerErrorBoundary issueNumber={sayi}>
-              <FlipbookViewer imageUrls={imageUrls} magazineId={magazine.id} />
+              <DynamicFlipbookViewer imageUrls={imageUrls} magazineId={magazine.id} />
             </FlipbookViewerErrorBoundary>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-900 rounded-lg">
