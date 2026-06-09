@@ -40,6 +40,7 @@
     "@supabase/storage-js": "^2.105.4",
     "@supabase/supabase-js": "^2.97.0",
     "@tanstack/react-query": "^5.90.16",
+    "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.542.0",
@@ -66,12 +67,12 @@
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.18",
+    "import-in-the-middle": "3.0.1",
+    "require-in-the-middle": "8.0.1",
     "tailwindcss": "^4",
     "tsx": "^4.19.2",
     "tw-animate-css": "^1.3.8",
-    "typescript": "^5",
-    "import-in-the-middle": "3.0.1",
-    "require-in-the-middle": "8.0.1"
+    "typescript": "^5"
   },
   "pnpm": {
     "overrides": {

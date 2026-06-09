@@ -9,6 +9,7 @@ import { env } from "@/lib/config/env";
 import { escapeJsonLd } from "@/lib/security/jsonLd";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -281,6 +282,7 @@ export default async function RootLayout({
         <GlobalErrorHandlerProvider />
         <Toaster />
         <AppShell>{children}</AppShell>
+        <Analytics />
       </body>
     </html>
   );
