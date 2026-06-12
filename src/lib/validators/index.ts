@@ -31,6 +31,8 @@ export {
 export * from './formDataSchemas'
 export * from './errorSchemas'
 export * from './urlValidation'
+export * from './analytics'
+
 
 // Enhanced validation helpers
 export * from './validationHelpers'

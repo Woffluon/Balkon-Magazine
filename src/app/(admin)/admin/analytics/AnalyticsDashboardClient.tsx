@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { UserMenu } from '../UserMenu'
-import type { AnalyticsDashboardData } from '@/app/actions/analytics-actions'
+import type { AnalyticsDashboardData, PageAnalyticsData } from '@/app/actions/analytics-actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
     ArrowLeft, 
@@ -21,6 +21,8 @@ import {
 import {
     Area,
     AreaChart,
+    Bar,
+    BarChart,
     CartesianGrid,
     ResponsiveContainer,
     Tooltip,
@@ -31,7 +33,7 @@ import {
     Cell,
     Legend
 } from 'recharts'
-import { getAnalyticsDashboardData } from '@/app/actions/analytics-actions'
+import { getAnalyticsDashboardData, getPageAnalytics } from '@/app/actions/analytics-actions'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { motion } from 'motion/react'
@@ -53,6 +55,28 @@ export function AnalyticsDashboardClient({ initialData, userEmail, magazines }: 
     const [days, setDays] = useState<number>(30)
     const [selectedMagazineId, setSelectedMagazineId] = useState<string>('all')
     const [loading, setLoading] = useState(false)
+    const [pageAnalytics, setPageAnalytics] = useState<PageAnalyticsData[]>([])
+    const [pageAnalyticsLoading, setPageAnalyticsLoading] = useState(false)
+
+    const fetchPageAnalytics = async (magId: string, daysVal: number) => {
+        if (magId === 'all') {
+            setPageAnalytics([])
+            return
+        }
+        setPageAnalyticsLoading(true)
+        try {
+            const result = await getPageAnalytics(magId, daysVal)
+            if (result.success) {
+                setPageAnalytics(result.data)
+            } else {
+                toast.error('Sayfa analizleri yüklenirken bir hata oluştu.')
+            }
+        } catch {
+            toast.error('Sayfa analizleri yüklenirken beklenmeyen bir hata oluştu.')
+        } finally {
+            setPageAnalyticsLoading(false)
+        }
+    }
 
     const handleFilterChange = async (newDays: number, newMagId: string) => {
         setLoading(true)
@@ -64,6 +88,8 @@ export function AnalyticsDashboardClient({ initialData, userEmail, magazines }: 
             } else {
                 toast.error('Veriler güncellenirken bir hata oluştu.')
             }
+
+            await fetchPageAnalytics(newMagId, newDays)
         } catch {
             toast.error('Beklenmeyen bir hata oluştu.')
         } finally {
@@ -101,6 +127,24 @@ export function AnalyticsDashboardClient({ initialData, userEmail, magazines }: 
             value: item.count
         }))
     }, [data.device_stats])
+
+    const funnelData = useMemo(() => {
+        if (pageAnalytics.length === 0) return []
+        
+        const page1Data = pageAnalytics.find(p => p.page_number === 1)
+        const page1UniqueViewers = page1Data?.unique_viewers || 0
+
+        return pageAnalytics.map(item => {
+            const percentage = page1UniqueViewers > 0
+                ? Math.round((item.unique_viewers / page1UniqueViewers) * 100)
+                : 0
+
+            return {
+                ...item,
+                percentage
+            }
+        })
+    }, [pageAnalytics])
 
     const COLORS = ['#dc2626', '#3b82f6', '#10b981', '#f59e0b']
 
@@ -439,7 +483,152 @@ export function AnalyticsDashboardClient({ initialData, userEmail, magazines }: 
                         </motion.div>
                     </div>
                 </div>
+
+                {/* Page Level Engagement & Funnel Analysis */}
+                {selectedMagazineId !== 'all' ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                        {/* Heatmap Bar Chart */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                        >
+                            <Card className="border-none shadow-sm rounded-2xl">
+                                <CardHeader>
+                                    <CardTitle className="text-lg font-bold text-slate-900">Sayfa Okuma Süreleri</CardTitle>
+                                    <CardDescription className="font-medium text-slate-400">Sayfa başına geçirilen ortalama süre (saniye)</CardDescription>
+                                </CardHeader>
+                                <CardContent className="pb-6">
+                                    {pageAnalyticsLoading ? (
+                                        <PageAnalyticsSkeleton />
+                                    ) : pageAnalytics.length > 0 ? (
+                                        <div className="h-[300px] w-full relative">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={pageAnalytics} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                    <XAxis
+                                                        dataKey="page_number"
+                                                        tickFormatter={(page) => `S. ${page}`}
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 500 }}
+                                                    />
+                                                    <YAxis
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 500 }}
+                                                        width={30}
+                                                    />
+                                                    <Tooltip
+                                                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                                        itemStyle={{ fontSize: '13px', fontWeight: 600 }}
+                                                        labelFormatter={(page) => `Sayfa ${page}`}
+                                                    />
+                                                    <Bar
+                                                        dataKey="average_duration_seconds"
+                                                        name="Ort. Süre (sn)"
+                                                        fill="#3b82f6"
+                                                        radius={[4, 4, 0, 0]}
+                                                        animationDuration={1500}
+                                                    />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    ) : (
+                                        <PageAnalyticsEmptyState />
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+
+                        {/* Drop-off Funnel Chart */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                        >
+                            <Card className="border-none shadow-sm rounded-2xl">
+                                <CardHeader>
+                                    <CardTitle className="text-lg font-bold text-slate-900">Okuyucu Düşüş Hunisi</CardTitle>
+                                    <CardDescription className="font-medium text-slate-400">1. sayfaya göre sayfaları ziyaret edenlerin oranı (%)</CardDescription>
+                                </CardHeader>
+                                <CardContent className="pb-6">
+                                    {pageAnalyticsLoading ? (
+                                        <PageAnalyticsSkeleton />
+                                    ) : pageAnalytics.length > 0 ? (
+                                        <div className="h-[300px] w-full relative">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={funnelData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                    <defs>
+                                                        <linearGradient id="colorPercentage" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="#dc2626" stopOpacity={0.15} />
+                                                            <stop offset="95%" stopColor="#dc2626" stopOpacity={0} />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                    <XAxis
+                                                        dataKey="page_number"
+                                                        tickFormatter={(page) => `S. ${page}`}
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 500 }}
+                                                    />
+                                                    <YAxis
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 500 }}
+                                                        width={35}
+                                                        domain={[0, 100]}
+                                                        tickFormatter={(val) => `${val}%`}
+                                                    />
+                                                    <Tooltip
+                                                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                                        itemStyle={{ fontSize: '13px', fontWeight: 600 }}
+                                                        labelFormatter={(page) => `Sayfa ${page}`}
+                                                    />
+                                                    <Area
+                                                        type="monotone"
+                                                        dataKey="percentage"
+                                                        name="Okuyucu Oranı"
+                                                        stroke="#dc2626"
+                                                        strokeWidth={3}
+                                                        fillOpacity={1}
+                                                        fill="url(#colorPercentage)"
+                                                        animationDuration={1500}
+                                                    />
+                                                </AreaChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    ) : (
+                                        <PageAnalyticsEmptyState />
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    </div>
+                ) : (
+                    <Card className="border-none shadow-sm rounded-2xl p-8 mt-8 flex flex-col items-center justify-center text-center bg-slate-50 border border-dashed border-slate-200">
+                        <BookOpen className="w-12 h-12 text-slate-300 mb-3" />
+                        <h3 className="text-lg font-bold text-slate-700">Sayfa Bazlı Analizler</h3>
+                        <p className="text-sm text-slate-400 max-w-md mt-1">
+                            Sayfa bazlı okuma sürelerini ve okuyucu düşüş (huni) grafiğini görüntülemek için yukarıdan belirli bir dergi sayısı seçin.
+                        </p>
+                    </Card>
+                )}
             </div>
         </main>
     )
 }
+
+const PageAnalyticsSkeleton = () => (
+    <div className="animate-pulse space-y-4">
+        <div className="h-[250px] bg-slate-100 rounded-2xl" />
+    </div>
+)
+
+const PageAnalyticsEmptyState = () => (
+    <div className="w-full h-[250px] flex flex-col items-center justify-center text-slate-400 gap-2">
+        <BarChart3 className="w-12 h-12 opacity-20" />
+        <p className="font-medium">Bu sayı için henüz sayfa okuma verisi bulunmuyor.</p>
+    </div>
+)

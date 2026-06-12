@@ -16,6 +16,7 @@ import type { PageFlipHandle, FlipEvent } from 'react-pageflip'
 import { ZoomContainer } from '@/components/reader/ZoomContainer'
 import { PageJumpInput } from '@/components/reader/PageJumpInput'
 import { usePassiveEventListener } from '@/lib/performance-utils'
+import { useReaderEngagement } from '@/hooks/useReaderEngagement'
 
 const SafeFlipBook = dynamic(() => import('react-pageflip'), {
   ssr: false,
@@ -63,6 +64,9 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
   const [preloadedPages, setPreloadedPages] = useState<Set<number>>(new Set())
   const [failedPages, setFailedPages] = useState<Set<number>>(new Set())
   const [pageAnnouncement, setPageAnnouncement] = useState('')
+
+  // Track active page engagement durations
+  const { trackPageChange } = useReaderEngagement(magazineId, 0)
 
   // -- Reader State --
   const [isLocked, setIsLocked] = useState(false)
@@ -152,7 +156,8 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     const pageNumber = ValidationHelpers.validateOrDefault(flipEvent.data, isNumber, 0, 'onFlip')
     setCurrentPage(pageNumber)
     setPageAnnouncement(`Sayfa ${pageNumber + 1} / ${pages.length}`)
-  }, [pages.length])
+    trackPageChange(pageNumber)
+  }, [pages.length, trackPageChange])
 
   const handlePageJump = useCallback((targetPageIndex: number) => {
     if (!bookRef.current) {

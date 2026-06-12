@@ -7,6 +7,7 @@ import { logger } from '@/lib/services/Logger'
 import { ErrorHandler, type Result } from '@/lib/errors/errorHandler'
 import { rateLimiter } from '@/lib/services/rateLimiting'
 import { requireAdmin } from '@/lib/services/authorization'
+import { PageEngagementBatchSchema, type PageEngagementEvent } from '@/lib/validators'
 
 const VIEWER_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -203,6 +204,121 @@ export async function getAnalyticsDashboardData(
         const appError = ErrorHandler.handleUnknownError(error)
         logger.error('Failed to fetch analytics data', {
             operation: 'getAnalyticsDashboardData',
+            error: appError
+        })
+        return ErrorHandler.failure(appError)
+    }
+}
+
+/**
+ * Tracks a batch of page engagement events. Called from client hook.
+ */
+export async function trackPageEngagement(events: PageEngagementEvent[]): Promise<Result<void>> {
+    try {
+        const validationResult = PageEngagementBatchSchema.safeParse(events)
+        if (!validationResult.success) {
+            const appError = ErrorHandler.handleUnknownError(new Error('Invalid page engagement payload'))
+            logger.warn('Validation failed for page engagement events', {
+                operation: 'trackPageEngagement',
+                errors: validationResult.error.issues
+            })
+            return ErrorHandler.failure(appError)
+        }
+
+        const validatedEvents = validationResult.data
+
+        const cookieStore = await cookies()
+        let sessionId = cookieStore.get('viewer_session')?.value
+
+        if (!sessionId || !isUuid(sessionId)) {
+            sessionId = crypto.randomUUID()
+            cookieStore.set('viewer_session', sessionId, {
+                maxAge: VIEWER_COOKIE_MAX_AGE_SECONDS,
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
+            })
+        }
+
+        const { createPublicClient } = await import('@/lib/supabase/server')
+        const supabase = createPublicClient()
+
+        const rows = validatedEvents.map(event => ({
+            session_id: sessionId,
+            magazine_id: event.magazineId,
+            page_number: event.pageNumber,
+            duration_seconds: event.durationSeconds,
+        }))
+
+        const { error } = await supabase
+            .from('page_engagement')
+            .insert(rows)
+
+        if (error) {
+            logger.error('Failed to write page engagement to database', {
+                operation: 'trackPageEngagement',
+                errorCode: error.code,
+                errorMessage: error.message
+            })
+            const appError = ErrorHandler.handleSupabaseError(error, 'insert', 'page_engagement')
+            return ErrorHandler.failure(appError)
+        }
+
+        return ErrorHandler.success(undefined)
+    } catch (error) {
+        const appError = ErrorHandler.handleUnknownError(error)
+        logger.error('Unexpected error tracking page engagement', {
+            operation: 'trackPageEngagement',
+            error: appError
+        })
+        return ErrorHandler.failure(appError)
+    }
+}
+
+export interface PageAnalyticsData {
+    page_number: number
+    total_views: number
+    unique_viewers: number
+    average_duration_seconds: number
+}
+
+/**
+ * Fetches page view drop-off and engagement heatmaps for the admin dashboard.
+ */
+export async function getPageAnalytics(magazineId: string, days: number): Promise<Result<PageAnalyticsData[]>> {
+    try {
+        await requireAdmin()
+        if (!isUuid(magazineId)) {
+            const validationError = ErrorHandler.handleUnknownError(new Error('Invalid magazine id'))
+            return ErrorHandler.failure(validationError)
+        }
+
+        const supabase = await getAuthenticatedClient()
+
+        const { data, error } = await supabase.rpc('get_page_analytics', {
+            p_magazine_id: magazineId,
+            p_days: days
+        })
+
+        if (error) {
+            logger.error('Failed to fetch page analytics', {
+                operation: 'getPageAnalytics',
+                magazineId,
+                days,
+                error
+            })
+            const appError = ErrorHandler.handleSupabaseError(error, 'select', 'page_engagement')
+            return ErrorHandler.failure(appError)
+        }
+
+        return ErrorHandler.success(data as PageAnalyticsData[])
+    } catch (error) {
+        const appError = ErrorHandler.handleUnknownError(error)
+        logger.error('Unexpected error fetching page analytics', {
+            operation: 'getPageAnalytics',
+            magazineId,
+            days,
             error: appError
         })
         return ErrorHandler.failure(appError)
