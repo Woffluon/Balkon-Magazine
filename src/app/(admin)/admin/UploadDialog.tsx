@@ -15,6 +15,7 @@ import { UploadLogs } from './components/UploadLogs'
 import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
 import { saveUploadLog } from './actions'
 import { useSupabaseClient } from '@/hooks/useSupabaseClient'
+import { ImageProcessor } from '@/lib/processors/ImageProcessor'
 import { categorizeError, showError, showSuccess } from '@/lib/utils/uploadErrors'
 import { logger } from '@/lib/services/Logger'
 import { IdempotencyManager } from '@/lib/services/IdempotencyManager'
@@ -297,7 +298,9 @@ export default function UploadDialog() {
     const coverPath = `${issueNumber}/${APP_CONFIG.storage.fileNaming.coverFilename}`
 
     try {
-      await uploadToStorage(coverPath, formState.cover)
+      const processor = new ImageProcessor()
+      const result = await processor.process(formState.cover)
+      await uploadToStorage(coverPath, result.blob)
       updateCoverProgress(100, true) // 100% complete
       addLog('Kapak görseli yükleme tamamlandı')
     } catch (error) {

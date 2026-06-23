@@ -228,11 +228,12 @@ export function useFileUpload(
               contentType
             })
 
-            // Call server action to upload file using FormData to bypass React serialization limits for large arrays
+            // Call server action to upload file using FormData with a File object to bypass React serialization limits
             // Requirements 14.1, 14.4, 14.5: Use server action with server-side client
+            const fileToUpload = new File([arrayBuffer], 'upload', { type: contentType })
             const formData = new FormData()
             formData.append('path', validatedPath)
-            formData.append('file', new Blob([arrayBuffer], { type: contentType }))
+            formData.append('file', fileToUpload)
             formData.append('contentType', contentType)
 
             const result = await uploadFileToStorage(formData)
