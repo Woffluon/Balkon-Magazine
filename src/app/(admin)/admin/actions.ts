@@ -570,7 +570,7 @@ async function performFileUpload(path: string, fileData: ArrayBuffer, contentTyp
  * Requirements 14.1-14.5:
  * - 14.1: Server action for file uploads instead of client-side calls
  * - 14.2: Marked with "use server" directive
- * - 14.3: Accepts ArrayBuffer from client (converted from File)
+ * - 14.3: Accepts FormData containing the file and metadata, extracting ArrayBuffer on the server (to bypass React serialization limits)
  * - 14.4: Uses server-side Supabase client with proper authentication
  * - 14.5: Returns success/error status to client
  * 
@@ -584,20 +584,30 @@ async function performFileUpload(path: string, fileData: ArrayBuffer, contentTyp
  * - Authentication and validation
  * - File upload execution
  * 
- * @param path - The storage path for the file
- * @param fileData - The file data as ArrayBuffer
- * @param contentType - The MIME type of the file
+ * @param formData - The FormData containing path, file (as Blob/File), and contentType
  * @returns Result<void> indicating success or failure
  */
 export async function uploadFileToStorage(
-  path: string,
-  fileData: ArrayBuffer,
-  contentType: string
+  formData: FormData
 ): Promise<Result<void>> {
   const { logger } = await import('@/lib/services/Logger')
   const { ErrorHandler } = await import('@/lib/errors/errorHandler')
   
+  const path = formData.get('path') as string
+  const file = formData.get('file') as File
+  const contentType = formData.get('contentType') as string
+
   try {
+    if (!path || !file || !contentType) {
+      throw new ValidationError(
+        'Missing upload parameters',
+        'formData',
+        'required',
+        'Yükleme parametreleri eksik.'
+      )
+    }
+
+    const fileData = await file.arrayBuffer()
     await validateFileUploadRequest(path, fileData, contentType)
     await performFileUpload(path, fileData, contentType)
     
@@ -605,8 +615,8 @@ export async function uploadFileToStorage(
   } catch (error) {
     logger.error('Server-side upload error', {
       operation: 'uploadFileToStorage',
-      path,
-      contentType,
+      path: path || 'unknown',
+      contentType: contentType || 'unknown',
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined
     })

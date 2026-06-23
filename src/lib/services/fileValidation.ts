@@ -27,7 +27,7 @@ const MAGIC_NUMBERS = {
  * File size limits in bytes
  */
 export const FILE_SIZE_LIMITS = {
-  PDF: 50 * 1024 * 1024, // 50MB
+  PDF: 500 * 1024 * 1024, // 500MB
   IMAGE: 10 * 1024 * 1024, // 10MB
 } as const
 

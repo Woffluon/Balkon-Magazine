@@ -9,11 +9,11 @@
  * Server action configuration
  */
 export const SERVER_ACTION_CONFIG = {
-  /** Maximum body size for server actions (50MB) */
-  BODY_SIZE_LIMIT: '50mb' as const,
+  /** Maximum body size for server actions (500MB) */
+  BODY_SIZE_LIMIT: '500mb' as const,
   
   /** Maximum body size in bytes */
-  BODY_SIZE_LIMIT_BYTES: 50 * 1024 * 1024,
+  BODY_SIZE_LIMIT_BYTES: 500 * 1024 * 1024,
   
   /** Request timeout in milliseconds (5 minutes) */
   REQUEST_TIMEOUT: 5 * 60 * 1000,

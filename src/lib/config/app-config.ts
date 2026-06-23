@@ -91,14 +91,14 @@ export const UPLOAD_CONFIG = {
    * File upload limits and constraints
    */
   limits: {
-    /** Maximum file size for server action uploads (50MB in bytes) */
-    maxBodySize: 50 * 1024 * 1024,
+    /** Maximum file size for server action uploads (500MB in bytes) */
+    maxBodySize: 500 * 1024 * 1024,
     /** Maximum file size for server action uploads (human-readable) */
-    maxBodySizeMB: 50,
+    maxBodySizeMB: 500,
     /** Maximum number of pages allowed in a PDF */
     maxPdfPages: 500,
-    /** Maximum individual file size for client uploads (100MB in bytes) */
-    maxClientFileSize: 100 * 1024 * 1024,
+    /** Maximum individual file size for client uploads (500MB in bytes) */
+    maxClientFileSize: 500 * 1024 * 1024,
     /** Number of concurrent page uploads to process in parallel */
     concurrentUploads: 5,
   },
