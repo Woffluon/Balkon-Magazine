@@ -204,7 +204,7 @@ export function Footer() {
             <p className="text-gray-500 text-xs">
               Made by{" "}
               <a
-                href="https://efearabaci.vercel.app"
+                href="https://xn--efearabac-3pb.com/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-red-500 hover:text-red-600 transition-colors font-medium"
