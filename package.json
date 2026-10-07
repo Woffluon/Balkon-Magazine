@@ -10,8 +10,9 @@
     "student-publication",
     "sezai-karakoc-anadolu-lisesi"
   ],
+  "packageManager": "pnpm@10.5.2",
   "engines": {
-    "node": ">=18.0.0",
+    "node": ">=18.0.0 <=22.x",
     "npm": ">=8.0.0"
   },
   "scripts": {
