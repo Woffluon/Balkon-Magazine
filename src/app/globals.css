@@ -295,4 +295,24 @@
       aspect-ratio: 1696 / 1200;
     }
   }
+
+  /* Reader Skeleton Shimmer */
+  @keyframes reader-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-reader-shimmer {
+    animation: reader-shimmer 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-reader-shimmer {
+      animation: none;
+    }
+  }
 }

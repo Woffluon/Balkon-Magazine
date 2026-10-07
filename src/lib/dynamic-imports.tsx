@@ -3,6 +3,7 @@
 import React from 'react'
 import dynamic from 'next/dynamic'
 import { logger } from '@/lib/services/Logger'
+import FlipbookViewerSkeleton from '@/components/FlipbookViewerSkeleton'
 
 // 1. FlipbookViewer (ssr: false)
 export const DynamicFlipbookViewer = dynamic(
@@ -20,12 +21,7 @@ export const DynamicFlipbookViewer = dynamic(
     }),
   {
     ssr: false,
-    loading: () => (
-      <div className="h-[600px] flex flex-col items-center justify-center bg-neutral-900 text-sm text-neutral-400 gap-3">
-        <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-        <p>Dergi Görüntüleyici Yükleniyor...</p>
-      </div>
-    ),
+    loading: () => <FlipbookViewerSkeleton />,
   }
 )
 

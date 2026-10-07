@@ -55,12 +55,33 @@ export const FLIPBOOK_SETTINGS = {
 } as const
 
 /**
+ * Timing constants for flip animations
+ */
+export const NORMAL_FLIP_DURATION = 450
+export const RAPID_FLIP_DURATION = 250
+export const RAPID_FLIP_THRESHOLD_MS = 600
+export const PAGES_AHEAD = 6
+export const PAGES_BEHIND = 2
+
+/**
  * Page preloading configuration
  */
 export const FLIPBOOK_PRELOAD = {
   /** Number of pages to preload ahead of current page */
-  PAGES_AHEAD: 3,
+  PAGES_AHEAD,
   
+  /** Number of pages to preload behind current page */
+  PAGES_BEHIND,
+
+  /** Normal flip animation duration in milliseconds */
+  NORMAL_FLIP_DURATION,
+
+  /** Rapid flip animation duration in milliseconds */
+  RAPID_FLIP_DURATION,
+
+  /** Threshold in milliseconds between flips to consider it rapid flipping */
+  RAPID_FLIP_THRESHOLD_MS,
+
   /** Whether to preload the current page */
   PRELOAD_CURRENT: true,
   
@@ -76,3 +97,4 @@ export const FLIPBOOK_CONFIG = {
   SETTINGS: FLIPBOOK_SETTINGS,
   PRELOAD: FLIPBOOK_PRELOAD,
 } as const
+

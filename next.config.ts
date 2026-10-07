@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import crypto from "crypto";
 import { env } from "./src/lib/env";
 import bundleAnalyzer from "@next/bundle-analyzer";
 
@@ -76,11 +77,13 @@ const nextConfig: NextConfig = {
             },
             // Split other large vendors
             lib: {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               test(module: any) {
                 return module.size() > 80000 && /node_modules/.test(module.identifier());
               },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               name(module: any) {
-                const hash = require('crypto')
+                const hash = crypto
                   .createHash('sha1')
                   .update(module.identifier())
                   .digest('hex')

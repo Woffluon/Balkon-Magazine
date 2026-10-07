@@ -3,12 +3,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 // import Image from 'next/image'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Lock, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Lock, Unlock, Volume2, VolumeX, ZoomIn, ZoomOut } from 'lucide-react'
 import { logger } from '@/lib/services/Logger'
+import { pageFlipAudio } from '@/lib/audio/pageFlipAudio'
 // import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { APP_CONFIG } from '@/lib/config/app-config'
 import {
-  createStandardizedPromise,
+  NORMAL_FLIP_DURATION,
+  RAPID_FLIP_DURATION,
+  RAPID_FLIP_THRESHOLD_MS,
+  PAGES_AHEAD,
+  PAGES_BEHIND
+} from '@/lib/constants/flipbook'
+import { prefetchSlidingWindow, idlePrefetchAllPages } from '@/lib/utils/pagePrefetcher'
+import {
   isNumber
 } from '@/lib/utils/asyncPatterns'
 import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
@@ -73,6 +81,31 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
   const [zoomLevel, setZoomLevel] = useState(1)
   const [isMobile, setIsMobile] = useState(false)
   const [isToolbarOpen, setIsToolbarOpen] = useState(true)
+  const [isAudioMuted, setIsAudioMuted] = useState(() => pageFlipAudio.getMuted())
+  const isFirstFlipRef = useRef(true)
+
+  // Dynamic flip animation speed (450ms default, 250ms when flipping rapidly)
+  const [flippingTime, setFlippingTime] = useState<number>(NORMAL_FLIP_DURATION)
+  const lastFlipTimestampRef = useRef<number>(0)
+
+  const triggerDynamicFlipSpeed = useCallback(() => {
+    const now = Date.now()
+    const delta = now - lastFlipTimestampRef.current
+    lastFlipTimestampRef.current = now
+
+    if (delta > 0 && delta < RAPID_FLIP_THRESHOLD_MS) {
+      setFlippingTime(RAPID_FLIP_DURATION)
+    } else {
+      setFlippingTime(NORMAL_FLIP_DURATION)
+    }
+  }, [])
+
+  // Audio preload & mute synchronization
+  useEffect(() => {
+    pageFlipAudio.preload().catch(() => {})
+    const unsubscribe = pageFlipAudio.subscribe(setIsAudioMuted)
+    return unsubscribe
+  }, [])
 
   // Responsive spread detection & Scroll lock
   useEffect(() => {
@@ -107,57 +140,51 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     }
   }, [magazineId])
 
-  // Image preload
+  // High-performance Sliding Window Prefetch & Decode (Tier 1 & Tier 2)
   useEffect(() => {
-    const abortController = new AbortController()
-    const { signal } = abortController
+    let isCancelled = false
 
-    const { pagesAhead } = APP_CONFIG.magazine.preload
-    const nextIndices = Array.from({ length: pagesAhead }, (_, i) => currentPage + i + 1)
+    prefetchSlidingWindow(pages, currentPage, {
+      ahead: PAGES_AHEAD,
+      behind: PAGES_BEHIND,
+    })
+      .then((decodedUrls) => {
+        if (isCancelled) return
+        setPreloadedPages((prev) => {
+          const nextSet = new Set(prev)
+          pages.forEach((url, idx) => {
+            if (decodedUrls.includes(url)) {
+              nextSet.add(idx)
+            }
+          })
+          return nextSet
+        })
+      })
+      .catch(() => {})
 
-    const preloadImages = async () => {
-      const preloadPromises = nextIndices
-        .filter(idx => idx < pages.length && !preloadedPages.has(idx) && !failedPages.has(idx))
-        .map(idx =>
-          createStandardizedPromise<void>(
-            (resolve, reject) => {
-              if (signal.aborted) {
-                reject(new Error('Preload cancelled'))
-                return
-              }
-              const img = new window.Image()
-              const cleanup = () => { img.onload = null; img.onerror = null }
-
-              img.onload = () => {
-                if (!signal.aborted) setPreloadedPages(prev => new Set([...prev, idx]))
-                resolve()
-              }
-              img.onerror = () => {
-                if (!signal.aborted) setFailedPages(prev => new Set([...prev, idx]))
-                resolve()
-              }
-              img.src = pages[idx]
-              return cleanup
-            },
-            { timeout: 10000, context: { component: 'FlipbookViewer', operation: 'preloadImage' } }
-          )
-        )
-
-      if (preloadPromises.length > 0) {
-        await Promise.allSettled(preloadPromises)
-      }
+    return () => {
+      isCancelled = true
     }
+  }, [currentPage, pages])
 
-    preloadImages().catch(() => { })
-    return () => abortController.abort()
-  }, [currentPage, pages, preloadedPages, failedPages])
+  // Passive Background Idle Prefetch of Entire Magazine (Tier 3)
+  useEffect(() => {
+    const cancelIdle = idlePrefetchAllPages(pages, currentPage)
+    return cancelIdle
+  }, [pages, currentPage])
 
   const onFlip = useCallback((flipEvent: FlipEvent) => {
+    triggerDynamicFlipSpeed()
     const pageNumber = ValidationHelpers.validateOrDefault(flipEvent.data, isNumber, 0, 'onFlip')
     setCurrentPage(pageNumber)
     setPageAnnouncement(`Sayfa ${pageNumber + 1} / ${pages.length}`)
     trackPageChange(pageNumber)
-  }, [pages.length, trackPageChange])
+    if (!isFirstFlipRef.current) {
+      pageFlipAudio.play()
+    } else {
+      isFirstFlipRef.current = false
+    }
+  }, [pages.length, trackPageChange, triggerDynamicFlipSpeed])
 
   const handlePageJump = useCallback((targetPageIndex: number) => {
     if (!bookRef.current) {
@@ -170,6 +197,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     }
 
     try {
+      triggerDynamicFlipSpeed()
       const pageFlipInstance = bookRef.current.pageFlip()
       if (!pageFlipInstance) {
         throw new Error('pageFlip instance is not available')
@@ -183,7 +211,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
         error: error instanceof Error ? error.message : String(error)
       })
     }
-  }, [])
+  }, [triggerDynamicFlipSpeed])
 
   const prefetchNextPageImage = useCallback(() => {
     const nextIdx = currentPage + 1
@@ -204,8 +232,10 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
 
       try {
         if (keyboardEvent.key === 'ArrowRight') {
+          triggerDynamicFlipSpeed()
           bookRef.current.pageFlip().flipNext()
         } else if (keyboardEvent.key === 'ArrowLeft') {
+          triggerDynamicFlipSpeed()
           bookRef.current.pageFlip().flipPrev()
         }
       } catch {
@@ -214,7 +244,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     }
     window.addEventListener('keydown', handleKeyboardNavigation)
     return () => window.removeEventListener('keydown', handleKeyboardNavigation)
-  }, [pages.length, isLocked])
+  }, [pages.length, isLocked, triggerDynamicFlipSpeed])
 
   // -- Zoom Control --
   const zoomRef = useRef<{ zoomIn: () => void; zoomOut: () => void; reset: () => void }>(null)
@@ -257,7 +287,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             drawShadow
             usePortrait={isMobile}
             startPage={0}
-            flippingTime={1000}
+            flippingTime={flippingTime}
             useMouseEvents={!isLocked && zoomLevel === 1}
             swipeDistance={30}
             showPageCorners={false}
@@ -268,28 +298,30 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             style={{ margin: '0 auto' }}
           >
             {pages.map((url, index) => {
-              const { pagesAhead } = APP_CONFIG.magazine.preload
-              const shouldLoad = Math.abs(index - currentPage) <= pagesAhead + 1 || preloadedPages.has(index)
+              const shouldLoad = Math.abs(index - currentPage) <= PAGES_AHEAD || preloadedPages.has(index)
 
               return (
-                <div key={index} className="page relative bg-neutral-800 shadow-2xl overflow-hidden">
+                <div
+                  key={index}
+                  className="page relative bg-neutral-800 shadow-2xl overflow-hidden [will-change:transform] [transform:translateZ(0)] [backface-visibility:hidden]"
+                >
                   {shouldLoad ? (
                     // eslint-disable-next-line @next/next/no-img-element -- Pageflip needs raw img sizing and lazy page-level loading.
                     <img
                       src={url}
                       alt={`Sayfa ${index + 1}`}
-                      className="absolute inset-0 w-full h-full object-fill" /* Replicating fill + objectFit: 'fill' */
+                      className="absolute inset-0 w-full h-full object-fill [will-change:transform]" /* Replicating fill + objectFit: 'fill' */
                       loading={Math.abs(index - currentPage) <= 1 ? "eager" : "lazy"}
                       onError={() => setFailedPages(prev => new Set([...prev, index]))}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+                    <div className="w-full h-full flex items-center justify-center bg-[#1a1d23] animate-reader-shimmer">
                       <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                     </div>
                   )}
                   {/* Subtle spine line for double spread realism */}
                   {!isMobile && index % 2 !== 0 && (
-                    <div className="absolute top-0 right-0 w-px h-full bg-black/10 z-10" />
+                    <div className="absolute top-0 right-0 w-px h-full bg-black/15 z-10 pointer-events-none" />
                   )}
                 </div>
               )
@@ -302,7 +334,10 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
           <>
             <button
               type="button"
-              onClick={() => bookRef.current?.pageFlip().flipPrev()}
+              onClick={() => {
+                triggerDynamicFlipSpeed()
+                bookRef.current?.pageFlip().flipPrev()
+              }}
               className="absolute left-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-100 disabled:hidden"
               disabled={currentPage === 0}
             >
@@ -310,7 +345,10 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             </button>
             <button
               type="button"
-              onClick={() => bookRef.current?.pageFlip().flipNext()}
+              onClick={() => {
+                triggerDynamicFlipSpeed()
+                bookRef.current?.pageFlip().flipNext()
+              }}
               onMouseEnter={prefetchNextPageImage}
               className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-100 disabled:hidden"
               disabled={currentPage === pages.length - 1}
@@ -377,6 +415,16 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
           </div>
 
           <div className={`h-6 w-px bg-white/10 ${isToolbarOpen ? '' : 'hidden'}`} />
+
+          <button
+            type="button"
+            onClick={() => pageFlipAudio.toggleMute()}
+            className={`p-2 rounded-full transition-colors ${isToolbarOpen ? '' : 'hidden'} ${isAudioMuted ? 'text-white/40 hover:text-white/70 hover:bg-white/10' : 'text-white/80 hover:bg-white/10'}`}
+            title={isAudioMuted ? 'Sesi Aç' : 'Sesi Kapat'}
+            aria-label={isAudioMuted ? 'Sesi Aç' : 'Sesi Kapat'}
+          >
+            {isAudioMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+          </button>
 
           <button
             onClick={() => setIsLocked(!isLocked)}

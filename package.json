@@ -20,6 +20,7 @@
     "start": "next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
+    "test": "npx tsx --test src/lib/utils/__tests__/*.test.ts src/lib/audio/__tests__/*.test.ts",
     "clean": "rm -rf .next",
     "configure:r2-cors": "tsx configure-r2-cors.ts",
     "postinstall": "node scripts/copy-pdf-worker.mjs",

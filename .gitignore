@@ -55,5 +55,6 @@ reports
 .turbo
 
 # Custom
+.codegraph
 analizler
 .agents
