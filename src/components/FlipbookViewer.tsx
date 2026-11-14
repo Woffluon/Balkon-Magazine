@@ -22,7 +22,7 @@ import {
   isNumber
 } from '@/lib/utils/asyncPatterns'
 import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
-import type { PageFlipHandle, FlipEvent } from 'react-pageflip'
+import type { PageFlipAPI, PageFlipHandle, FlipEvent } from 'react-pageflip'
 import { FlipbookPage, createPageWindowStore } from '@/components/reader/FlipbookPage'
 import { ZoomContainer, type ZoomContainerRef } from '@/components/reader/ZoomContainer'
 import { PageJumpInput } from '@/components/reader/PageJumpInput'
@@ -72,6 +72,8 @@ function handlePageImageError(pageIndex: number): void {
 export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'default-mag' }: FlipbookViewerProps) {
   const pages = useMemo(() => validateImageUrls(imageUrls), [imageUrls])
   const bookRef = useRef<PageFlipHandle | null>(null)
+  const activePageFlipRef = useRef<PageFlipAPI | null>(null)
+  const scheduleUpdateRef = useRef<(() => void) | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerBoxRef = useRef<HTMLDivElement>(null)
 
@@ -111,10 +113,20 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     const delta = now - lastFlipTimestampRef.current
     lastFlipTimestampRef.current = now
 
-    if (delta > 0 && delta < RAPID_FLIP_THRESHOLD_MS) {
-      setFlippingTime(RAPID_FLIP_DURATION)
-    } else {
-      setFlippingTime(NORMAL_FLIP_DURATION)
+    const nextFlippingTime =
+      delta > 0 && delta < RAPID_FLIP_THRESHOLD_MS
+        ? RAPID_FLIP_DURATION
+        : NORMAL_FLIP_DURATION
+
+    setFlippingTime(nextFlippingTime)
+
+    try {
+      const settings = bookRef.current?.pageFlip()?.getSettings?.()
+      if (settings) {
+        settings.flippingTime = nextFlippingTime
+      }
+    } catch {
+      // Ignore if pageFlip instance is not ready yet
     }
   }, [])
 
@@ -155,6 +167,18 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     }
   }, [])
 
+  // Clean up previous PageFlip UI handlers when switching portrait/landscape or unmounting
+  useEffect(() => {
+    return () => {
+      try {
+        activePageFlipRef.current?.getUI?.()?.removeHandlers?.()
+      } catch {
+        // Ignore cleanup errors if instance already torn down
+      }
+      activePageFlipRef.current = null
+    }
+  }, [isMobile])
+
   // Sync pageFlip layout and boxWidth on container resize, F11 fullscreen, and F12/visualViewport changes
   const hasPages = pages.length > 0
   useEffect(() => {
@@ -170,8 +194,27 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
         boxWidthRef.current = nextWidth
         setBoxWidth(nextWidth)
       }
+      const effectiveWidth = nextWidth > 0 ? nextWidth : (boxWidthRef.current || 300)
+      const targetMinWidth = isMobileRef.current
+        ? Math.max(100, Math.min(effectiveWidth, Math.ceil(effectiveWidth * 0.6)))
+        : 100
+
       try {
-        bookRef.current?.pageFlip()?.update()
+        const pf = bookRef.current?.pageFlip()
+        if (pf) {
+          activePageFlipRef.current = pf
+          const settings = pf.getSettings?.()
+          if (settings) {
+            settings.minWidth = targetMinWidth
+            settings.minHeight = 100
+          }
+          const stfParent = boxEl.querySelector<HTMLElement>('.stf__parent')
+          if (stfParent) {
+            stfParent.style.minWidth = `${targetMinWidth * (isMobileRef.current ? 1 : 2)}px`
+            stfParent.style.minHeight = '100px'
+          }
+          pf.update()
+        }
       } catch {
         // Ignore if pageFlip instance is not ready yet
       }
@@ -184,6 +227,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
       rafId = requestAnimationFrame(syncSize)
     }
 
+    scheduleUpdateRef.current = scheduleUpdate
     syncSize()
 
     const resizeObserver = typeof ResizeObserver !== 'undefined'
@@ -198,6 +242,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     window.visualViewport?.addEventListener('resize', scheduleUpdate)
 
     return () => {
+      scheduleUpdateRef.current = null
       if (rafId !== null) {
         cancelAnimationFrame(rafId)
       }
@@ -207,6 +252,15 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
       window.visualViewport?.removeEventListener('resize', scheduleUpdate)
     }
   }, [hasPages])
+
+  const handleFlipbookInit = useCallback(() => {
+    try {
+      activePageFlipRef.current = bookRef.current?.pageFlip() ?? null
+    } catch {
+      // Ignore if pageFlip instance is not ready yet
+    }
+    scheduleUpdateRef.current?.()
+  }, [])
 
   // Analytics View Tracking
   useEffect(() => {
@@ -391,6 +445,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             showPageCorners={false}
             disableFlipByClick={isLocked || zoomLevel > 1}
             mobileScrollSupport={!isLocked && zoomLevel === 1}
+            onInit={handleFlipbookInit}
             onFlip={onFlip}
             className="mx-auto"
             style={{ margin: '0 auto' }}

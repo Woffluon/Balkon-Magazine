@@ -9,6 +9,14 @@ declare module 'react-pageflip' {
     update(): void
     destroy(): void
     getOrientation(): 'portrait' | 'landscape'
+    getSettings(): {
+      minWidth: number
+      minHeight: number
+      usePortrait: boolean
+      flippingTime: number
+      useMouseEvents: boolean
+    }
+    getUI(): { removeHandlers?: () => void }
   }
   
   export interface PageFlipHandle {
@@ -44,6 +52,7 @@ declare module 'react-pageflip' {
     style?: React.CSSProperties
     startZIndex?: number
     renderOnlyPageLengthChange?: boolean
+    onInit?: (e: { data: { page: number; mode: 'portrait' | 'landscape' } }) => void
     onFlip?: (e: FlipEvent) => void
     onChangeOrientation?: (e: { data: 'portrait' | 'landscape' }) => void
     onChangeState?: (e: { data: 'read' | 'user_fold' | 'fold_corner' }) => void
