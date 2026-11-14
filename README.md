@@ -2,557 +2,82 @@
 
 <img src="public/favicon.png" alt="Balkon Dergisi" width="96" height="96" />
 
-# 📖 Balkon Dergisi
+# Balkon Dergisi
 
-**Modern Digital Magazine Platform for Sezai Karakoç Anadolu Lisesi**
+Digital magazine platform for Sezai Karakoç Anadolu Lisesi.
 
-*"Şu içimizin de balkonu olsaydı, çıkıp arada nefes alsaydık."*
-
-[![Next.js](https://img.shields.io/badge/Next.js-15.5.7-black?style=flat&logo=next.js)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19.1-blue?style=flat&logo=react)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=flat&logo=typescript)](https://www.typescriptlang.org/)
-[![Supabase](https://img.shields.io/badge/Supabase-Backend-3FCF8E?style=flat&logo=supabase)](https://supabase.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-[Features](#-features) • [Architecture](#-architecture) • [Tech Stack](#-tech-stack) • [Getting Started](#-getting-started) • [Deployment](#-deployment) • [Analytics](#-analytics-dashboard)
-
 </div>
 
 ---
 
-![Interactive Flipbook Experience](public/hero_image.webp)
-<p align="center"><em>Interactive Flipbook Experience</em></p>
+## Overview
 
----
+Balkon Dergisi converts PDF issues into WebP page sets in the browser, stores assets in Supabase Storage or Cloudflare R2, and serves them through an interactive flipbook reader with engagement and Web Vitals analytics.
 
-## 🌟 Overview
+## Core Capabilities
 
-**Balkon Dergisi** is a production-grade digital magazine platform that transforms PDF publications into immersive, interactive reading experiences. Built for **Sezai Karakoç Anadolu Lisesi**, it combines enterprise-level engineering with student publication accessibility.
+| Capability | Summary |
+|---|---|
+| **Flipbook Reader** | Renders issues at `/dergi/[sayi]` with `react-pageflip`, 1x–4x zoom, page jump input, left/right arrow navigation, Web Audio flip sound, and sliding-window prefetching |
+| **Client PDF Pipeline** | Extracts PDF pages in a `pdfjs-dist` web worker, renders to `HTMLCanvasElement` as WebP, and uploads sequentially via Server Actions |
+| **Admin Portal** | Authenticated dashboard at `/admin` with issue CRUD, optimistic locking on renames, reader analytics (`/admin/analytics`), and Web Vitals (`/admin/performance`) |
+| **Dual Storage** | Switches between Supabase Storage (default) and Cloudflare R2 (`@aws-sdk/client-s3`) via `StorageFactory` |
+| **Security & Telemetry** | Nonce-based CSP in `middleware.ts`, security headers in `next.config.ts`, PII-redacted logging, and production Sentry tracking |
 
-The name "Balkon" (Turkish for "Balcony") embodies the platform's philosophy—providing students a space to breathe, express themselves, and share their creative work with the world.
+See [Architecture](docs/architecture.md) for component flows, database schema, security controls, and PWA caching details.
 
-### Key Capabilities
+## Architecture
 
-| Capability | Description |
-|------------|-------------|
-| **📚 Interactive Flipbook Reader** | Hardware-accelerated page-turning with zoom, keyboard navigation, and touch gestures |
-| **📄 PDF-to-Magazine Pipeline** | Automated PDF processing with page extraction, WebP conversion, and parallel uploads |
-| **🔐 Admin Dashboard** | Complete CRUD operations with optimistic locking, transaction rollback, and audit trails |
-| **📊 Analytics Engine** | Session-based reader analytics with device tracking and engagement metrics |
-| **🛡️ Production Security** | CSP headers, rate limiting, input sanitization, and Sentry error monitoring |
-
----
-
-## 🎯 Features
-
-### 🎨 Interactive Reader Experience
-
-Built on [`FlipbookViewer`](./src/components/FlipbookViewer.tsx), the reading interface delivers magazine-quality interactions:
-
-- **Page Flip Animation** powered by [react-pageflip](https://github.com/Nodlik/StPageFlip) with smooth 60fps transitions
-- **Zoom Controls** (1x → 4x scale) via [`ZoomContainer`](./src/components/reader/ZoomContainer.tsx) with pinch-to-zoom support
-- **Page Lock Feature** prevents accidental navigation during zoomed reading
-- **Keyboard Navigation** (Arrow keys, Space, Escape) with accessibility aria-live announcements
-- **Intelligent Preloading** — Adjacent pages prefetch for instant flips
-- **Responsive Dimensions** using [`useResponsiveDimensions`](./src/hooks/useResponsiveDimensions.ts) for dynamic viewport scaling
-
-### 🔄 PDF Processing Pipeline
-
-Enterprise-grade PDF processing with comprehensive error recovery:
-
-```
-PDF File → Page Extraction → WebP Conversion → Parallel Upload → Database Record
-    ↓            ↓                 ↓                 ↓               ↓
- Validation   pdf.js          Canvas API      Batch (3 concurrent)  Transaction
- Magic bytes  Worker          quality=0.85    Retry (3 attempts)    Rollback
+```mermaid
+flowchart LR
+  Public["Public Browser (/ and /dergi/[sayi])"] --> NextApp["Next.js 15 App Router"]
+  Admin["Admin Browser (/admin)"] --> NextApp
+  NextApp --> Middleware["middleware.ts (Nonce CSP and Auth Redirects)"]
+  NextApp --> Actions["Server Actions and /api/analytics/vitals"]
+  Actions --> Services["Services (MagazineService, StorageFactory, Logger)"]
+  Services --> DB[("Supabase PostgreSQL")]
+  Services --> Storage["Storage (Supabase Storage or Cloudflare R2)"]
+  NextApp --> Sentry["Sentry (Production Only)"]
 ```
 
-**Key Technical Details:**
-- PDF parsing via [pdf.js](https://mozilla.github.io/pdf.js/) with dedicated web worker
-- Page rendering to OffscreenCanvas with configurable target height (2000px default)
-- WebP encoding at 85% quality for optimal size/quality balance
-- Batched parallel uploads (3 concurrent) with exponential backoff retry
-- Wake Lock API integration to prevent device sleep during long uploads
-- Full transaction support: storage uploads roll back if database insert fails
+## Quickstart
 
-### 📊 Analytics & Insights
+1. Install dependencies (automatically runs `postinstall` to copy the PDF.js worker to `public/`):
 
-Real-time analytics powered by [Supabase](https://supabase.com/) with [`AnalyticsService`](./src/lib/services/AnalyticsService.ts):
+   ```bash
+   pnpm install
+   ```
 
-- **Session Tracking** — Device type, user agent, start time, duration
-- **Event Buffering** — Batched writes (5 events or 10s interval) for performance
-- **Graceful Degradation** — Fallback IDs when database is unavailable
-- **Analytics Dashboard** at [`/admin/analytics`](./src/app/(admin)/admin/analytics) with:
-  - 📈 Total sessions, unique users, average duration metrics
-  - 📱 Device distribution (mobile/tablet/desktop) pie charts
-  - 📆 Daily session trends via [Recharts](https://recharts.org/)
+2. Copy the environment template and set your credentials (see [Environment Variables](docs/setup.md#environment-variables)):
 
-### 🔐 Authentication & Authorization
+   ```bash
+   cp .env.example .env.local
+   ```
 
-Secure admin access via [Supabase Auth](https://supabase.com/docs/guides/auth) with SSR-compatible session management:
+3. Apply the SQL migrations in Supabase and configure storage buckets (see [Supabase Setup](docs/setup.md#supabase-setup)).
 
-- **Middleware Protection** ([`middleware.ts`](./middleware.ts)) — Route guards for `/admin` paths
-- **Auto-Refresh Sessions** — Proactive token renewal within 5 minutes of expiry
-- **Role-Based Access** — Admin-only upload and magazine management
-- **Error Recovery** — Graceful fallback redirects on auth failures
+4. Start the development server at `http://localhost:3000`:
 
-### 🚀 Admin Management Portal
+   ```bash
+   pnpm dev
+   ```
 
-Full-featured CMS at [`/admin`](./src/app/(admin)/admin) with:
+5. Run the unit test suite:
 
-| Feature | Implementation |
-|---------|----------------|
-| **Magazine Upload** | Drag-and-drop PDF with real-time processing progress |
-| **Magazine CRUD** | Create, rename, delete with optimistic locking |
-| **Version Conflicts** | Concurrency detection with user-friendly resolution UI |
-| **Audit Logging** | Structured logging with operation context via custom Logger |
+   ```bash
+   pnpm test
+   ```
 
----
+## Documentation
 
-## 🏗️ Architecture
+- [Setup and Deployment](docs/setup.md) — prerequisites, environment variables, Supabase and Cloudflare R2 configuration, scripts, Sentry, and troubleshooting
+- [Architecture](docs/architecture.md) — layered architecture, directory map, PDF upload sequence, flipbook reader, database schema, security, and PWA caching
+- [Contributing](docs/contributing.md) — coding conventions, error handling, validation, verification commands, and PR workflow
 
-The application follows a **layered architecture** with clear separation of concerns:
+## License
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Presentation Layer                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │    Hero     │  │ MagazineCard│  │   FlipbookViewer        │  │
-│  │  Component  │  │    Grid     │  │  (react-pageflip)       │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
-├─────────────────────────────────────────────────────────────────┤
-│                          Hooks Layer                             │
-│  ┌───────────────┐  ┌──────────────┐  ┌────────────────────┐   │
-│  │usePDFProcessor│  │ useFileUpload│  │useMagazineAnalytics│   │
-│  └───────────────┘  └──────────────┘  └────────────────────┘   │
-├─────────────────────────────────────────────────────────────────┤
-│                        Services Layer                            │
-│  ┌───────────────────┐  ┌─────────────────┐  ┌──────────────┐  │
-│  │  MagazineService  │  │  UploadService  │  │ AnalyticsService │
-│  │  (Transactions)   │  │  (Batch Upload) │  │ (Event Queue)│  │
-│  └───────────────────┘  └─────────────────┘  └──────────────┘  │
-├─────────────────────────────────────────────────────────────────┤
-│                      Infrastructure Layer                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │  Supabase   │  │   Logger    │  │   TransactionManager    │  │
-│  │  (Storage)  │  │  (Sentry)   │  │  (Rollback Support)     │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
+This project is licensed under the MIT License — see [LICENSE](./LICENSE).
 
-### Directory Structure
-
-```
-src/
-├── app/                          # Next.js App Router
-│   ├── (admin)/                  # Admin route group (protected)
-│   │   └── admin/               
-│   │       ├── login/            # Authentication flow
-│   │       ├── analytics/        # Reader analytics dashboard
-│   │       └── [CRUD components] # Upload, Table, Actions
-│   ├── (public)/                 # Public route group
-│   │   ├── page.tsx              # Landing page
-│   │   └── dergi/[issueNumber]/  # Magazine reader pages
-│   ├── layout.tsx                # Root layout with SEO & JSON-LD
-│   ├── sitemap.ts                # Dynamic sitemap generation
-│   └── robots.ts                 # Robots.txt configuration
-│
-├── components/
-│   ├── FlipbookViewer.tsx        # Core reader with zoom & analytics
-│   ├── Hero.tsx                  # Animated landing section
-│   ├── MagazineCard.tsx          # Issue cards with hover effects
-│   └── ui/                       # Radix-based design system
-│
-├── hooks/
-│   ├── usePDFProcessor.ts        # PDF.js integration
-│   ├── useFileUpload.ts          # Multi-file upload orchestration
-│   ├── useMagazineAnalytics.ts   # Reader session tracking
-│   └── useWakeLock.ts            # Prevent sleep during uploads
-│
-├── lib/
-│   ├── services/
-│   │   ├── MagazineService.ts    # Transactions, optimistic locking
-│   │   ├── UploadService.ts      # Batch uploads with retry
-│   │   ├── AnalyticsService.ts   # Event queue with batching
-│   │   └── storage/              # Storage abstraction layer
-│   ├── validators/               # Zod schemas for all inputs
-│   ├── errors/                   # Typed error hierarchy
-│   └── guards/                   # Runtime type guards
-│
-└── types/                        # TypeScript definitions
-```
-
----
-
-## 💻 Tech Stack
-
-### Core Framework
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| [Next.js](https://nextjs.org/) | 15.5.7 | App Router, Server Components, ISR, Server Actions |
-| [React](https://react.dev/) | 19.1.2 | UI library with latest concurrent features |
-| [TypeScript](https://www.typescriptlang.org/) | 5.x | End-to-end type safety with strict mode |
-| [Tailwind CSS](https://tailwindcss.com/) | 4.x | Utility-first with custom PostCSS pipeline |
-
-### Backend & Storage
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| [Supabase](https://supabase.com/) | Latest | PostgreSQL database, object storage, authentication |
-| [Supabase SSR](https://supabase.com/docs/guides/auth/server-side-rendering) | Latest | Server-side session management |
-
-### Key Libraries
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| [pdf.js](https://mozilla.github.io/pdf.js/) | 4.x | PDF parsing and canvas-based rendering with worker support |
-| [react-pageflip](https://github.com/nicholaspage/react-pageflip) | 2.x | Flipbook animations with CSS 3D transforms |
-| [Recharts](https://recharts.org/) | 2.x | Composable React charts for analytics |
-| [Zod](https://zod.dev/) | 3.x | Runtime schema validation for forms and API inputs |
-| [Motion](https://motion.dev/) | Latest | Declarative animations for UI interactions |
-| [Radix UI](https://www.radix-ui.com/) | Latest | Accessible component primitives (Dialog, Dropdown, Select) |
-| [Sentry](https://sentry.io/) | Latest | Error tracking and performance monitoring |
-| [React Hook Form](https://react-hook-form.com/) | 7.x | Performant forms with validation |
-
----
-
-## 🧑‍💻 Developer Experience
-
-The [`usePDFProcessor`](./src/hooks/usePDFProcessor.ts) hook encapsulates the entire transformation workflow:
-
-```typescript
-const { processPDF, processedPages, totalPages, isProcessing, error } = usePDFProcessor()
-
-const result = await processPDF(file, {
-  targetHeight: 2000,
-  quality: 0.85,
-  onProgress: (current, total) => console.log(`Processing ${current}/${total}`)
-})
-// Returns: { pages: Blob[], totalPages: number }
-```
-
-The [`useMagazineAnalytics`](./src/hooks/useMagazineAnalytics.ts) hook automatically tracks:
-- Session initialization on magazine view
-- Tab visibility changes (pause/resume events)
-- Reader interactions (page turns tracked via event metadata)
-
----
-
-## 🗄️ Database Schema
-
-The application expects the following Supabase tables:
-
-```sql
--- Magazines table
-CREATE TABLE magazines (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  title TEXT NOT NULL,
-  issue_number INTEGER UNIQUE NOT NULL,
-  publication_date DATE NOT NULL,
-  cover_url TEXT NOT NULL,
-  page_count INTEGER NOT NULL,
-  version INTEGER DEFAULT 1,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Analytics sessions
-CREATE TABLE analytics_sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  magazine_id UUID REFERENCES magazines(id),
-  device_type TEXT NOT NULL,
-  user_agent TEXT,
-  started_at TIMESTAMPTZ DEFAULT NOW(),
-  last_active_at TIMESTAMPTZ
-);
-
--- Analytics events
-CREATE TABLE analytics_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  session_id UUID REFERENCES analytics_sessions(id),
-  event_type TEXT NOT NULL,
-  metadata JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-**Storage Bucket Structure:**
-
-```
-magazines/
-├── {issue_number}/
-│   ├── cover.webp
-│   └── pages/
-│       ├── 1.webp
-│       ├── 2.webp
-│       └── ...
-```
-
----
-
-## 🛡️ Security & Monitoring
-
-Production-hardened security configuration:
-
-```typescript
-// Content Security Policy (from next.config.ts)
-"default-src 'self'",
-"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
-"img-src 'self' data: blob: https:",
-"frame-ancestors 'none'",
-```
-
-### HTTP Security Headers
-
-| Header | Value |
-|--------|-------|
-| `Content-Security-Policy` | Strict CSP with Supabase domain allowlist |
-| `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `DENY` |
-| `X-XSS-Protection` | `1; mode=block` |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
-
-### Error Recovery Strategy
-
-| Stage | Recovery Strategy |
-|-------|-------------------|
-| PDF Processing | Retry with reduced quality; skip corrupt pages |
-| Page Upload | Exponential backoff (3 attempts); partial upload state persisted |
-| Cover Upload | Falls back to first PDF page if custom cover fails |
-| Database Insert | Full rollback of uploaded files |
-
-### Sentry Integration
-
-- [`sentry.client.config.ts`](./sentry.client.config.ts) for frontend errors
-- [`sentry.server.config.ts`](./sentry.server.config.ts) for API routes
-- [`sentry.edge.config.ts`](./sentry.edge.config.ts) for middleware errors
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **Node.js** ≥ 18.0.0
-- **npm** ≥ 8.0.0
-- **Supabase Account** — [Create free project](https://supabase.com/dashboard)
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/Woffluon/Balkon-Magazine.git
-cd Balkon-Magazine
-
-# Install dependencies
-npm install
-
-# Configure environment variables
-cp .env.example .env.local
-```
-
-Update `.env.local` with your credentials:
-
-```env
-# Required
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
-
-# Optional
-SENTRY_DSN=your-sentry-dsn
-NEXT_PUBLIC_SENTRY_DSN=your-client-sentry-dsn
-```
-
-### Supabase Setup
-
-1. Create database tables using the SQL schema above
-2. Configure Storage bucket:
-   - Bucket name: `magazines`
-   - Public access: **Enabled**
-   - File size limit: **500MB**
-
-### Development
-
-```bash
-# Start development server with Turbopack
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
-### Available Scripts
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start dev server with Turbopack |
-| `npm run build` | Create production build |
-| `npm start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm run type-check` | TypeScript type checking |
-| `npm run clean` | Clean build artifacts |
-
----
-
-## 📦 Deployment
-
-### Vercel (Recommended)
-
-This project is optimized for [Vercel](https://vercel.com/) deployment:
-
-1. **Connect repository** to Vercel dashboard
-2. **Set environment variables** in Vercel project settings
-3. **Deploy** — Vercel auto-detects Next.js configuration
-
-**Production Configuration:**
-- Output mode: `standalone`
-- Server Actions body size limit: 500MB (for large PDF uploads)
-- Image Optimization: Disabled (`unoptimized: true`) for static hosting compatibility
-- Compression: Enabled via `compress: true`
-
-### Self-Hosting
-
-```bash
-npm run build
-npm start
-```
-
-Ensure your hosting environment supports:
-- Node.js 18+
-- Environment variable injection
-- Persistent storage for `.next` cache (optional)
-
-### PDF.js Worker Setup
-
-The `postinstall` script automatically copies `pdf.worker.min.mjs` to `public/`:
-
-```bash
-node -e "require('fs').copyFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs', 'public/pdf.worker.min.mjs')"
-```
-
-Verify the worker is accessible at `/pdf.worker.min.mjs` after deployment.
-
----
-
-## 📊 Analytics Dashboard
-
-Access magazine insights at `/admin/analytics`:
-
-### Available Metrics
-
-- **Overview Cards** — Total sessions, unique users, average duration
-- **Device Distribution** — Pie chart breakdown (mobile/tablet/desktop)
-- **Engagement Trends** — Daily session counts with date range filters
-
-### Implementation Details
-
-```
-React Component → useMagazineAnalytics → AnalyticsService → Supabase Tables
-```
-
-The analytics system uses:
-- **Batched Writes** — Events buffer to 5 items or 10s, whichever comes first
-- **Retry Logic** — Failed flushes re-queue (max 100 pending)
-- **Graceful Degradation** — Fallback UUIDs if database unavailable
-
-## ⚡ Performance & Mobile Optimizations
-
-The platform is equipped with enterprise-grade performance optimizations to deliver the best experience on mobile networks (3G/2G) and low-end devices:
-
-1. **Bundle Analysis & Code Splitting**:
-   - JS bundle composition is optimized using `@next/bundle-analyzer`.
-   - Webpack `splitChunks` configuration dynamically separates large libraries (`pdfjs-dist`, `recharts`, `react-pageflip`) into dedicated chunks.
-   - Non-critical pages and components (e.g., Admin Analytics) are lazily loaded via dynamic imports (`next/dynamic`).
-
-2. **Connection-Aware OptimizedImage**:
-   - Network Information API integration scales image quality to 60% on slow networks (2G/3G) or when Data Saver is active, and 90% quality on fast connections.
-   - Gaussian blur SVG filters generate dynamic Base64 blur placeholders to prevent Layout Shifts (CLS).
-   - Priority loading (`priority` and `fetchpriority="high"`) is active for LCP candidate images.
-
-3. **Offline Support & Caching Strategies (Service Worker)**:
-   - Static assets (CSS, JS, Fonts) use a browser-level **Cache-First** strategy.
-   - Magazine pages utilize a **Stale-While-Revalidate** caching mechanism. The image cache is constrained by a 50MB LRU (Least Recently Used) eviction policy.
-   - If connection is lost entirely, a custom-designed `/offline.html` fallback page is presented to the user.
-
-4. **Runtime & Animation Optimizations**:
-   - Custom utility hooks (`useDebounce`, `useThrottle`, and `usePassiveEventListener` for touch/scroll events) are utilized to minimize main thread blocking.
-   - Intensive components and computations are optimized using `React.memo`, `useMemo`, and `useCallback`.
-   - Respects `prefers-reduced-motion` media queries to disable CPU-intensive animations for users requesting reduced motion.
-   - PDF rendering operations are throttled to a maximum concurrency of 3, and memory is reclaimed instantly via page cleanup to prevent browser memory leaks.
-
-5. **Performance Monitoring (Web Vitals) & Budget Control**:
-   - Track Core Web Vitals (LCP, FID, CLS, FCP, TTFB, INP) across all pages using `next/web-vitals`.
-   - Warns on budget overruns in development console, and logs metrics to `/api/analytics/vitals` using `navigator.sendBeacon` in production to be recorded in Supabase.
-   - Performance dashboards are available at `/admin/performance` with visual charts to track metrics over time.
-
-## ⚡ Performans ve Mobil Optimizasyonları
-
-Platform, mobil ağlarda (3G/2G) ve düşük donanımlı cihazlarda en iyi deneyimi sunmak için kurumsal düzeyde performans optimizasyonlarıyla donatılmıştır:
-
-1. **Paket Analizi ve Kod Bölme**:
-   - `@next/bundle-analyzer` entegrasyonu ile JavaScript paket bileşimi optimize edilmiştir.
-   - Webpack `splitChunks` yapılandırması sayesinde büyük kütüphaneler (`pdfjs-dist`, `recharts`, `react-pageflip`) ayrı JavaScript parçalarına bölünmüştür.
-   - Kritik olmayan sayfalar ve bileşenler (örn. Yönetici İstatistikleri) dynamic imports (`next/dynamic`) ile tembelce yüklenir.
-
-2. **Bağlantı Hızına Duyarlı OptimizedImage**:
-   - Network Information API entegrasyonu ile 2G/3G veya veri tasarrufu (save-data) etkin ağlarda görseller %60 kalitede, hızlı ağlarda ise %90 kalitede sunulur.
-   - SVG Gauss Bulanıklığı filtreleri kullanılarak oluşturulan dinamik Base64 görsel yer tutucuları (blur placeholders) ile sayfa düzeni kayması (CLS) önlenir.
-   - LCP adayı görseller için öncelikli yükleme (`priority` ve `fetchpriority="high"`) etkindir.
-
-3. **Çevrimdışı Çalışma ve Önbellek Stratejileri (Service Worker)**:
-   - Statik varlıklar (CSS, JS, Yazı Tipleri) için tarayıcı düzeyinde **Cache-First** stratejisi uygulanır.
-   - Dergi sayfaları görselleri için **Stale-While-Revalidate** önbellek yöntemi kullanılır. Görüntü önbelleği 50MB LRU (en son kullanılan) tahliye politikasıyla sınırlandırılmıştır.
-   - Bağlantı tamamen koptuğunda kullanıcıya özel tasarlanmış `/offline.html` hata sayfası sunulur.
-
-4. **Çalışma Zamanı ve Animasyon İyileştirmeleri**:
-   - `useDebounce`, `useThrottle` ve dokunmatik/kaydırma olaylarının performansını artıran `usePassiveEventListener` özel kancaları (hooks) yazılmıştır.
-   - Pahalı bileşenler ve hesaplamalar için `React.memo`, `useMemo` ve `useCallback` optimizasyonları uygulanmıştır.
-   - `prefers-reduced-motion` ortam sorgusu (media query) algılanarak animasyonları devre dışı bırakma desteği eklenmiştir.
-   - PDF oluşturma/çizim işlemlerinde eş zamanlı işlem limiti 3 olarak sınırlandırılmış ve bellek sızıntılarını önlemek için PDF.js nesneleri anında bellekten temizlenir.
-
-5. **Performans İzleme (Web Vitals) ve Bütçe Kontrolü**:
-   - Tüm sayfalarda LCP, FID, CLS, FCP, TTFB, INP metrikleri `next/web-vitals` ile izlenir.
-   - Geliştirme ortamında bütçe aşımlarında konsola uyarı basılır. Üretim ortamında ise performans metrikleri `navigator.sendBeacon` ile `/api/analytics/vitals` API'sine ve oradan Supabase veritabanına kaydedilir.
-   - Yönetici panelindeki `/admin/performance` ekranından bu metrikler görsel bütçe grafikeriyle izlenebilmektedir.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please ensure:
-
-1. All code passes `npm run lint` and `npm run type-check`
-2. **TypeScript Strict Mode** — All code must compile without errors
-3. **Component Structure** — Keep components under 300 lines
-4. **Error Handling** — Use structured error patterns from [`ErrorHandler`](./src/lib/errors/errorHandler.ts)
-5. **Logging** — Use [`Logger`](./src/lib/services/Logger.ts) instead of `console.log`
-6. New features include appropriate error handling and accessibility compliance
-
-### Contribution Workflow
-
-1. **Fork** the repository
-2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Commit changes** (`git commit -m 'Add amazing feature'`)
-4. **Push to branch** (`git push origin feature/amazing-feature`)
-5. **Open a Pull Request**
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** — see the [`LICENSE`](./LICENSE) file for details.
-
-Copyright © 2025 Efe Arabacı
-
----
-
-<div align="center">
-
-**Made by Efe Arabacı**
-
-**Balkon Dergisi** — Where students find their voice.
-
-[Report Bug](https://github.com/Woffluon/Balkon-Magazine/issues) • [Request Feature](https://github.com/Woffluon/Balkon-Magazine/issues)
-
-</div>
+Copyright (c) 2026 Efe Arabacı
