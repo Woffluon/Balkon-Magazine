@@ -238,7 +238,7 @@ export default async function DergiPage({ params }: { params: Promise<{ sayi: st
       </header>
 
       {/* Reader Centerpiece - Fixed Height/Width via CSS Aspect Ratio */}
-      <div className="w-full flex-1 flex items-center justify-center p-4 sm:p-8">
+      <div className="w-full flex-1 min-w-0 min-h-0 flex items-center justify-center p-4 sm:p-8">
         <div className="reader-aspect-ratio-box">
           {imageUrls.length > 0 ? (
             <FlipbookViewerErrorBoundary issueNumber={sayi}>

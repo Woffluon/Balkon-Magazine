@@ -9,6 +9,8 @@ import { pageFlipAudio } from '@/lib/audio/pageFlipAudio'
 // import { ErrorHandler } from '@/lib/errors/errorHandler'
 import { APP_CONFIG } from '@/lib/config/app-config'
 import {
+  FLIPBOOK_PRELOAD,
+  FLIPBOOK_SETTINGS,
   NORMAL_FLIP_DURATION,
   RAPID_FLIP_DURATION,
   RAPID_FLIP_THRESHOLD_MS,
@@ -21,9 +23,9 @@ import {
 } from '@/lib/utils/asyncPatterns'
 import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 import type { PageFlipHandle, FlipEvent } from 'react-pageflip'
-import { ZoomContainer } from '@/components/reader/ZoomContainer'
+import { FlipbookPage, createPageWindowStore } from '@/components/reader/FlipbookPage'
+import { ZoomContainer, type ZoomContainerRef } from '@/components/reader/ZoomContainer'
 import { PageJumpInput } from '@/components/reader/PageJumpInput'
-import { usePassiveEventListener } from '@/lib/performance-utils'
 import { useReaderEngagement } from '@/hooks/useReaderEngagement'
 
 const SafeFlipBook = dynamic(() => import('react-pageflip'), {
@@ -59,19 +61,28 @@ function validateImageUrls(urls: unknown): string[] {
     .map(url => url.trim())
 }
 
+function handlePageImageError(pageIndex: number): void {
+  logger.warn('Failed to load magazine page image', {
+    component: 'FlipbookViewer',
+    operation: 'handlePageImageError',
+    pageIndex,
+  })
+}
+
 export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'default-mag' }: FlipbookViewerProps) {
   const pages = useMemo(() => validateImageUrls(imageUrls), [imageUrls])
   const bookRef = useRef<PageFlipHandle | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const viewerBoxRef = useRef<HTMLDivElement>(null)
 
-  // Passive event listeners to prevent scroll delays on mobile touch devices
-  usePassiveEventListener(containerRef, 'touchstart', () => {})
-  usePassiveEventListener(containerRef, 'touchmove', () => {})
+  const windowStore = useMemo(() => createPageWindowStore(0), [])
+  const currentPageRef = useRef(0)
+  const lastTrackedPageRef = useRef(0)
 
   const [currentPage, setCurrentPage] = useState(0)
-  const [preloadedPages, setPreloadedPages] = useState<Set<number>>(new Set())
-  const [failedPages, setFailedPages] = useState<Set<number>>(new Set())
   const [pageAnnouncement, setPageAnnouncement] = useState('')
+  const [boxWidth, setBoxWidth] = useState(0)
+  const boxWidthRef = useRef(0)
 
   // Track active page engagement durations
   const { trackPageChange } = useReaderEngagement(magazineId, 0)
@@ -79,10 +90,17 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
   // -- Reader State --
   const [isLocked, setIsLocked] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(1)
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+  )
+  const isMobileRef = useRef(isMobile)
+  isMobileRef.current = isMobile
   const [isToolbarOpen, setIsToolbarOpen] = useState(true)
   const [isAudioMuted, setIsAudioMuted] = useState(() => pageFlipAudio.getMuted())
   const isFirstFlipRef = useRef(true)
+
+  // -- Zoom Control --
+  const zoomRef = useRef<ZoomContainerRef>(null)
 
   // Dynamic flip animation speed (450ms default, 250ms when flipping rapidly)
   const [flippingTime, setFlippingTime] = useState<number>(NORMAL_FLIP_DURATION)
@@ -107,21 +125,88 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     return unsubscribe
   }, [])
 
-  // Responsive spread detection & Scroll lock
+  // Responsive breakpoint detection & Scroll lock
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024)
-    }
-
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
     document.body.classList.add('reader-lock-scroll')
 
+    const mediaQuery = window.matchMedia('(min-width: 1024px)')
+    const applyBreakpoint = (matchesDesktop: boolean) => {
+      const nextIsMobile = !matchesDesktop
+      if (isMobileRef.current !== nextIsMobile) {
+        isMobileRef.current = nextIsMobile
+        zoomRef.current?.reset()
+        setZoomLevel(1)
+        isFirstFlipRef.current = true
+        setIsMobile(nextIsMobile)
+      }
+    }
+
+    applyBreakpoint(mediaQuery.matches)
+
+    const handleMediaChange = (event: MediaQueryListEvent) => {
+      applyBreakpoint(event.matches)
+    }
+
+    mediaQuery.addEventListener('change', handleMediaChange)
+
     return () => {
-      window.removeEventListener('resize', checkMobile)
+      mediaQuery.removeEventListener('change', handleMediaChange)
       document.body.classList.remove('reader-lock-scroll')
     }
   }, [])
+
+  // Sync pageFlip layout and boxWidth on container resize, F11 fullscreen, and F12/visualViewport changes
+  const hasPages = pages.length > 0
+  useEffect(() => {
+    const boxEl = viewerBoxRef.current
+    if (!boxEl) return
+
+    let rafId: number | null = null
+
+    const syncSize = () => {
+      rafId = null
+      const nextWidth = Math.round(boxEl.getBoundingClientRect().width)
+      if (nextWidth > 0 && nextWidth !== boxWidthRef.current) {
+        boxWidthRef.current = nextWidth
+        setBoxWidth(nextWidth)
+      }
+      try {
+        bookRef.current?.pageFlip()?.update()
+      } catch {
+        // Ignore if pageFlip instance is not ready yet
+      }
+    }
+
+    const scheduleUpdate = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
+      rafId = requestAnimationFrame(syncSize)
+    }
+
+    syncSize()
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => {
+          scheduleUpdate()
+        })
+      : null
+    resizeObserver?.observe(boxEl)
+
+    window.addEventListener('fullscreenchange', scheduleUpdate)
+    document.addEventListener('fullscreenchange', scheduleUpdate)
+    window.visualViewport?.addEventListener('resize', scheduleUpdate)
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
+      resizeObserver?.disconnect()
+      window.removeEventListener('fullscreenchange', scheduleUpdate)
+      document.removeEventListener('fullscreenchange', scheduleUpdate)
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate)
+    }
+  }, [hasPages])
 
   // Analytics View Tracking
   useEffect(() => {
@@ -142,49 +227,56 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
 
   // High-performance Sliding Window Prefetch & Decode (Tier 1 & Tier 2)
   useEffect(() => {
-    let isCancelled = false
+    if (pages.length === 0) return
 
-    prefetchSlidingWindow(pages, currentPage, {
-      ahead: PAGES_AHEAD,
-      behind: PAGES_BEHIND,
-    })
-      .then((decodedUrls) => {
+    let isCancelled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    const rafId = requestAnimationFrame(() => {
+      timeoutId = setTimeout(() => {
         if (isCancelled) return
-        setPreloadedPages((prev) => {
-          const nextSet = new Set(prev)
-          pages.forEach((url, idx) => {
-            if (decodedUrls.includes(url)) {
-              nextSet.add(idx)
-            }
-          })
-          return nextSet
-        })
-      })
-      .catch(() => {})
+        prefetchSlidingWindow(pages, currentPage, {
+          ahead: PAGES_AHEAD,
+          behind: PAGES_BEHIND,
+          concurrency: FLIPBOOK_PRELOAD.DECODE_CONCURRENCY,
+        }).catch(() => {})
+      }, 120)
+    })
 
     return () => {
       isCancelled = true
+      cancelAnimationFrame(rafId)
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+      }
     }
   }, [currentPage, pages])
 
   // Passive Background Idle Prefetch of Entire Magazine (Tier 3)
   useEffect(() => {
-    const cancelIdle = idlePrefetchAllPages(pages, currentPage)
+    const cancelIdle = idlePrefetchAllPages(pages, 0)
     return cancelIdle
-  }, [pages, currentPage])
+  }, [pages])
 
   const onFlip = useCallback((flipEvent: FlipEvent) => {
-    triggerDynamicFlipSpeed()
     const pageNumber = ValidationHelpers.validateOrDefault(flipEvent.data, isNumber, 0, 'onFlip')
+    currentPageRef.current = pageNumber
+    windowStore.setPage(pageNumber)
     setCurrentPage(pageNumber)
     setPageAnnouncement(`Sayfa ${pageNumber + 1} / ${pages.length}`)
-    trackPageChange(pageNumber)
-    if (!isFirstFlipRef.current) {
-      pageFlipAudio.play()
-    } else {
-      isFirstFlipRef.current = false
+
+    if (pageNumber === lastTrackedPageRef.current) {
+      if (isFirstFlipRef.current) {
+        isFirstFlipRef.current = false
+      }
+      return
     }
-  }, [pages.length, trackPageChange, triggerDynamicFlipSpeed])
+
+    lastTrackedPageRef.current = pageNumber
+    isFirstFlipRef.current = false
+    triggerDynamicFlipSpeed()
+    trackPageChange(pageNumber)
+    pageFlipAudio.play()
+  }, [pages.length, trackPageChange, triggerDynamicFlipSpeed, windowStore])
 
   const handlePageJump = useCallback((targetPageIndex: number) => {
     if (!bookRef.current) {
@@ -198,6 +290,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
 
     try {
       triggerDynamicFlipSpeed()
+      windowStore.setPage(targetPageIndex)
       const pageFlipInstance = bookRef.current.pageFlip()
       if (!pageFlipInstance) {
         throw new Error('pageFlip instance is not available')
@@ -211,18 +304,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
         error: error instanceof Error ? error.message : String(error)
       })
     }
-  }, [triggerDynamicFlipSpeed])
-
-  const prefetchNextPageImage = useCallback(() => {
-    const nextIdx = currentPage + 1
-    if (nextIdx < pages.length && !preloadedPages.has(nextIdx) && !failedPages.has(nextIdx)) {
-      const img = new window.Image()
-      img.src = pages[nextIdx]
-      img.onload = () => {
-        setPreloadedPages(prev => new Set([...prev, nextIdx]))
-      }
-    }
-  }, [currentPage, pages, preloadedPages, failedPages])
+  }, [triggerDynamicFlipSpeed, windowStore])
 
   // Keyboard Navigation
   useEffect(() => {
@@ -246,13 +328,27 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
     return () => window.removeEventListener('keydown', handleKeyboardNavigation)
   }, [pages.length, isLocked, triggerDynamicFlipSpeed])
 
-  // -- Zoom Control --
-  const zoomRef = useRef<{ zoomIn: () => void; zoomOut: () => void; reset: () => void }>(null)
+  const pageElements = useMemo(
+    () =>
+      pages.map((url, index) => (
+        <FlipbookPage
+          key={index}
+          url={url}
+          index={index}
+          isMobile={isMobile}
+          windowStore={windowStore}
+          pagesAhead={PAGES_AHEAD}
+          onImageError={handlePageImageError}
+        />
+      )),
+    [pages, isMobile, windowStore]
+  )
 
   if (!pages.length) return <div className="text-white">Geçerli sayfa bulunamadı.</div>
 
   const handleZoomIn = () => zoomRef.current?.zoomIn()
   const handleZoomOut = () => zoomRef.current?.zoomOut()
+  const mobileMinWidth = Math.max(100, Math.min(boxWidth || 300, Math.ceil((boxWidth || 300) * 0.6)))
 
   return (
     <div
@@ -265,7 +361,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
       <div role="status" aria-live="polite" className="sr-only">{pageAnnouncement}</div>
 
       {/* Main Viewer Area - CSS Driven Stability */}
-      <div className="w-full h-full overflow-hidden relative group">
+      <div ref={viewerBoxRef} className="w-full h-full overflow-hidden relative group">
         <ZoomContainer
           ref={zoomRef}
           minScale={1}
@@ -274,19 +370,21 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
           onZoomChange={setZoomLevel}
         >
           <SafeFlipBook
+            key={isMobile ? 'portrait' : 'landscape'}
             ref={bookRef}
             width={848}
             height={1200}
             size="stretch"
-            minWidth={300}
+            minWidth={isMobile ? mobileMinWidth : 100}
             maxWidth={2500}
-            minHeight={400}
+            minHeight={100}
             maxHeight={3000}
             showCover
-            maxShadowOpacity={0.5}
-            drawShadow
+            maxShadowOpacity={FLIPBOOK_SETTINGS.MAX_SHADOW_OPACITY}
+            drawShadow={FLIPBOOK_SETTINGS.DRAW_SHADOW}
             usePortrait={isMobile}
-            startPage={0}
+            startPage={currentPageRef.current}
+            renderOnlyPageLengthChange={true}
             flippingTime={flippingTime}
             useMouseEvents={!isLocked && zoomLevel === 1}
             swipeDistance={30}
@@ -297,35 +395,7 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
             className="mx-auto"
             style={{ margin: '0 auto' }}
           >
-            {pages.map((url, index) => {
-              const shouldLoad = Math.abs(index - currentPage) <= PAGES_AHEAD || preloadedPages.has(index)
-
-              return (
-                <div
-                  key={index}
-                  className="page relative bg-neutral-800 shadow-2xl overflow-hidden [will-change:transform] [transform:translateZ(0)] [backface-visibility:hidden]"
-                >
-                  {shouldLoad ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- Pageflip needs raw img sizing and lazy page-level loading.
-                    <img
-                      src={url}
-                      alt={`Sayfa ${index + 1}`}
-                      className="absolute inset-0 w-full h-full object-fill [will-change:transform]" /* Replicating fill + objectFit: 'fill' */
-                      loading={Math.abs(index - currentPage) <= 1 ? "eager" : "lazy"}
-                      onError={() => setFailedPages(prev => new Set([...prev, index]))}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-[#1a1d23] animate-reader-shimmer">
-                      <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                    </div>
-                  )}
-                  {/* Subtle spine line for double spread realism */}
-                  {!isMobile && index % 2 !== 0 && (
-                    <div className="absolute top-0 right-0 w-px h-full bg-black/15 z-10 pointer-events-none" />
-                  )}
-                </div>
-              )
-            })}
+            {pageElements}
           </SafeFlipBook>
         </ZoomContainer>
 
@@ -349,7 +419,6 @@ export default React.memo(function FlipbookViewer({ imageUrls, magazineId = 'def
                 triggerDynamicFlipSpeed()
                 bookRef.current?.pageFlip().flipNext()
               }}
-              onMouseEnter={prefetchNextPageImage}
               className="absolute right-4 top-1/2 -translate-y-1/2 z-40 p-4 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all opacity-100 disabled:hidden"
               disabled={currentPage === pages.length - 1}
             >

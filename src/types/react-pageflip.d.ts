@@ -6,6 +6,9 @@ declare module 'react-pageflip' {
     getCurrentPageIndex(): number
     getPageCount(): number
     turnToPage(page: number): void
+    update(): void
+    destroy(): void
+    getOrientation(): 'portrait' | 'landscape'
   }
   
   export interface PageFlipHandle {

@@ -17,7 +17,7 @@ export interface ZoomContainerRef {
     reset: () => void
 }
 
-export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerProps>(({
+const ZoomContainerInner = React.forwardRef<ZoomContainerRef, ZoomContainerProps>(({
     children,
     minScale = 1,
     maxScale = 4,
@@ -51,6 +51,7 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
     // -- Helper to update scale and notify --
     const updateScale = useCallback((newScale: number) => {
         const clamped = Math.min(Math.max(newScale, minScale), maxScale)
+        stateRef.current.scale = clamped
         setScale(clamped)
         onZoomChange?.(clamped)
         return clamped
@@ -58,14 +59,18 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
 
     // -- Imperative Handle --
     React.useImperativeHandle(ref, () => ({
-        zoomIn: () => updateScale(scale + 0.5),
-        zoomOut: () => updateScale(scale - 0.5),
+        zoomIn: () => updateScale(stateRef.current.scale + 0.5),
+        zoomOut: () => updateScale(stateRef.current.scale - 0.5),
         reset: () => {
+            stateRef.current.scale = 1
+            stateRef.current.position = { x: 0, y: 0 }
+            stateRef.current.isDragging = false
             setScale(1)
             setPosition({ x: 0, y: 0 })
+            setIsDragging(false)
             onZoomChange?.(1)
         }
-    }), [scale, updateScale, onZoomChange])
+    }), [updateScale, onZoomChange])
 
     // -- Event Handlers (Non-React for Passive: false) --
 
@@ -287,4 +292,7 @@ export const ZoomContainer = React.forwardRef<ZoomContainerRef, ZoomContainerPro
     )
 })
 
+ZoomContainerInner.displayName = 'ZoomContainer'
+
+export const ZoomContainer = React.memo(ZoomContainerInner)
 ZoomContainer.displayName = 'ZoomContainer'
