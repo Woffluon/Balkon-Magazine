@@ -129,6 +129,94 @@ describe('pagePrefetcher', () => {
       assert.strictEqual(result, false)
       assert.ok(!decodedCache.has(url))
     })
+
+    it('deduplicates concurrent in-flight decodeImage calls for the same URL', async () => {
+      let decodeStarted = 0
+      let resolveDecode!: () => void
+      const gate = new Promise<void>((resolve) => {
+        resolveDecode = resolve
+      })
+
+      class DeferredImage {
+        src = ''
+        async decode() {
+          decodeStarted++
+          await gate
+        }
+      }
+      globalThis.Image = DeferredImage as unknown as typeof Image
+
+      const url = 'https://example.com/concurrent.jpg'
+      const p1 = decodeImage(url)
+      const p2 = decodeImage(`  ${url}  `)
+      const p3 = decodeImage(url)
+
+      assert.strictEqual(p1, p2)
+      assert.strictEqual(p2, p3)
+      assert.strictEqual(decodeStarted, 1)
+
+      resolveDecode()
+      const results = await Promise.all([p1, p2, p3])
+      assert.deepStrictEqual(results, [true, true, true])
+      assert.strictEqual(decodeStarted, 1)
+      assert.ok(decodedCache.has(url))
+    })
+
+    it('cleans up inFlightDecodes on failure so subsequent retries can succeed', async () => {
+      let attempt = 0
+      class RetryableImage {
+        src = ''
+        async decode() {
+          attempt++
+          if (attempt === 1) {
+            throw new Error('Transient error')
+          }
+        }
+      }
+      globalThis.Image = RetryableImage as unknown as typeof Image
+
+      const url = 'https://example.com/retry.jpg'
+      const [r1, r2] = await Promise.all([decodeImage(url), decodeImage(url)])
+      assert.strictEqual(r1, false)
+      assert.strictEqual(r2, false)
+      assert.strictEqual(attempt, 1)
+
+      const r3 = await decodeImage(url)
+      assert.strictEqual(r3, true)
+      assert.strictEqual(attempt, 2)
+      assert.ok(decodedCache.has(url))
+    })
+
+    it('clears inFlightDecodes when clearDecodedCache is called', async () => {
+      let decodeStarted = 0
+      let resolveFirst!: () => void
+
+      class ControlledImage {
+        src = ''
+        async decode() {
+          decodeStarted++
+          if (decodeStarted === 1) {
+            await new Promise<void>((resolve) => {
+              resolveFirst = resolve
+            })
+          }
+        }
+      }
+      globalThis.Image = ControlledImage as unknown as typeof Image
+
+      const url = 'https://example.com/reset-inflight.jpg'
+      const firstPromise = decodeImage(url)
+      assert.strictEqual(decodeStarted, 1)
+
+      clearDecodedCache()
+
+      const secondPromise = decodeImage(url)
+      assert.notStrictEqual(firstPromise, secondPromise)
+      assert.strictEqual(decodeStarted, 2)
+
+      resolveFirst()
+      assert.deepStrictEqual(await Promise.all([firstPromise, secondPromise]), [true, true])
+    })
   })
 
   describe('prefetchSlidingWindow', () => {
@@ -196,6 +284,68 @@ describe('pagePrefetcher', () => {
     it('returns empty array when input urls is empty', async () => {
       const prefetched = await prefetchSlidingWindow([], 0)
       assert.deepStrictEqual(prefetched, [])
+    })
+
+    it('enforces bounded concurrency (default 2) and preserves priority order', async () => {
+      let inFlight = 0
+      let maxInFlight = 0
+      const decodeOrder: string[] = []
+
+      class ConcurrencyTrackingImage {
+        src = ''
+        async decode() {
+          decodeOrder.push(this.src)
+          inFlight++
+          maxInFlight = Math.max(maxInFlight, inFlight)
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          inFlight--
+        }
+      }
+      globalThis.Image = ConcurrencyTrackingImage as unknown as typeof Image
+
+      const prefetched = await prefetchSlidingWindow(urls, 3, { ahead: 3, behind: 2 })
+
+      const expectedPriorityOrder = [
+        urls[3],
+        urls[4],
+        urls[5],
+        urls[6],
+        urls[2],
+        urls[1],
+      ]
+      assert.deepStrictEqual(prefetched, expectedPriorityOrder)
+      assert.deepStrictEqual(decodeOrder, expectedPriorityOrder)
+      assert.ok(maxInFlight <= 2, `Expected maxInFlight <= 2, got ${maxInFlight}`)
+      assert.strictEqual(maxInFlight, 2)
+    })
+
+    it('respects custom concurrency option in prefetchSlidingWindow', async () => {
+      let inFlight = 0
+      let maxInFlight = 0
+      const decodeOrder: string[] = []
+
+      class SerialTrackingImage {
+        src = ''
+        async decode() {
+          decodeOrder.push(this.src)
+          inFlight++
+          maxInFlight = Math.max(maxInFlight, inFlight)
+          await new Promise((resolve) => setTimeout(resolve, 5))
+          inFlight--
+        }
+      }
+      globalThis.Image = SerialTrackingImage as unknown as typeof Image
+
+      const prefetched = await prefetchSlidingWindow(urls, 2, {
+        ahead: 2,
+        behind: 1,
+        concurrency: 1,
+      })
+
+      const expectedPriorityOrder = [urls[2], urls[3], urls[4], urls[1]]
+      assert.deepStrictEqual(prefetched, expectedPriorityOrder)
+      assert.deepStrictEqual(decodeOrder, expectedPriorityOrder)
+      assert.strictEqual(maxInFlight, 1)
     })
   })
 

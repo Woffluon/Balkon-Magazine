@@ -42,10 +42,10 @@ export const FLIPBOOK_SETTINGS = {
   SIZE_MODE: 'fixed' as const,
   
   /** Maximum shadow opacity (0.0 - 1.0) */
-  MAX_SHADOW_OPACITY: 0,
+  MAX_SHADOW_OPACITY: 0.28,
   
   /** Whether to draw page shadows */
-  DRAW_SHADOW: false,
+  DRAW_SHADOW: true,
   
   /** Whether to use portrait orientation */
   USE_PORTRAIT: true,
@@ -62,6 +62,7 @@ export const RAPID_FLIP_DURATION = 250
 export const RAPID_FLIP_THRESHOLD_MS = 600
 export const PAGES_AHEAD = 6
 export const PAGES_BEHIND = 2
+export const DECODE_CONCURRENCY = 2
 
 /**
  * Page preloading configuration
@@ -72,6 +73,9 @@ export const FLIPBOOK_PRELOAD = {
   
   /** Number of pages to preload behind current page */
   PAGES_BEHIND,
+
+  /** Maximum number of concurrent image decode operations */
+  DECODE_CONCURRENCY,
 
   /** Normal flip animation duration in milliseconds */
   NORMAL_FLIP_DURATION,

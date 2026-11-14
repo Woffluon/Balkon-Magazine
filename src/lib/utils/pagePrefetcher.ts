@@ -6,10 +6,16 @@ import { FLIPBOOK_PRELOAD } from '@/lib/constants/flipbook'
 export const decodedCache = new Set<string>()
 
 /**
+ * Tracks in-flight decode promises by URL to deduplicate concurrent requests for the same image.
+ */
+const inFlightDecodes = new Map<string, Promise<boolean>>()
+
+/**
  * Resets the decoded image cache (primarily for testing and cache invalidation).
  */
 export function clearDecodedCache(): void {
   decodedCache.clear()
+  inFlightDecodes.clear()
 }
 
 /**
@@ -29,23 +35,28 @@ export function isLowPowerOrSaveData(): boolean {
  * @param url The image URL to decode and cache
  * @returns Promise resolving to true if decoded/cached successfully, false otherwise
  */
-export async function decodeImage(url: string): Promise<boolean> {
+export function decodeImage(url: string): Promise<boolean> {
   if (!url || typeof url !== 'string' || url.trim().length === 0) {
-    return false
+    return Promise.resolve(false)
   }
 
   const cleanUrl = url.trim()
   if (decodedCache.has(cleanUrl)) {
-    return true
+    return Promise.resolve(true)
   }
 
   // Handle SSR / non-browser environments gracefully
   if (typeof Image === 'undefined') {
     decodedCache.add(cleanUrl)
-    return true
+    return Promise.resolve(true)
   }
 
-  return new Promise<boolean>((resolve) => {
+  const existing = inFlightDecodes.get(cleanUrl)
+  if (existing) {
+    return existing
+  }
+
+  const decodePromise = new Promise<boolean>((resolve) => {
     try {
       const img = new Image()
       img.src = cleanUrl
@@ -72,12 +83,20 @@ export async function decodeImage(url: string): Promise<boolean> {
     } catch {
       resolve(false)
     }
+  }).finally(() => {
+    if (inFlightDecodes.get(cleanUrl) === decodePromise) {
+      inFlightDecodes.delete(cleanUrl)
+    }
   })
+
+  inFlightDecodes.set(cleanUrl, decodePromise)
+  return decodePromise
 }
 
 export interface SlidingWindowOptions {
   ahead?: number
   behind?: number
+  concurrency?: number
 }
 
 /**
@@ -129,7 +148,25 @@ export async function prefetchSlidingWindow(
     .map((idx) => urls[idx])
     .filter((url): url is string => Boolean(url))
 
-  await Promise.all(targetUrls.map((url) => decodeImage(url)))
+  if (targetUrls.length === 0) {
+    return []
+  }
+
+  const rawConcurrency = options?.concurrency ?? FLIPBOOK_PRELOAD.DECODE_CONCURRENCY
+  const normalizedConcurrency = Number.isFinite(rawConcurrency)
+    ? Math.floor(rawConcurrency)
+    : FLIPBOOK_PRELOAD.DECODE_CONCURRENCY
+  const workerCount = Math.max(1, Math.min(targetUrls.length, normalizedConcurrency))
+
+  let nextIndex = 0
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (nextIndex < targetUrls.length) {
+      const idx = nextIndex++
+      await decodeImage(targetUrls[idx])
+    }
+  })
+
+  await Promise.all(workers)
 
   return targetUrls
 }
