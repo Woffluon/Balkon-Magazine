@@ -1,16 +1,32 @@
-"use client"
+'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { AlertCircle, CheckCircle2, Loader2, Plus } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { useUploadForm } from '@/hooks/useUploadForm'
 import { useUploadProgress } from '@/hooks/useUploadProgress'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { usePDFProcessor } from '@/hooks/usePDFProcessor'
 import { useWakeLock } from '@/hooks/useWakeLock'
 import { useUploadPersistence } from '@/hooks/useUploadPersistence'
-import { UploadForm } from './components/UploadForm'
+import {
+  UploadForm,
+  validateDateValue,
+  validateIssueNumber,
+  validateTitleValue,
+} from './components/UploadForm'
 import { UploadLogs } from './components/UploadLogs'
 import { SupabaseMagazineRepository } from '@/lib/repositories/SupabaseMagazineRepository'
 import { saveUploadLog } from './actions'
@@ -21,7 +37,9 @@ import { logger } from '@/lib/services/Logger'
 import { IdempotencyManager } from '@/lib/services/IdempotencyManager'
 import { APP_CONFIG } from '@/lib/config/app-config'
 import { AppError, ProcessingError, StorageError, DatabaseError } from '@/lib/errors/AppError'
-import { createStandardizedPromise } from '@/lib/utils/asyncPatterns'
+import { formatNumberTR } from '@/lib/formatters/tr'
+import { t } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
 import type { Magazine } from '@/types/magazine'
 import type { UploadState } from '@/hooks/useUploadPersistence'
@@ -34,23 +52,26 @@ interface ErrorState {
   lastSuccessfulPage?: number
 }
 
+type UploadStage = 'info' | 'process' | 'upload' | 'completed'
+
 export default function UploadDialog() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isUploadInProgress, setIsUploadInProgress] = useState(false)
+  const [uploadStage, setUploadStage] = useState<UploadStage>('info')
+  const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [existingMagazines, setExistingMagazines] = useState<Magazine[]>([])
   const [errorState, setErrorState] = useState<ErrorState>({
     hasError: false,
     errorMessage: '',
-    errorType: 'unknown'
+    errorType: 'unknown',
   })
   const [idempotencyKey, setIdempotencyKey] = useState<string>('')
   const [isUploadCompleted, setIsUploadCompleted] = useState(false)
+  const [completedIssueNumber, setCompletedIssueNumber] = useState<number | null>(null)
   const router = useRouter()
 
-  // Initialize idempotency manager with useMemo to prevent recreation on every render
   const idempotencyManager = useMemo(() => new IdempotencyManager(), [])
 
-  // Custom hooks for separation of concerns
   const { formState, updateField, reset: resetForm, validate } = useUploadForm()
   const {
     progress,
@@ -60,66 +81,50 @@ export default function UploadDialog() {
     addLog,
     reset: resetProgress,
     getOverallProgress,
-    getLogsAsString
+    getLogsAsString,
   } = useUploadProgress()
   const supabase = useSupabaseClient()
 
-  // New custom hooks
-  const { isActive: wakeLockActive, request: requestWakeLock, release: releaseWakeLock } = useWakeLock(false)
+  const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock(false)
   const { processPDF } = usePDFProcessor()
-  const { uploadFile: uploadToStorage } = useFileUpload() // Now uses server actions
+  const { uploadFile: uploadToStorage } = useFileUpload()
   const { saveState, loadState, clearState } = useUploadPersistence(isUploadInProgress)
 
-  function reset() {
+  const reset = useCallback(() => {
     resetForm()
     resetProgress()
     clearState()
+    setShowValidationErrors(false)
+    setUploadStage('info')
+    setCompletedIssueNumber(null)
     setErrorState({
       hasError: false,
       errorMessage: '',
-      errorType: 'unknown'
+      errorType: 'unknown',
     })
 
-    // Clear idempotency key on success to allow new uploads
     if (idempotencyKey && isUploadCompleted) {
       idempotencyManager.clear(idempotencyKey)
     }
 
-    // Reset idempotency state
     setIdempotencyKey('')
     setIsUploadCompleted(false)
-  }
+  }, [resetForm, resetProgress, clearState, idempotencyKey, isUploadCompleted, idempotencyManager])
 
-  /**
-   * Generate idempotency key and check for completed uploads when dialog opens
-   * 
-   * Requirements: 4.3, 4.4
-   * - Generates unique idempotency key on mount
-   * - Checks if upload with this key was already completed
-   * - Disables submit if upload was completed
-   */
   useEffect(() => {
     if (isDialogOpen && !idempotencyKey) {
-      // Generate new idempotency key
       const key = idempotencyManager.generateKey()
       setIdempotencyKey(key)
 
-      // Check if this upload was already completed
       const wasAlreadyCompleted = idempotencyManager.isCompleted(key)
       setIsUploadCompleted(wasAlreadyCompleted)
 
       if (wasAlreadyCompleted) {
-        addLog('Bu yükleme işlemi daha önce tamamlanmış.')
+        addLog('Bu yükleme oturumu daha önce tamamlanmış.')
       }
     }
   }, [isDialogOpen, idempotencyKey, idempotencyManager, addLog])
 
-  /**
-   * Fetch existing magazines when dialog opens
-   * 
-   * Loads all magazines to check for duplicate issue numbers.
-   * Dependencies: [isDialogOpen, supabase] - Re-runs when dialog opens or supabase client changes
-   */
   useEffect(() => {
     if (isDialogOpen) {
       const fetchMagazines = async () => {
@@ -131,9 +136,8 @@ export default function UploadDialog() {
           logger.error('Failed to fetch magazines', {
             operation: 'fetch_magazines',
             component: 'UploadDialog',
-            error: error instanceof Error ? error.message : String(error)
+            error: error instanceof Error ? error.message : String(error),
           })
-          // Don't block the dialog if fetching fails
           setExistingMagazines([])
         }
       }
@@ -141,27 +145,14 @@ export default function UploadDialog() {
     }
   }, [isDialogOpen, supabase])
 
-  /**
-   * Load persisted upload state on mount
-   * 
-   * Restores upload state if user refreshed during upload.
-   * Dependencies: [loadState, updateField, updateCoverProgress] - All are stable functions from custom hooks
-   */
   useEffect(() => {
     const savedState = loadState()
     if (savedState && savedState.isActive) {
       updateField('issue', savedState.issue)
       updateCoverProgress(savedState.coverProgress)
-      // Note: We can't restore file objects from localStorage
-      // User will need to re-select files
     }
   }, [loadState, updateField, updateCoverProgress])
 
-  /**
-   * Auto-save upload state when visibility changes
-   * 
-   * Saves state when user switches tabs to prevent data loss
-   */
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && isUploadInProgress) {
@@ -171,9 +162,9 @@ export default function UploadDialog() {
           date: formState.date,
           coverProgress: progress.coverProgress,
           pagesProgress: progress.pagesProgress,
-          logs,
+          logs: [],
           isActive: isUploadInProgress,
-          startTime: Date.now()
+          startTime: Date.now(),
         }
         saveState(state)
       }
@@ -183,78 +174,80 @@ export default function UploadDialog() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [isUploadInProgress, formState, progress, logs, saveState])
+  }, [isUploadInProgress, formState, progress, saveState])
 
-  /**
-   * Validates form data before upload
-   * Requirements: 2.1, 2.3 - Separate validation logic into focused function
-   */
   function validateUploadForm(): boolean {
+    setShowValidationErrors(true)
+
     if (isUploadCompleted) {
-      addLog('Bu yükleme işlemi zaten tamamlanmış. Yeni bir yükleme için dialogu kapatıp tekrar açın.')
+      addLog('Bu yükleme işlemi tamamlandı. Yeni yükleme için pencereyi kapatıp tekrar açın veya Yeni Yükleme düğmesine basın.')
       return false
     }
 
     if (!idempotencyKey) {
-      addLog('İdempotency anahtarı oluşturulamadı. Lütfen dialogu kapatıp tekrar açın.')
+      addLog(t('errors.sessionStartFailed'), 'error')
       return false
     }
 
-    if (!validate()) {
-      addLog('Lütfen tüm zorunlu alanları doldurun.')
+    const titleCheck = validateTitleValue(formState.title)
+    const issueCheck = validateIssueNumber(formState.issue, existingMagazines)
+    const dateCheck = validateDateValue(formState.date)
+
+    if (!validate() || !titleCheck.isValid || !issueCheck.isValid || !dateCheck.isValid) {
+      const firstError =
+        titleCheck.error ??
+        issueCheck.error ??
+        dateCheck.error ??
+        'Lütfen tüm zorunlu alanları geçerli biçimde doldurun.'
+      addLog(firstError, 'error')
       return false
     }
 
     return true
   }
 
-  /**
-   * Initializes upload session with wake lock and error state reset
-   * Requirements: 2.1, 2.2 - Separate initialization logic
-   */
   async function initializeUploadSession(): Promise<void> {
     setIsUploadInProgress(true)
 
-    // Clear previous error state when retrying
     if (errorState.hasError) {
       setErrorState({
         hasError: false,
         errorMessage: '',
-        errorType: 'unknown'
+        errorType: 'unknown',
       })
       addLog('Yeniden deneniyor...')
     }
 
-    // Request wake lock to prevent screen sleep during upload
     try {
       await requestWakeLock()
-      if (wakeLockActive) {
-        addLog('Ekran kilidi aktif')
+      if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+        addLog(t('upload.wakeLockActive'), 'info')
       }
     } catch (error) {
       logger.warn('Wake lock request failed, continuing upload', {
         operation: 'wake_lock_request',
         component: 'UploadDialog',
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       })
-      addLog('Ekran kilidi başarısız oldu, yükleme devam ediyor')
+      addLog(t('upload.wakeLockFailed'), 'info')
     }
   }
 
-  /**
-   * Processes PDF file into individual page images
-   * Requirements: 2.1, 2.2 - Separate PDF processing logic
-   */
-  async function processPDFFile(issueNumber: number): Promise<{ pages: Blob[]; totalPages: number }> {
-    // Skip PDF processing if we already have pages from previous attempt
-    if (errorState.failedAt && errorState.failedAt !== 'pdf_processing' && progress.totalPages > 0) {
-      addLog('PDF zaten işlenmiş, devam ediliyor...')
-      // Note: We can't restore the actual page blobs, but we can skip re-processing
-      // In a real retry scenario, we'd need to re-process the PDF
+  async function processPDFFile(
+    issueNumber: number
+  ): Promise<{ pages: Blob[]; totalPages: number }> {
+    setUploadStage('process')
+
+    if (
+      errorState.failedAt &&
+      errorState.failedAt !== 'pdf_processing' &&
+      progress.totalPages > 0
+    ) {
+      addLog('PDF dosyası yeniden hazırlanıyor...')
       const result = await processPDF(formState.pdf!, {
         onProgress: (current, total) => {
-          addLog(`Sayfa ${current}/${total} işleniyor...`)
-        }
+          addLog(`Sayfa ${current}/${total} işleniyor...`, 'progress')
+        },
       })
       return { pages: result.pages, totalPages: result.totalPages }
     }
@@ -265,68 +258,67 @@ export default function UploadDialog() {
     try {
       const result = await processPDF(formState.pdf!, {
         onProgress: (current, total) => {
-          addLog(`Sayfa ${current}/${total} işleniyor...`)
-        }
+          addLog(`Sayfa ${current}/${total} işleniyor...`, 'progress')
+        },
       })
 
-      addLog(`PDF işleme tamamlandı: ${result.totalPages} sayfa`)
+      addLog(`PDF işleme tamamlandı: ${result.totalPages} sayfa`, 'success')
       return { pages: result.pages, totalPages: result.totalPages }
     } catch (error) {
       throw new ProcessingError(
         `PDF processing failed: ${error instanceof Error ? error.message : String(error)}`,
         'pdf_processing',
-        'PDF dosyası işlenirken hata oluştu. Lütfen dosyanın geçerli bir PDF olduğundan emin olun.',
+        'PDF dosyası işlenirken hata oluştu. Dosyanın geçerli ve okunabilir olduğundan emin olun.',
         false,
         { originalError: error, issueNumber }
       )
     }
   }
 
-  /**
-   * Uploads cover image if provided
-   * Requirements: 2.1, 2.2 - Separate cover upload logic
-   */
   async function uploadCoverImage(issueNumber: number): Promise<void> {
+    setUploadStage('upload')
+
     if (!formState.cover || progress.coverDone) {
       if (progress.coverDone) {
-        addLog('Kapak görseli zaten yüklendi, atlanıyor...')
+        addLog('Kapak görseli daha önce yüklendi, atlanıyor...', 'info')
       }
       return
     }
 
-    addLog('Kapak görseli yükleniyor...')
+    addLog('Kapak görseli yükleniyor...', 'progress')
     const coverPath = `${issueNumber}/${APP_CONFIG.storage.fileNaming.coverFilename}`
 
     try {
       const processor = new ImageProcessor()
       const result = await processor.process(formState.cover)
       await uploadToStorage(coverPath, result.blob)
-      updateCoverProgress(100, true) // 100% complete
-      addLog('Kapak görseli yükleme tamamlandı')
+      updateCoverProgress(100, true)
+      addLog('Kapak görseli yüklendi.', 'success')
     } catch (error) {
       throw new StorageError(
         `Cover upload failed: ${error instanceof Error ? error.message : String(error)}`,
         'upload',
         coverPath,
-        'Kapak görseli yüklenirken hata oluştu. Lütfen tekrar deneyin.',
+        'Kapak görseli yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.',
         true,
         { originalError: error, issueNumber }
       )
     }
   }
 
-  /**
-   * Uploads all PDF pages with resume capability
-   * Requirements: 2.1, 2.2 - Separate page upload logic with configuration constants
-   */
-  async function uploadPages(pages: Blob[], totalPages: number, issueNumber: number): Promise<void> {
+  async function uploadPages(
+    pages: Blob[],
+    totalPages: number,
+    issueNumber: number
+  ): Promise<void> {
+    setUploadStage('upload')
     const startPage = errorState.lastSuccessfulPage ?? 0
     const { pagePrefix, pagePadding, extension } = APP_CONFIG.storage.fileNaming
 
     if (startPage > 0) {
-      addLog(`Sayfa ${startPage + 1}/${totalPages} sayfasından devam ediliyor...`)
+      addLog(`Sayfa ${startPage + 1}/${totalPages} adımından devam ediliyor...`, 'progress')
     } else {
-      addLog(`${totalPages} sayfa yükleniyor...`)
+      addLog(`${totalPages} sayfa yükleniyor...`, 'progress')
     }
 
     for (let i = startPage; i < pages.length; i++) {
@@ -336,12 +328,10 @@ export default function UploadDialog() {
       try {
         await uploadToStorage(pagePath, pages[i])
         updatePagesProgress(i + 1, totalPages)
-        addLog(`Sayfa ${i + 1}/${totalPages} başarıyla yüklendi`)
+        addLog(`Sayfa ${i + 1}/${totalPages} yüklendi.`, 'success')
 
-        // Update last successful page for potential retry
-        setErrorState(prev => ({ ...prev, lastSuccessfulPage: i }))
+        setErrorState((prev) => ({ ...prev, lastSuccessfulPage: i }))
       } catch (error) {
-        // Save progress before throwing
         await saveUploadState(issueNumber)
 
         throw new StorageError(
@@ -356,25 +346,26 @@ export default function UploadDialog() {
     }
   }
 
-  /**
-   * Creates database record for the magazine
-   * Requirements: 2.1, 2.2 - Separate database operations
-   */
-  async function createMagazineRecord(issueNumber: number, totalPages: number): Promise<void> {
-    addLog('Veritabanı kaydı oluşturuluyor...')
+  async function createMagazineRecord(
+    issueNumber: number,
+    totalPages: number
+  ): Promise<void> {
+    addLog('Veritabanı kaydı oluşturuluyor...', 'progress')
     const magazineRepository = new SupabaseMagazineRepository(supabase)
 
     try {
       await magazineRepository.create({
-        title: formState.title,
+        title: formState.title.trim(),
         issue_number: issueNumber,
         publication_date: formState.date,
         is_published: true,
-        cover_image_url: formState.cover ? `${issueNumber}/${APP_CONFIG.storage.fileNaming.coverFilename}` : undefined,
-        page_count: totalPages
+        cover_image_url: formState.cover
+          ? `${issueNumber}/${APP_CONFIG.storage.fileNaming.coverFilename}`
+          : undefined,
+        page_count: totalPages,
       })
 
-      addLog('✨ Veritabanı kaydı başarıyla tamamlandı')
+      addLog('Dergi kaydı veritabanına eklendi.', 'success')
     } catch (error) {
       throw new DatabaseError(
         `Database record creation failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -387,10 +378,6 @@ export default function UploadDialog() {
     }
   }
 
-  /**
-   * Saves upload state for recovery purposes
-   * Requirements: 2.1, 2.2 - Separate state persistence logic
-   */
   async function saveUploadState(issueNumber: number): Promise<void> {
     const state: UploadState = {
       title: formState.title,
@@ -398,72 +385,49 @@ export default function UploadDialog() {
       date: formState.date,
       coverProgress: progress.coverProgress,
       pagesProgress: progress.pagesProgress,
-      logs,
+      logs: [],
       isActive: true,
-      startTime: Date.now()
+      startTime: Date.now(),
     }
     saveState(state)
   }
 
-  /**
-   * Completes upload process with logging and cleanup
-   * Requirements: 2.1, 2.2 - Separate completion logic with configuration constants
-   */
   async function completeUpload(issueNumber: number): Promise<void> {
-    // Save logs - don't block main upload if this fails
-    const logResult = await saveUploadLog(String(issueNumber), getLogsAsString() + '\nTüm işlemler başarıyla tamamlandı')
+    const logResult = await saveUploadLog(
+      String(issueNumber),
+      getLogsAsString() + '\nTüm işlemler başarıyla tamamlandı.'
+    )
     if (logResult.success) {
-      addLog('İşlem günlükleri kaydedildi')
+      addLog('İşlem günlüğü kaydedildi.', 'success')
     } else {
       logger.warn('Upload log save failed, continuing', {
         operation: 'save_upload_log',
         component: 'UploadDialog',
         issueNumber,
-        error: logResult.error
+        error: logResult.error,
       })
-      addLog('Günlük kaydı başarısız oldu (yükleme başarılı)')
+      addLog('Günlük dosyası kaydedilemedi (dergi yüklemesi başarılı).', 'info')
     }
 
-    addLog('Dergi başarıyla yüklendi!')
+    addLog(`Sayı ${issueNumber} yayına hazır.`, 'success')
 
-    // Mark upload as completed (idempotency)
     idempotencyManager.markCompleted(idempotencyKey)
     setIsUploadCompleted(true)
-
-    // Clear upload state on success
+    setCompletedIssueNumber(issueNumber)
+    setUploadStage('completed')
     clearState()
 
-    // Show success toast
-    showSuccess(formState.title, issueNumber, () => {
+    showSuccess(formState.title.trim(), issueNumber, () => {
       router.push(`/dergi/${issueNumber}`)
     })
 
-    // Wait a bit to show success message using configuration constant
-    const { maxExecutionTime } = APP_CONFIG.system.performance
-    const successDelayMs = Math.min(1500, maxExecutionTime / 3)
-    const successTimeoutMs = Math.min(2000, maxExecutionTime / 2)
-
-    await createStandardizedPromise<void>(
-      (resolve) => {
-        const timer = setTimeout(() => resolve(), successDelayMs)
-        return () => clearTimeout(timer)
-      },
-      {
-        timeout: successTimeoutMs,
-        context: { operation: 'showSuccessDelay', component: 'UploadDialog' }
-      }
-    )
-
     router.refresh()
-    setIsDialogOpen(false)
-    reset()
   }
 
-  /**
-   * Handles upload errors with consistent error processing
-   * Requirements: 2.1, 2.2, 4.1, 4.2, 4.3, 4.4 - Standardized error handling
-   */
-  async function handleUploadError(error: unknown, issueNumber: number): Promise<void> {
+  async function handleUploadError(
+    error: unknown,
+    issueNumber: number
+  ): Promise<void> {
     let appError: AppError
 
     if (error instanceof AppError) {
@@ -480,9 +444,8 @@ export default function UploadDialog() {
       )
     }
 
-    addLog(`HATA: ${appError.userMessage}`)
+    addLog(`Hata: ${appError.userMessage}`, 'error')
 
-    // Determine where the error occurred based on error type
     let failedAt: ErrorState['failedAt'] = 'pages_upload'
     if (error instanceof ProcessingError) {
       failedAt = 'pdf_processing'
@@ -503,56 +466,27 @@ export default function UploadDialog() {
       error: appError.message,
       code: appError.code,
       userMessage: appError.userMessage,
-      stack: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined,
     })
 
-    // Categorize error for user display
     const categorizedError = categorizeError(error)
 
-    // Set error state WITHOUT clearing progress
     setErrorState({
       hasError: true,
       errorMessage: appError.userMessage,
       errorType: categorizedError.type,
       failedAt,
-      lastSuccessfulPage: progress.pagesDone > 0 ? progress.pagesDone - 1 : undefined
+      lastSuccessfulPage: progress.pagesDone > 0 ? progress.pagesDone - 1 : undefined,
     })
 
-    // Save state for potential recovery
-    await saveUploadState(issueNumber || (typeof formState.issue === 'number' ? formState.issue : 0))
+    await saveUploadState(
+      issueNumber || (typeof formState.issue === 'number' ? formState.issue : 0)
+    )
 
-    // Show error toast with retry option
-    showError(categorizedError, () => {
-      // Retry by resubmitting the form
-      const syntheticEvent = {
-        preventDefault: () => { },
-        stopPropagation: () => { },
-        nativeEvent: new Event('submit'),
-        currentTarget: document.createElement('form'),
-        target: document.createElement('form'),
-        bubbles: false,
-        cancelable: false,
-        defaultPrevented: false,
-        eventPhase: 0,
-        isTrusted: false,
-        timeStamp: Date.now(),
-        type: 'submit',
-        isDefaultPrevented: () => false,
-        isPropagationStopped: () => false,
-        persist: () => { },
-      } as React.FormEvent<HTMLFormElement>
-      handleSubmit(syntheticEvent)
-    })
+    showError(categorizedError)
   }
 
-  /**
-   * Main upload handler - orchestrates the entire upload process
-   * Requirements: 2.1, 2.2, 2.3, 2.5 - Refactored from 133-line god function
-   */
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
-    // Validation phase
+  async function runUpload(): Promise<void> {
     if (!validateUploadForm()) {
       return
     }
@@ -560,24 +494,12 @@ export default function UploadDialog() {
     const issueNumber = typeof formState.issue === 'number' ? formState.issue : 0
 
     try {
-      // Initialize upload session
       await initializeUploadSession()
-
-      // Process PDF file
       const { pages, totalPages } = await processPDFFile(issueNumber)
-
-      // Upload cover image
       await uploadCoverImage(issueNumber)
-
-      // Upload all pages
       await uploadPages(pages, totalPages, issueNumber)
-
-      // Create database record
       await createMagazineRecord(issueNumber, totalPages)
-
-      // Complete upload process
       await completeUpload(issueNumber)
-
     } catch (error) {
       await handleUploadError(error, issueNumber)
     } finally {
@@ -586,41 +508,115 @@ export default function UploadDialog() {
     }
   }
 
-  /**
-   * Dialog close handler with cleanup
-   * 
-   * Clears upload state when dialog closes (unless upload is in progress).
-   * Uses useCallback to prevent unnecessary re-renders of Dialog component.
-   * 
-   * Dependencies: [isUploadInProgress, clearState] - Re-creates when upload state or cleanup function changes
-   */
-  const handleDialogClose = useCallback((shouldOpen: boolean) => {
-    if (!shouldOpen && !isUploadInProgress) {
-      // Clear upload state when dialog closes (if not uploading)
-      clearState()
-    }
-    setIsDialogOpen(shouldOpen)
-  }, [isUploadInProgress, clearState])
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    await runUpload()
+  }
+
+  const handleDialogClose = useCallback(
+    (shouldOpen: boolean) => {
+      if (!shouldOpen && isUploadInProgress) {
+        toast.warning(t('upload.closeWhileBusy'))
+        return
+      }
+      if (!shouldOpen) {
+        if (isUploadCompleted) {
+          reset()
+        } else {
+          clearState()
+        }
+      }
+      setIsDialogOpen(shouldOpen)
+    },
+    [isUploadInProgress, isUploadCompleted, clearState, reset]
+  )
+
+  const handleStartNewUpload = () => {
+    reset()
+  }
+
+  const steps: Array<{ key: UploadStage; number: number; label: string }> = [
+    { key: 'info', number: 1, label: t('upload.stepInfo') },
+    { key: 'process', number: 2, label: t('upload.stepProcess') },
+    { key: 'upload', number: 3, label: t('upload.stepUpload') },
+  ]
+
+  const stageOrder: Record<UploadStage, number> = {
+    info: 1,
+    process: 2,
+    upload: 3,
+    completed: 4,
+  }
+  const currentOrder = stageOrder[uploadStage]
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
       <DialogTrigger asChild>
-        <Button type="button" variant="default" className="w-full sm:w-auto text-sm sm:text-base px-3 sm:px-4 py-2">
-          <span className="hidden sm:inline">Yeni Dergi Ekle</span>
-          <span className="sm:hidden">+ Ekle</span>
+        <Button
+          type="button"
+          variant="default"
+          data-tour="upload-trigger"
+          className="w-full sm:w-auto"
+        >
+          <Plus className="size-4 shrink-0" aria-hidden="true" />
+          <span>{t('upload.triggerLabel')}</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="w-[92vw] sm:w-[90vw] max-w-xl mx-auto max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+      <DialogContent className="mx-auto max-h-[88vh] w-[94vw] max-w-xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-lg sm:text-xl text-gray-900 font-semibold">
-            Yeni Dergi Ekle
-            {isUploadInProgress && <span className="ml-2 text-sm text-blue-600 font-normal">(Yükleniyor...)</span>}
+          <DialogTitle className="flex items-center gap-2 text-lg font-semibold text-foreground sm:text-xl">
+            <span>{t('upload.dialogTitle')}</span>
+            {isUploadInProgress ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-status-info-fg">
+                <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                {t('upload.submitUploading')}
+              </span>
+            ) : null}
           </DialogTitle>
-          <p className="text-sm text-gray-600 mt-1">
-            PDF dosyanızı yükleyin ve dergi bilgilerini girin
-          </p>
+          <DialogDescription className="text-sm text-muted-foreground">
+            {t('upload.dialogDescription')}
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-3 sm:gap-4">
+
+        {/* 3-Step Wizard Indicator */}
+        <ol
+          aria-label={t('upload.stepsLabel')}
+          className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-muted/40 p-2"
+        >
+          {steps.map((step) => {
+            const isDone = currentOrder > step.number
+            const isCurrent = currentOrder === step.number
+            return (
+              <li
+                key={step.key}
+                aria-current={isCurrent ? 'step' : undefined}
+                className={cn(
+                  'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                  isDone && 'bg-status-success-bg text-status-success-fg',
+                  isCurrent && 'bg-card text-foreground shadow-xs ring-1 ring-border',
+                  !isDone && !isCurrent && 'text-muted-foreground'
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums',
+                    isDone
+                      ? 'bg-status-success-fg text-status-success-bg'
+                      : isCurrent
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground'
+                  )}
+                >
+                  {isDone ? '✓' : step.number}
+                </span>
+                <span className="truncate">{step.label}</span>
+              </li>
+            )
+          })}
+        </ol>
+
+        <form onSubmit={handleSubmit} noValidate className="grid gap-4">
           <UploadForm
             title={formState.title}
             issue={formState.issue}
@@ -632,68 +628,93 @@ export default function UploadDialog() {
             pagesDone={progress.pagesDone}
             totalPages={progress.totalPages}
             existingMagazines={existingMagazines}
+            showValidationErrors={showValidationErrors}
+            hasPdfSelected={formState.pdf !== null}
             onTitleChange={(value) => updateField('title', value)}
             onIssueChange={(value) => updateField('issue', value)}
             onDateChange={(value) => updateField('date', value)}
             onPdfChange={(file) => updateField('pdf', file)}
             onCoverChange={(file) => updateField('cover', file)}
           />
-          <UploadLogs logs={logs} />
 
-          {/* Upload Completed UI */}
-          {isUploadCompleted && !isUploadInProgress && (
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+          <UploadLogs
+            logs={logs}
+            hasError={errorState.hasError}
+            busy={isUploadInProgress}
+          />
+
+          {/* Persistent Completion Summary */}
+          {isUploadCompleted && !isUploadInProgress ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-lg border border-status-success-border bg-status-success-bg p-4 text-status-success-fg"
+            >
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-medium text-green-800">
-                    Yükleme Tamamlandı
+                <CheckCircle2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <h3 className="text-sm font-semibold">
+                    {t('upload.completedTitle', {
+                      issue: completedIssueNumber ?? (typeof formState.issue === 'number' ? formState.issue : ''),
+                    })}
                   </h3>
-                  <div className="mt-2 text-sm text-green-700">
-                    <p>Bu yükleme işlemi başarıyla tamamlanmış. Yeni bir yükleme yapmak için dialogu kapatıp tekrar açın.</p>
+                  <p className="text-sm opacity-90">{t('upload.completedDescription')}</p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {completedIssueNumber !== null ? (
+                      <Button asChild size="sm" variant="default">
+                        <Link href={`/dergi/${completedIssueNumber}`}>
+                          {t('upload.viewMagazine')}
+                        </Link>
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleStartNewUpload}
+                    >
+                      {t('upload.newUpload')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDialogClose(false)}
+                    >
+                      {t('common.close')}
+                    </Button>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Error Recovery UI */}
-          {errorState.hasError && !isUploadInProgress && !isUploadCompleted && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          {errorState.hasError && !isUploadInProgress && !isUploadCompleted ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-status-error-border bg-status-error-bg p-4 text-status-error-fg"
+            >
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-medium text-red-800">
-                    Yükleme Hatası
-                  </h3>
-                  <div className="mt-2 text-sm text-red-700">
+                <AlertCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold">{t('upload.errorTitle')}</h3>
+                  <div className="mt-1.5 space-y-1 text-sm">
                     <p>{errorState.errorMessage}</p>
-                    {errorState.lastSuccessfulPage !== undefined && (
-                      <p className="mt-1">
-                        İlerleme kaydedildi: {errorState.lastSuccessfulPage + 1} sayfa başarıyla yüklendi.
+                    {errorState.lastSuccessfulPage !== undefined ? (
+                      <p className="text-xs font-medium tabular-nums">
+                        {t('upload.savedPagesProgress', {
+                          count: formatNumberTR(errorState.lastSuccessfulPage + 1),
+                        })}
                       </p>
-                    )}
-                    {progress.coverDone && (
-                      <p className="mt-1">
-                        Kapak görseli başarıyla yüklendi.
-                      </p>
-                    )}
+                    ) : null}
+                    {progress.coverDone ? (
+                      <p className="text-xs font-medium">{t('upload.savedCoverProgress')}</p>
+                    ) : null}
                   </div>
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      type="submit"
-                      size="sm"
-                      className="bg-red-600 hover:bg-red-700 text-white"
-                    >
-                      Tekrar Dene
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="destructive" onClick={runUpload}>
+                      {t('upload.submitRetry')}
                     </Button>
                     <Button
                       type="button"
@@ -704,32 +725,45 @@ export default function UploadDialog() {
                         addLog('İşlem iptal edildi ve ilerleme sıfırlandı.')
                       }}
                     >
-                      Sıfırla
+                      {t('common.reset')}
                     </Button>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
-          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => handleDialogClose(false)}
-              disabled={isUploadInProgress}
-              className="w-full sm:w-auto order-2 sm:order-1"
-            >
-              {isUploadInProgress ? 'Yükleme devam ediyor...' : 'Kapat'}
-            </Button>
-            <Button
-              type="submit"
-              disabled={isUploadInProgress || isUploadCompleted}
-              className="w-full sm:w-auto order-1 sm:order-2 bg-neutral-900 hover:bg-neutral-800 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isUploadCompleted ? 'Tamamlandı' : isUploadInProgress ? 'Yükleniyor...' : errorState.hasError ? 'Tekrar Dene' : 'Kaydet'}
-            </Button>
-          </DialogFooter>
+          {!isUploadCompleted ? (
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => handleDialogClose(false)}
+                disabled={isUploadInProgress}
+                className="order-2 w-full sm:order-1 sm:w-auto"
+              >
+                {isUploadInProgress ? t('upload.submitUploading') : t('common.close')}
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                disabled={isUploadInProgress}
+                aria-busy={isUploadInProgress}
+                className="order-1 w-full sm:order-2 sm:w-auto"
+              >
+                {isUploadInProgress ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    <span>{t('upload.submitUploading')}</span>
+                  </>
+                ) : errorState.hasError ? (
+                  t('upload.submitRetry')
+                ) : (
+                  t('upload.submitSave')
+                )}
+              </Button>
+            </DialogFooter>
+          ) : null}
         </form>
       </DialogContent>
     </Dialog>

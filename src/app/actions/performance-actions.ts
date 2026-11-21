@@ -3,6 +3,7 @@
 import { getAuthenticatedClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/services/Logger'
 import { requireAdmin } from '@/lib/services/authorization'
+import { getErrorEntry } from '@/lib/constants/errorCatalog'
 
 export interface PerformanceStats {
   metric: string
@@ -76,7 +77,10 @@ export async function getPerformanceDashboardData(days: number = 7): Promise<Met
       })
       return {
         success: false,
-        error: { code: 'DATABASE_ERROR', message: error.message }
+        error: {
+          code: 'DATABASE_ERROR',
+          message: getErrorEntry('DATABASE_FETCH_FAILED').userMessage
+        }
       }
     }
 

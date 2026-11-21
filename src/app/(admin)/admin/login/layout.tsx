@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
+import { t } from '@/lib/i18n'
 
 export const metadata: Metadata = {
-  title: 'Admin Girişi - Balkon Dergisi',
+  title: `${t('auth.loginTitle')} - ${t('nav.brandTitle')} ${t('nav.brandSubtitle')}`,
   robots: {
     index: false,
     follow: false,
@@ -11,4 +12,3 @@ export const metadata: Metadata = {
 export default function LoginLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
-

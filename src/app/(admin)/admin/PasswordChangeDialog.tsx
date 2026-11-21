@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { t } from '@/lib/i18n'
 import { changePassword } from './password-actions'
 
 type PasswordChangeDialogProps = {
@@ -28,65 +30,84 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  // Password visibility toggles
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
-  // Client-side validation
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current !== null) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      clearCloseTimer()
+    }
+  }, [])
+
   const validateForm = (): string | null => {
     if (!currentPassword) {
-      return 'Mevcut şifre gereklidir'
+      return t('validation.passwordRequired')
     }
     if (!newPassword) {
-      return 'Yeni şifre gereklidir'
+      return t('validation.passwordRequired')
     }
     if (newPassword.length < 6) {
-      return 'Yeni şifre en az 6 karakter olmalıdır'
+      return t('validation.passwordMin')
     }
     if (newPassword === currentPassword) {
-      return 'Yeni şifre mevcut şifreden farklı olmalıdır'
+      return t('validation.passwordSame')
     }
     if (newPassword !== confirmPassword) {
-      return 'Şifreler eşleşmiyor'
+      return t('validation.passwordMismatch')
     }
     return null
   }
 
+  const resetFormState = () => {
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
+    setShowCurrentPassword(false)
+    setShowNewPassword(false)
+    setShowConfirmPassword(false)
+    setError(null)
+    setSuccess(false)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Clear previous messages
+
+    clearCloseTimer()
     setError(null)
     setSuccess(false)
 
-    // Validate form
     const validationError = validateForm()
     if (validationError) {
       setError(validationError)
       return
     }
 
-    // Submit password change
     setIsLoading(true)
     try {
       const result = await changePassword(currentPassword, newPassword)
-      
+
       if (result.success) {
         setSuccess(true)
-        // Clear form and close dialog after 2 seconds
-        setTimeout(() => {
-          setCurrentPassword('')
-          setNewPassword('')
-          setConfirmPassword('')
-          setSuccess(false)
+        toast.success(t('password.successMessage'))
+        closeTimerRef.current = setTimeout(() => {
+          resetFormState()
           onOpenChange(false)
-        }, 2000)
+        }, 1200)
       } else {
-        setError(result.error || 'Bir hata oluştu')
+        setError(result.error || t('errors.unknown'))
       }
     } catch {
-      setError('Şifre güncellenirken bir hata oluştu. Lütfen tekrar deneyin.')
+      setError(t('errors.unknown'))
     } finally {
       setIsLoading(false)
     }
@@ -94,14 +115,10 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!isLoading) {
+      clearCloseTimer()
       onOpenChange(newOpen)
-      // Reset form when closing
       if (!newOpen) {
-        setCurrentPassword('')
-        setNewPassword('')
-        setConfirmPassword('')
-        setError(null)
-        setSuccess(false)
+        resetFormState()
       }
     }
   }
@@ -110,17 +127,15 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Şifre Değiştir</DialogTitle>
-          <DialogDescription>
-            Hesap güvenliğiniz için şifrenizi güncelleyin
-          </DialogDescription>
+          <DialogTitle>{t('password.title')}</DialogTitle>
+          <DialogDescription>{t('password.description')}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             {/* Current Password */}
             <div className="grid gap-2">
-              <Label htmlFor="current-password">Mevcut Şifre</Label>
+              <Label htmlFor="current-password">{t('password.currentLabel')}</Label>
               <div className="relative">
                 <Input
                   id="current-password"
@@ -128,20 +143,23 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   disabled={isLoading}
-                  className="pr-10"
+                  className="pr-11"
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowCurrentPassword((prev) => !prev)}
                   disabled={isLoading}
-                  tabIndex={-1}
+                  aria-label={
+                    showCurrentPassword ? t('auth.hidePassword') : t('auth.showPassword')
+                  }
+                  aria-pressed={showCurrentPassword}
+                  className="absolute top-1/2 right-0.5 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50"
                 >
                   {showCurrentPassword ? (
-                    <EyeOff className="size-4" />
+                    <EyeOff className="size-4" aria-hidden="true" />
                   ) : (
-                    <Eye className="size-4" />
+                    <Eye className="size-4" aria-hidden="true" />
                   )}
                 </button>
               </div>
@@ -149,7 +167,7 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
 
             {/* New Password */}
             <div className="grid gap-2">
-              <Label htmlFor="new-password">Yeni Şifre</Label>
+              <Label htmlFor="new-password">{t('password.newLabel')}</Label>
               <div className="relative">
                 <Input
                   id="new-password"
@@ -157,20 +175,23 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   disabled={isLoading}
-                  className="pr-10"
+                  className="pr-11"
                   autoComplete="new-password"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowNewPassword((prev) => !prev)}
                   disabled={isLoading}
-                  tabIndex={-1}
+                  aria-label={
+                    showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')
+                  }
+                  aria-pressed={showNewPassword}
+                  className="absolute top-1/2 right-0.5 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50"
                 >
                   {showNewPassword ? (
-                    <EyeOff className="size-4" />
+                    <EyeOff className="size-4" aria-hidden="true" />
                   ) : (
-                    <Eye className="size-4" />
+                    <Eye className="size-4" aria-hidden="true" />
                   )}
                 </button>
               </div>
@@ -178,7 +199,7 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
 
             {/* Confirm Password */}
             <div className="grid gap-2">
-              <Label htmlFor="confirm-password">Yeni Şifre (Tekrar)</Label>
+              <Label htmlFor="confirm-password">{t('password.confirmLabel')}</Label>
               <div className="relative">
                 <Input
                   id="confirm-password"
@@ -186,57 +207,72 @@ export function PasswordChangeDialog({ open, onOpenChange }: PasswordChangeDialo
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   disabled={isLoading}
-                  className="pr-10"
+                  className="pr-11"
                   autoComplete="new-password"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
                   disabled={isLoading}
-                  tabIndex={-1}
+                  aria-label={
+                    showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')
+                  }
+                  aria-pressed={showConfirmPassword}
+                  className="absolute top-1/2 right-0.5 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50"
                 >
                   {showConfirmPassword ? (
-                    <EyeOff className="size-4" />
+                    <EyeOff className="size-4" aria-hidden="true" />
                   ) : (
-                    <Eye className="size-4" />
+                    <Eye className="size-4" aria-hidden="true" />
                   )}
                 </button>
               </div>
             </div>
 
-            {/* Error Message */}
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-md p-3">
+            {error ? (
+              <div
+                role="alert"
+                className="rounded-md border border-status-error-border bg-status-error-bg p-3 text-sm font-medium text-status-error-fg"
+              >
                 {error}
               </div>
-            )}
+            ) : null}
 
-            {/* Success Message */}
-            {success && (
-              <div className="text-sm text-green-600 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-md p-3">
-                Şifreniz başarıyla güncellendi
+            {success ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-md border border-status-success-border bg-status-success-bg p-3 text-sm font-medium text-status-success-fg"
+              >
+                {t('password.successMessage')}
               </div>
-            )}
+            ) : null}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row">
             <Button
               type="button"
               variant="outline"
               onClick={() => handleOpenChange(false)}
               disabled={isLoading}
+              className="w-full sm:w-auto"
             >
-              İptal
+              {t('common.cancel')}
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button
+              type="submit"
+              variant="default"
+              disabled={isLoading}
+              aria-busy={isLoading}
+              className="w-full sm:w-auto"
+            >
               {isLoading ? (
                 <>
-                  <Loader2 className="animate-spin" />
-                  Güncelleniyor...
+                  <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  <span>{t('password.submitting')}</span>
                 </>
               ) : (
-                'Şifreyi Güncelle'
+                t('password.submit')
               )}
             </Button>
           </DialogFooter>

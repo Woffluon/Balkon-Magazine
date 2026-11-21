@@ -1,8 +1,20 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ProgressBar } from './ProgressBar'
 import { UPLOAD_LIMITS } from '@/lib/constants/upload'
-import { FILE_SIZE_LIMITS, ALLOWED_MIME_TYPES, validatePDF as validatePDFMagic, validateImage } from '@/lib/services/fileValidation'
-import { useState, useEffect } from 'react'
+import {
+  FILE_SIZE_LIMITS,
+  ALLOWED_MIME_TYPES,
+  validatePDF as validatePDFMagic,
+  validateImage,
+} from '@/lib/services/fileValidation'
+import { TURKISH_TITLE_REGEX } from '@/lib/validators/schemas'
+import { formatFileSizeTR, formatNumberTR, parseLocalDateTR } from '@/lib/formatters/tr'
+import { t } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 import type { Magazine } from '@/types/magazine'
 
 interface UploadFormProps {
@@ -16,8 +28,10 @@ interface UploadFormProps {
   pagesDone?: number
   totalPages?: number
   existingMagazines?: Magazine[]
+  showValidationErrors?: boolean
+  hasPdfSelected?: boolean
   onTitleChange: (value: string) => void
-  onIssueChange: (value: number) => void
+  onIssueChange: (value: number | '') => void
   onDateChange: (value: string) => void
   onPdfChange: (file: File | null) => void
   onCoverChange: (file: File | null) => void
@@ -30,144 +44,128 @@ interface FileValidationState {
   isValid: boolean
 }
 
-interface IssueValidationState {
+interface FieldValidationState {
   error: string | null
   isValid: boolean
 }
 
-/**
- * Format file size in human-readable format
- */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+export function validateTitleValue(title: string): FieldValidationState {
+  const trimmed = title.trim()
+  if (!trimmed) {
+    return { error: t('validation.titleRequired'), isValid: false }
+  }
+  if (trimmed.length > 200) {
+    return { error: t('validation.titleMax'), isValid: false }
+  }
+  if (!TURKISH_TITLE_REGEX.test(trimmed)) {
+    return { error: t('validation.titleCharset'), isValid: false }
+  }
+  return { error: null, isValid: true }
 }
 
-/**
- * Validate issue number: check range (1-9999) and uniqueness
- * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
- */
-function validateIssueNumber(issue: number | '', existingMagazines: Magazine[]): IssueValidationState {
-  // Check if empty
-  if (issue === '' || issue === 0) {
-    return {
-      error: 'Sayı numarası gereklidir',
-      isValid: false
-    }
+export function validateIssueNumber(
+  issue: number | '',
+  existingMagazines: Magazine[]
+): FieldValidationState {
+  if (issue === '') {
+    return { error: t('validation.issueRequired'), isValid: false }
   }
 
-  // Check range (1-9999)
-  if (issue < 1 || issue > 9999) {
-    return {
-      error: 'Sayı numarası 1 ile 9999 arasında olmalıdır',
-      isValid: false
-    }
+  if (!Number.isInteger(issue) || issue < 1 || issue > 9999) {
+    return { error: t('validation.issueRange'), isValid: false }
   }
 
-  // Check for duplicates
-  const isDuplicate = existingMagazines.some(mag => mag.issue_number === issue)
+  const isDuplicate = existingMagazines.some((mag) => mag.issue_number === issue)
   if (isDuplicate) {
-    return {
-      error: `Sayı ${issue} zaten mevcut`,
-      isValid: false
-    }
+    return { error: t('validation.issueDuplicate'), isValid: false }
   }
 
-  return {
-    error: null,
-    isValid: true
-  }
+  return { error: null, isValid: true }
 }
 
-/**
- * Validate PDF file: check type and size (100MB max)
- * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
- */
+export function validateDateValue(date: string): FieldValidationState {
+  if (!date.trim()) {
+    return { error: t('validation.dateRequired'), isValid: false }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || parseLocalDateTR(date) === null) {
+    return { error: t('validation.dateInvalid'), isValid: false }
+  }
+  return { error: null, isValid: true }
+}
+
 async function validatePDF(file: File): Promise<FileValidationState> {
-  // Check MIME type
-  const isPdfType = ALLOWED_MIME_TYPES.PDF.some(type => type === file.type)
+  const isPdfType = ALLOWED_MIME_TYPES.PDF.some((type) => type === file.type)
   if (!isPdfType) {
     return {
-      error: 'Sadece PDF dosyaları desteklenir',
+      error: t('validation.pdfInvalidType'),
       fileName: null,
       fileSize: null,
-      isValid: false
+      isValid: false,
     }
   }
 
-  // Check file size (500MB max)
   if (file.size > UPLOAD_LIMITS.MAX_CLIENT_FILE_SIZE) {
     return {
-      error: `PDF dosyası çok büyük (maksimum ${UPLOAD_LIMITS.MAX_BODY_SIZE_MB}MB)`,
+      error: t('validation.pdfSizeLimit'),
       fileName: null,
       fileSize: null,
-      isValid: false
+      isValid: false,
     }
   }
 
-  // Validate magic number
   const magicValidation = await validatePDFMagic(file)
   if (!magicValidation.valid) {
     return {
-      error: 'Geçersiz PDF dosyası',
+      error: magicValidation.error ?? t('validation.pdfInvalidFile'),
       fileName: null,
       fileSize: null,
-      isValid: false
+      isValid: false,
     }
   }
 
   return {
     error: null,
     fileName: file.name,
-    fileSize: formatFileSize(file.size),
-    isValid: true
+    fileSize: formatFileSizeTR(file.size),
+    isValid: true,
   }
 }
 
-/**
- * Validate cover image: check type and size (10MB max)
- * Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6
- */
 async function validateCover(file: File): Promise<FileValidationState> {
-  // Check MIME type
-  const isImageType = ALLOWED_MIME_TYPES.IMAGE.some(type => type === file.type)
+  const isImageType = ALLOWED_MIME_TYPES.IMAGE.some((type) => type === file.type)
   if (!isImageType) {
     return {
-      error: 'Sadece JPEG, PNG ve WebP dosyaları desteklenir',
+      error: t('validation.coverInvalidType'),
       fileName: null,
       fileSize: null,
-      isValid: false
+      isValid: false,
     }
   }
 
-  // Check file size (10MB max)
   if (file.size > FILE_SIZE_LIMITS.IMAGE) {
-    const maxSizeMB = (FILE_SIZE_LIMITS.IMAGE / (1024 * 1024)).toFixed(0)
     return {
-      error: `Kapak görseli çok büyük (maksimum ${maxSizeMB}MB)`,
+      error: t('validation.coverSizeLimit'),
       fileName: null,
       fileSize: null,
-      isValid: false
+      isValid: false,
     }
   }
 
-  // Validate magic number
   const magicValidation = await validateImage(file)
   if (!magicValidation.valid) {
     return {
-      error: 'Geçersiz görsel dosyası',
+      error: magicValidation.error ?? t('validation.coverInvalidType'),
       fileName: null,
       fileSize: null,
-      isValid: false
+      isValid: false,
     }
   }
 
   return {
     error: null,
     fileName: file.name,
-    fileSize: formatFileSize(file.size),
-    isValid: true
+    fileSize: formatFileSizeTR(file.size),
+    isValid: true,
   }
 }
 
@@ -177,45 +175,54 @@ export function UploadForm({
   date,
   coverProgress,
   pagesProgress,
+  overall,
   busy,
   pagesDone = 0,
   totalPages = 0,
   existingMagazines = [],
+  showValidationErrors = false,
+  hasPdfSelected = false,
   onTitleChange,
   onIssueChange,
   onDateChange,
   onPdfChange,
-  onCoverChange
+  onCoverChange,
 }: UploadFormProps) {
   const [pdfValidation, setPdfValidation] = useState<FileValidationState>({
     error: null,
     fileName: null,
     fileSize: null,
-    isValid: false
+    isValid: false,
   })
   const [coverValidation, setCoverValidation] = useState<FileValidationState>({
     error: null,
     fileName: null,
     fileSize: null,
-    isValid: false
+    isValid: false,
   })
-  const [issueValidation, setIssueValidation] = useState<IssueValidationState>({
-    error: null,
-    isValid: false
+  const [touched, setTouched] = useState({
+    title: false,
+    issue: false,
+    date: false,
   })
 
-  // Validate issue number whenever it changes
+  // Clear file feedback when parent resets form
   useEffect(() => {
-    if (issue !== '') {
-      const validation = validateIssueNumber(issue, existingMagazines)
-      setIssueValidation(validation)
-    } else {
-      setIssueValidation({
-        error: null,
-        isValid: false
-      })
+    if (!title && issue === '' && !date && !hasPdfSelected) {
+      setPdfValidation({ error: null, fileName: null, fileSize: null, isValid: false })
+      setCoverValidation({ error: null, fileName: null, fileSize: null, isValid: false })
+      setTouched({ title: false, issue: false, date: false })
     }
-  }, [issue, existingMagazines])
+  }, [title, issue, date, hasPdfSelected])
+
+  const titleState = validateTitleValue(title)
+  const issueState = validateIssueNumber(issue, existingMagazines)
+  const dateState = validateDateValue(date)
+
+  const showTitleError = (touched.title || showValidationErrors) && titleState.error
+  const showIssueError = (issue !== '' || touched.issue || showValidationErrors) && issueState.error
+  const showDateError = (touched.date || showValidationErrors) && dateState.error
+  const showPdfRequiredError = showValidationErrors && !hasPdfSelected && !pdfValidation.error
 
   const handlePdfChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
@@ -225,13 +232,12 @@ export function UploadForm({
         error: null,
         fileName: null,
         fileSize: null,
-        isValid: false
+        isValid: false,
       })
       onPdfChange(null)
       return
     }
 
-    // Real-time validation
     const validation = await validatePDF(file)
     setPdfValidation(validation)
 
@@ -239,7 +245,7 @@ export function UploadForm({
       onPdfChange(file)
     } else {
       onPdfChange(null)
-      e.target.value = '' // Clear the input
+      e.target.value = ''
     }
   }
 
@@ -251,13 +257,12 @@ export function UploadForm({
         error: null,
         fileName: null,
         fileSize: null,
-        isValid: false
+        isValid: false,
       })
       onCoverChange(null)
       return
     }
 
-    // Real-time validation
     const validation = await validateCover(file)
     setCoverValidation(validation)
 
@@ -265,139 +270,206 @@ export function UploadForm({
       onCoverChange(file)
     } else {
       onCoverChange(null)
-      e.target.value = '' // Clear the input
+      e.target.value = ''
     }
   }
 
   return (
-    <div className="grid gap-3 sm:gap-4">
+    <div className="grid gap-4">
       <div className="grid gap-2">
-        <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="title">
-          Başlık
-        </label>
+        <Label htmlFor="upload-title" className="text-sm font-medium text-foreground">
+          {t('upload.titleLabel')} <span className="text-destructive" aria-hidden="true">*</span>
+        </Label>
         <Input
-          id="title"
+          id="upload-title"
           value={title}
+          placeholder={t('upload.titlePlaceholder')}
           onChange={(e) => onTitleChange(e.target.value)}
+          onBlur={() => setTouched((prev) => ({ ...prev, title: true }))}
           required
           disabled={busy}
-          className="w-full text-[10px] sm:text-xs"
+          aria-invalid={showTitleError ? 'true' : 'false'}
+          aria-describedby={showTitleError ? 'upload-title-error' : undefined}
+          className={cn(showTitleError && 'border-destructive')}
         />
-      </div>
-
-      <div className="grid gap-2">
-        <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="issue">
-          Sayı No
-        </label>
-        <Input
-          id="issue"
-          type="number"
-          min="1"
-          max="9999"
-          value={issue}
-          onChange={(e) => onIssueChange(Number(e.target.value))}
-          required
-          disabled={busy}
-          className={`w-full text-[10px] sm:text-xs ${issueValidation.error ? 'border-red-500' : ''}`}
-          aria-invalid={issueValidation.error ? "true" : "false"}
-          aria-describedby={issueValidation.error ? "issue-error" : issueValidation.isValid ? "issue-success" : undefined}
-        />
-        {issueValidation.error && (
-          <p id="issue-error" role="alert" className="text-[10px] sm:text-xs text-red-600">
-            {issueValidation.error}
+        {showTitleError ? (
+          <p id="upload-title-error" role="alert" className="text-xs font-medium text-status-error-fg">
+            {titleState.error}
           </p>
-        )}
-        {issueValidation.isValid && issue !== '' && (
-          <p id="issue-success" className="text-[10px] sm:text-xs text-green-700">
-            ✓ Sayı numarası geçerli
-          </p>
-        )}
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="upload-issue" className="text-sm font-medium text-foreground">
+            {t('upload.issueLabel')} <span className="text-destructive" aria-hidden="true">*</span>
+          </Label>
+          <Input
+            id="upload-issue"
+            type="number"
+            min={1}
+            max={9999}
+            step={1}
+            value={issue}
+            onChange={(e) => {
+              const raw = e.target.value
+              if (raw === '') {
+                onIssueChange('')
+                return
+              }
+              const parsed = Number(raw)
+              if (!Number.isNaN(parsed)) {
+                onIssueChange(parsed)
+              }
+            }}
+            onBlur={() => setTouched((prev) => ({ ...prev, issue: true }))}
+            required
+            disabled={busy}
+            aria-invalid={showIssueError ? 'true' : 'false'}
+            aria-describedby={
+              showIssueError
+                ? 'upload-issue-error'
+                : issueState.isValid
+                  ? 'upload-issue-success'
+                  : undefined
+            }
+            className={cn('tabular-nums', showIssueError && 'border-destructive')}
+          />
+          {showIssueError ? (
+            <p id="upload-issue-error" role="alert" className="text-xs font-medium text-status-error-fg">
+              {issueState.error}
+            </p>
+          ) : issueState.isValid && issue !== '' ? (
+            <p id="upload-issue-success" className="text-xs font-medium text-status-success-fg">
+              ✓ {t('upload.issueValid')}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="upload-date" className="text-sm font-medium text-foreground">
+            {t('upload.dateLabel')} <span className="text-destructive" aria-hidden="true">*</span>
+          </Label>
+          <Input
+            id="upload-date"
+            type="date"
+            value={date}
+            onChange={(e) => onDateChange(e.target.value)}
+            onBlur={() => setTouched((prev) => ({ ...prev, date: true }))}
+            required
+            disabled={busy}
+            aria-invalid={showDateError ? 'true' : 'false'}
+            aria-describedby={showDateError ? 'upload-date-error' : undefined}
+            className={cn('tabular-nums', showDateError && 'border-destructive')}
+          />
+          {showDateError ? (
+            <p id="upload-date-error" role="alert" className="text-xs font-medium text-status-error-fg">
+              {dateState.error}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-2">
-        <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="date">
-          Yayın Tarihi
-        </label>
+        <Label htmlFor="upload-pdf" className="text-sm font-medium text-foreground">
+          {t('upload.pdfLabel')} <span className="text-destructive" aria-hidden="true">*</span>
+        </Label>
         <Input
-          id="date"
-          type="date"
-          value={date}
-          onChange={(e) => onDateChange(e.target.value)}
-          required
-          disabled={busy}
-          className="w-full text-[10px] sm:text-xs"
-        />
-      </div>
-
-      <div className="grid gap-2">
-        <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="pdf">
-          PDF <span className="text-[10px] sm:text-xs text-gray-500">(yalnızca dönüştürmek için; sunucuya yüklenmez)</span>
-        </label>
-        <Input
-          id="pdf"
+          id="upload-pdf"
           type="file"
           accept="application/pdf"
           onChange={handlePdfChange}
           required
           disabled={busy}
-          className="w-full text-[10px] sm:text-xs"
-          aria-invalid={pdfValidation.error ? "true" : "false"}
-          aria-describedby={pdfValidation.error ? "pdf-error" : pdfValidation.isValid ? "pdf-success" : undefined}
+          aria-invalid={pdfValidation.error || showPdfRequiredError ? 'true' : 'false'}
+          aria-describedby={
+            pdfValidation.error || showPdfRequiredError
+              ? 'upload-pdf-error'
+              : pdfValidation.isValid
+                ? 'upload-pdf-success'
+                : 'upload-pdf-hint'
+          }
+          className={cn(
+            'cursor-pointer',
+            (pdfValidation.error || showPdfRequiredError) && 'border-destructive'
+          )}
         />
-        {pdfValidation.error && (
-          <p id="pdf-error" role="alert" className="text-[10px] sm:text-xs text-red-600">
+        <p id="upload-pdf-hint" className="text-xs text-muted-foreground">
+          {t('upload.pdfHint')}
+        </p>
+        {pdfValidation.error ? (
+          <p id="upload-pdf-error" role="alert" className="text-xs font-medium text-status-error-fg">
             {pdfValidation.error}
           </p>
-        )}
-        {pdfValidation.isValid && pdfValidation.fileName && (
-          <p id="pdf-success" className="text-[10px] sm:text-xs text-green-700">
+        ) : showPdfRequiredError ? (
+          <p id="upload-pdf-error" role="alert" className="text-xs font-medium text-status-error-fg">
+            {t('upload.pdfLabel')}: {t('common.required')}
+          </p>
+        ) : pdfValidation.isValid && pdfValidation.fileName ? (
+          <p id="upload-pdf-success" className="text-xs font-medium text-status-success-fg">
             ✓ {pdfValidation.fileName} ({pdfValidation.fileSize})
           </p>
-        )}
+        ) : null}
       </div>
 
       <div className="grid gap-2">
-        <label className="text-[10px] sm:text-xs font-medium text-gray-700" htmlFor="cover">
-          Kapak <span className="text-[10px] sm:text-xs text-gray-500">(opsiyonel)</span>
-        </label>
+        <Label htmlFor="upload-cover" className="text-sm font-medium text-foreground">
+          {t('upload.coverLabel')}{' '}
+          <span className="text-xs font-normal text-muted-foreground">({t('common.optional')})</span>
+        </Label>
         <Input
-          id="cover"
+          id="upload-cover"
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           onChange={handleCoverChange}
           disabled={busy}
-          className="w-full text-[10px] sm:text-xs"
-          aria-invalid={coverValidation.error ? "true" : "false"}
-          aria-describedby={coverValidation.error ? "cover-error" : coverValidation.isValid ? "cover-success" : undefined}
+          aria-invalid={coverValidation.error ? 'true' : 'false'}
+          aria-describedby={
+            coverValidation.error
+              ? 'upload-cover-error'
+              : coverValidation.isValid
+                ? 'upload-cover-success'
+                : 'upload-cover-hint'
+          }
+          className={cn('cursor-pointer', coverValidation.error && 'border-destructive')}
         />
-        {coverValidation.error && (
-          <p id="cover-error" role="alert" className="text-[10px] sm:text-xs text-red-600">
+        <p id="upload-cover-hint" className="text-xs text-muted-foreground">
+          {t('upload.coverHint')}
+        </p>
+        {coverValidation.error ? (
+          <p id="upload-cover-error" role="alert" className="text-xs font-medium text-status-error-fg">
             {coverValidation.error}
           </p>
-        )}
-        {coverValidation.isValid && coverValidation.fileName && (
-          <p id="cover-success" className="text-[10px] sm:text-xs text-green-700">
+        ) : coverValidation.isValid && coverValidation.fileName ? (
+          <p id="upload-cover-success" className="text-xs font-medium text-status-success-fg">
             ✓ {coverValidation.fileName} ({coverValidation.fileSize})
           </p>
-        )}
+        ) : null}
       </div>
 
-      {busy && (
-        <>
+      {busy ? (
+        <div className="space-y-3 rounded-lg border border-border bg-muted/40 p-3">
           <ProgressBar
-            value={coverProgress}
-            label="Kapak yükleme ilerlemesi"
+            value={overall}
+            label={t('upload.overallProgress')}
             showPercentage={true}
           />
-
+          <ProgressBar
+            value={coverProgress}
+            label={t('upload.coverProgress')}
+            showPercentage={true}
+          />
           <ProgressBar
             value={pagesProgress}
-            label="Sayfa yükleme ilerlemesi"
+            label={t('upload.pagesProgress', {
+              completed: formatNumberTR(pagesDone),
+              total: formatNumberTR(totalPages),
+            })}
             showPercentage={true}
             fileCount={totalPages > 0 ? { done: pagesDone, total: totalPages } : undefined}
           />
-        </>
-      )}
+        </div>
+      ) : null}
     </div>
   )
 }

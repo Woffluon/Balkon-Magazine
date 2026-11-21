@@ -1,157 +1,119 @@
 import { z } from 'zod'
+import { parseLocalDateTR } from '@/lib/formatters/tr'
+import { t } from '@/lib/i18n'
+import { TURKISH_TITLE_REGEX } from './schemas'
 
 const httpUrl = z
   .string()
-  .url('Geçerli bir URL girin.')
+  .url('Geçerli bir bağlantı adresi girin.')
   .refine((value) => {
     const protocol = new URL(value).protocol
     return protocol === 'http:' || protocol === 'https:'
-  }, 'URL http:// veya https:// ile başlamalıdır.')
+  }, 'Bağlantı adresi http:// veya https:// ile başlamalıdır.')
 
 /**
  * FormData validation schema for magazine creation/update operations
- * Handles FormData-specific validation with proper type coercion
- * 
- * Requirements:
- * - 2.1: Validate all FormData fields using Zod schemas before processing
- * - 2.3: Validate numeric fields produce valid numbers and not NaN
- * - 2.4: Handle optional fields correctly (undefined and null values)
  */
 export const MagazineFormSchema = z.object({
   title: z
     .string()
-    .min(1, 'Başlık alanı zorunludur. Lütfen bir başlık girin.')
-    .max(200, 'Başlık en fazla 200 karakter olabilir. Lütfen daha kısa bir başlık girin.')
-    .regex(
-      /^[a-zA-Z0-9\s\-.,!?]+$/,
-      'Başlık sadece harf, rakam, boşluk ve şu işaretleri içerebilir: - . , ! ? Lütfen özel karakterleri kaldırın.'
-    ),
+    .trim()
+    .min(1, t('validation.titleRequired'))
+    .max(200, t('validation.titleMax'))
+    .regex(TURKISH_TITLE_REGEX, t('validation.titleCharset')),
   issue_number: z
     .coerce
     .number()
-    .int('Sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.')
-    .positive('Sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.')
-    .max(9999, 'Sayı numarası en fazla 9999 olabilir. Lütfen daha küçük bir sayı girin.')
-    .refine((val) => !isNaN(val), 'Sayı numarası geçerli bir sayı olmalıdır.'),
+    .int(t('validation.issueRange'))
+    .positive(t('validation.issueRange'))
+    .max(9999, t('validation.issueRange'))
+    .refine((val) => !isNaN(val), t('validation.issueRange')),
   publication_date: z
     .string()
-    .min(1, 'Yayın tarihi gereklidir.')
-    .regex(
-      /^\d{4}-\d{2}-\d{2}$/,
-      'Yayın tarihi YYYY-AA-GG formatında olmalıdır (örnek: 2024-01-15). Lütfen doğru formatta girin.'
-    )
-    .refine(
-      (date) => {
-        const parsed = new Date(date);
-        return !isNaN(parsed.getTime());
-      },
-      'Yayın tarihi geçerli bir tarih olmalıdır. Lütfen var olan bir tarih girin.'
-    ),
+    .min(1, t('validation.dateRequired'))
+    .regex(/^\d{4}-\d{2}-\d{2}$/, t('validation.dateFormat'))
+    .refine((date) => parseLocalDateTR(date) !== null, t('validation.dateInvalid')),
   pdf_url: z
     .string()
     .optional()
-    .transform((inputValue) => inputValue === '' ? undefined : inputValue)
-    .pipe(
-      httpUrl.optional()
-    ),
+    .transform((inputValue) => (inputValue === '' ? undefined : inputValue))
+    .pipe(httpUrl.optional()),
   cover_image_url: z
     .string()
     .optional()
-    .transform((inputValue) => inputValue === '' ? undefined : inputValue)
-    .pipe(
-      httpUrl.optional()
-    ),
+    .transform((inputValue) => (inputValue === '' ? undefined : inputValue))
+    .pipe(httpUrl.optional()),
   page_count: z
     .coerce
     .number()
-    .int('Sayfa sayısı tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.')
-    .positive('Sayfa sayısı pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.')
-    .refine((val) => !isNaN(val), 'Sayfa sayısı geçerli bir sayı olmalıdır.')
+    .int('Sayfa sayısı tam sayı olmalıdır.')
+    .positive('Sayfa sayısı pozitif bir tam sayı olmalıdır.')
+    .refine((val) => !isNaN(val), 'Geçerli bir sayfa sayısı girin.')
     .optional(),
-  is_published: z
-    .coerce
-    .boolean()
-    .default(true)
+  is_published: z.coerce.boolean().default(true),
 })
 
 /**
  * FormData validation schema for magazine deletion operations
- * Requires both ID and issue number for safety
- * 
- * Requirements:
- * - 2.1: Validate all FormData fields using Zod schemas before processing
- * - 2.2: Return descriptive error messages for validation failures
  */
 export const DeleteMagazineSchema = z.object({
   id: z
     .string()
-    .min(1, 'Dergi ID gereklidir.')
-    .uuid('Geçersiz ID formatı. ID otomatik olarak oluşturulur, lütfen değiştirmeyin.'),
+    .min(1, 'Dergi kimliği zorunludur.')
+    .uuid('Geçersiz kayıt kimliği.'),
   issue_number: z
     .coerce
     .number()
-    .int('Sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.')
-    .positive('Sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.')
-    .refine((val) => !isNaN(val), 'Sayı numarası geçerli bir sayı olmalıdır.')
+    .int(t('validation.issueRange'))
+    .positive(t('validation.issueRange'))
+    .refine((val) => !isNaN(val), t('validation.issueRange')),
 })
 
 /**
  * FormData validation schema for magazine rename operations
- * Handles both issue number change and optional title update
  * Includes version field for optimistic locking
- * 
- * Requirements:
- * - 2.1: Validate all FormData fields using Zod schemas before processing
- * - 2.2: Return descriptive error messages for validation failures
- * - 2.4: Handle optional fields correctly (undefined and null values)
- * - 4.1: Use optimistic locking with version fields to detect conflicts
  */
 export const RenameMagazineSchema = z.object({
   id: z
     .string()
-    .min(1, 'Dergi ID gereklidir.')
-    .uuid('Geçersiz ID formatı. ID otomatik olarak oluşturulur, lütfen değiştirmeyin.'),
+    .min(1, 'Dergi kimliği zorunludur.')
+    .uuid('Geçersiz kayıt kimliği.'),
   old_issue: z
     .coerce
     .number()
-    .int('Eski sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.')
-    .positive('Eski sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.')
-    .refine((val) => !isNaN(val), 'Eski sayı numarası geçerli bir sayı olmalıdır.'),
+    .int(t('validation.issueRange'))
+    .positive(t('validation.issueRange'))
+    .refine((val) => !isNaN(val), t('validation.issueRange')),
   new_issue: z
     .coerce
     .number()
-    .int('Yeni sayı numarası tam sayı olmalıdır. Lütfen ondalık sayı kullanmayın.')
-    .positive('Yeni sayı numarası pozitif bir sayı olmalıdır. Lütfen 1 veya daha büyük bir sayı girin.')
-    .refine((val) => !isNaN(val), 'Yeni sayı numarası geçerli bir sayı olmalıdır.'),
+    .int(t('validation.issueRange'))
+    .positive(t('validation.issueRange'))
+    .max(9999, t('validation.issueRange'))
+    .refine((val) => !isNaN(val), t('validation.issueRange')),
   new_title: z
     .string()
     .optional()
-    .transform((inputValue) => inputValue === '' ? undefined : inputValue)
+    .transform((inputValue) => {
+      const trimmed = inputValue?.trim()
+      return trimmed === '' ? undefined : trimmed
+    })
     .pipe(
-      z.string()
-        .min(1, 'Yeni başlık boş olamaz. Lütfen bir başlık girin.')
-        .max(200, 'Başlık en fazla 200 karakter olabilir. Lütfen daha kısa bir başlık girin.')
-        .regex(
-          /^[a-zA-Z0-9\s\-.,!?]+$/,
-          'Başlık sadece harf, rakam, boşluk ve şu işaretleri içerebilir: - . , ! ? Lütfen özel karakterleri kaldırın.'
-        )
+      z
+        .string()
+        .min(1, t('validation.titleRequired'))
+        .max(200, t('validation.titleMax'))
+        .regex(TURKISH_TITLE_REGEX, t('validation.titleCharset'))
         .optional()
     ),
   version: z
     .coerce
     .number()
-    .int('Versiyon numarası tam sayı olmalıdır.')
-    .nonnegative('Versiyon numarası negatif olamaz.')
-    .refine((val) => !isNaN(val), 'Versiyon numarası geçerli bir sayı olmalıdır.')
+    .int('Sürüm numarası tam sayı olmalıdır.')
+    .nonnegative('Sürüm numarası negatif olamaz.')
+    .refine((val) => !isNaN(val), 'Geçerli bir sürüm numarası girin.'),
 })
 
-/**
- * TypeScript types inferred from the FormData validation schemas
- * These ensure runtime validation matches compile-time types
- * 
- * Requirements:
- * - 2.5: Provide type-safe access to validated FormData fields
- */
 export type MagazineFormData = z.infer<typeof MagazineFormSchema>
 export type DeleteMagazineData = z.infer<typeof DeleteMagazineSchema>
 export type RenameMagazineData = z.infer<typeof RenameMagazineSchema>

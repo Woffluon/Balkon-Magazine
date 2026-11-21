@@ -1,17 +1,17 @@
 /**
  * Error Message Utilities
- * 
- * Implements Requirements 7.1, 7.2, 7.4:
- * - Descriptive error messages in Turkish
- * - Validation error listing with field names
- * - Error context formatting
- * 
+ *
+ * Implements descriptive Turkish error formatting, field label mapping,
+ * and plain serialized Result.error decoding for client components.
+ *
  * @module errorMessages
  */
 
 import { ZodError } from 'zod'
 import { DatabaseApiError, ErrorType } from '@/lib/errors/DatabaseApiError'
 import { AppError } from '@/lib/errors/AppError'
+import { getErrorEntry } from '@/lib/constants/errorCatalog'
+import { t } from '@/lib/i18n'
 
 /**
  * Formatted error information for display
@@ -29,248 +29,307 @@ export interface FormattedError {
   retryable: boolean
 }
 
-/**
- * Gets a user-friendly error message from any error type
- * 
- * Implements Requirement 7.1: Descriptive error messages in Turkish
- * 
- * @param error - Any error object
- * @returns User-friendly Turkish error message
- * 
- * @example
- * ```typescript
- * try {
- *   await operation()
- * } catch (error) {
- *   const message = getUserFriendlyError(error)
- *   toast.error(message)
- * }
- * ```
- */
-export function getUserFriendlyError(error: unknown): string {
-  // DatabaseApiError - use built-in user message
-  if (error instanceof DatabaseApiError) {
-    return error.getUserMessage()
+const FIELD_LABELS_TR: Record<string, string> = {
+  title: 'Başlık',
+  new_title: 'Yeni Başlık',
+  issue_number: 'Sayı No',
+  new_issue: 'Yeni Sayı No',
+  old_issue: 'Mevcut Sayı No',
+  publication_date: 'Yayın Tarihi',
+  email: 'E-posta',
+  password: 'Şifre',
+  currentPassword: 'Mevcut Şifre',
+  newPassword: 'Yeni Şifre',
+  pdf_url: 'PDF Adresi',
+  cover_image_url: 'Kapak Adresi',
+  page_count: 'Sayfa Sayısı',
+  version: 'Sürüm',
+}
+
+function mapFieldLabelTR(fieldPath: string): string {
+  if (!fieldPath) return 'Genel'
+  if (FIELD_LABELS_TR[fieldPath]) {
+    return FIELD_LABELS_TR[fieldPath]
   }
-  
-  // AppError - use userMessage field
-  if (error instanceof AppError) {
-    return error.userMessage
+  const leaf = fieldPath.split('.').pop() ?? fieldPath
+  return FIELD_LABELS_TR[leaf] ?? fieldPath
+}
+
+interface SerializedErrorLike {
+  code: string
+  message?: string
+  userMessage?: string
+  details?: unknown
+}
+
+function isSerializedErrorLike(error: unknown): error is SerializedErrorLike {
+  if (!error || typeof error !== 'object') {
+    return false
   }
-  
-  // Zod validation error - format validation errors
-  if (error instanceof ZodError) {
-    const fieldErrors = error.issues.map(zodIssue => {
-      const fieldPath = zodIssue.path.map(String).join('.')
-      return `${fieldPath}: ${zodIssue.message}`
-    })
-    
-    if (fieldErrors.length === 1) {
-      return `Doğrulama hatası: ${fieldErrors[0]}`
-    }
-    
-    return `Doğrulama hataları:\n${fieldErrors.join('\n')}`
+  const candidate = error as Record<string, unknown>
+  return (
+    typeof candidate.code === 'string' &&
+    candidate.code.length > 0 &&
+    (typeof candidate.userMessage === 'string' || typeof candidate.message === 'string')
+  )
+}
+
+function classifyErrorCode(code: string): string {
+  const upper = code.toUpperCase()
+  if (
+    upper === 'DB_VERSION_CONFLICT' ||
+    upper === 'DATABASE_VERSION_CONFLICT' ||
+    upper === 'CONFLICT' ||
+    upper.includes('CONFLICT')
+  ) {
+    return 'CONFLICT'
   }
-  
-  // Standard Error - use message
-  if (error instanceof Error) {
-    // Check for common error patterns and provide Turkish messages
-    const message = error.message.toLowerCase()
-    
-    if (message.includes('network') || message.includes('fetch')) {
-      return 'Ağ bağlantısı hatası. Lütfen internet bağlantınızı kontrol edin.'
-    }
-    
-    if (message.includes('timeout')) {
-      return 'İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.'
-    }
-    
-    if (message.includes('unauthorized') || message.includes('forbidden')) {
-      return 'Bu işlem için yetkiniz bulunmuyor.'
-    }
-    
-    if (message.includes('not found')) {
-      return 'İstenen kayıt bulunamadı.'
-    }
-    
-    // Return original message if no pattern matches
-    return error.message
+  if (upper.startsWith('VALIDATION') || upper === 'DATABASE_DUPLICATE_ENTRY') {
+    return 'VALIDATION'
   }
-  
-  // Unknown error type
-  return 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.'
+  if (
+    upper.startsWith('NETWORK') ||
+    upper === 'DATABASE_CONNECTION_FAILED' ||
+    upper === 'DATABASE_QUERY_TIMEOUT'
+  ) {
+    return 'NETWORK'
+  }
+  if (upper.startsWith('AUTH')) {
+    return 'PERMISSION'
+  }
+  return code
+}
+
+function extractZodFieldsFromDetails(
+  details: unknown
+): Array<{ field: string; message: string }> | undefined {
+  if (!details || typeof details !== 'object') {
+    return undefined
+  }
+  const zodError = (details as Record<string, unknown>).zodError
+  if (!Array.isArray(zodError)) {
+    return undefined
+  }
+  const fields: Array<{ field: string; message: string }> = []
+  for (const item of zodError) {
+    if (item && typeof item === 'object') {
+      const issue = item as { path?: unknown[]; message?: unknown }
+      if (typeof issue.message === 'string') {
+        const rawPath = Array.isArray(issue.path) ? issue.path.map(String).join('.') : ''
+        fields.push({
+          field: mapFieldLabelTR(rawPath),
+          message: issue.message,
+        })
+      }
+    }
+  }
+  return fields.length > 0 ? fields : undefined
 }
 
 /**
- * Formats validation errors with field names and constraints
- * 
- * Implements Requirement 7.2: Validation error listing
- * 
- * @param error - Zod validation error
- * @returns Array of formatted field errors
- * 
- * @example
- * ```typescript
- * try {
- *   schema.parse(data)
- * } catch (error) {
- *   if (error instanceof ZodError) {
- *     const fieldErrors = formatValidationErrors(error)
- *     fieldErrors.forEach(({ field, message }) => {
- *       console.log(`${field}: ${message}`)
- *     })
- *   }
- * }
- * ```
+ * Gets a user-friendly error message from any error type
+ */
+export function getUserFriendlyError(error: unknown): string {
+  if (error instanceof DatabaseApiError) {
+    return error.getUserMessage()
+  }
+
+  if (error instanceof AppError) {
+    return error.userMessage
+  }
+
+  if (error instanceof ZodError) {
+    const fieldErrors = error.issues.map((zodIssue) => {
+      const fieldPath = mapFieldLabelTR(zodIssue.path.map(String).join('.'))
+      return `${fieldPath}: ${zodIssue.message}`
+    })
+
+    if (fieldErrors.length === 1) {
+      return `Doğrulama hatası: ${fieldErrors[0]}`
+    }
+
+    return `Doğrulama hataları:\n${fieldErrors.join('\n')}`
+  }
+
+  if (isSerializedErrorLike(error)) {
+    const catalogEntry = getErrorEntry(error.code)
+    return error.userMessage?.trim() || catalogEntry.userMessage || t('errors.unknown')
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+
+    if (message.includes('network') || message.includes('fetch')) {
+      return t('errors.network')
+    }
+
+    if (message.includes('timeout')) {
+      return 'İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.'
+    }
+
+    if (message.includes('unauthorized') || message.includes('forbidden')) {
+      return t('errors.unauthorized')
+    }
+
+    if (message.includes('not found')) {
+      return 'İstenen kayıt bulunamadı.'
+    }
+
+    return error.message
+  }
+
+  return t('errors.unknown')
+}
+
+/**
+ * Formats validation errors with Turkish field names and constraints
  */
 export function formatValidationErrors(
   error: ZodError
 ): Array<{ field: string; message: string }> {
-  return error.issues.map(zodIssue => ({
-    field: zodIssue.path.map(String).join('.'),
-    message: zodIssue.message
+  return error.issues.map((zodIssue) => ({
+    field: mapFieldLabelTR(zodIssue.path.map(String).join('.')),
+    message: zodIssue.message,
   }))
 }
 
 /**
- * Formats an error with full context for display or logging
- * 
- * Implements Requirement 7.4: Error context formatting
- * 
- * @param error - Any error object
- * @returns Formatted error information
- * 
- * @example
- * ```typescript
- * try {
- *   await operation()
- * } catch (error) {
- *   const formatted = formatErrorWithContext(error)
- *   console.error('Operation failed:', formatted)
- *   
- *   // Display to user
- *   toast.error(formatted.message)
- *   
- *   // Show field errors if validation failed
- *   if (formatted.fields) {
- *     formatted.fields.forEach(({ field, message }) => {
- *       showFieldError(field, message)
- *     })
- *   }
- * }
- * ```
+ * Formats an error with full context for display or logging,
+ * including plain serialized `{ code, message, userMessage, details? }` objects from Server Actions.
  */
 export function formatErrorWithContext(error: unknown): FormattedError {
-  // DatabaseApiError
   if (error instanceof DatabaseApiError) {
     return {
       message: error.getUserMessage(),
       type: error.type,
       context: error.details,
-      retryable: error.isRetryable()
+      retryable: error.isRetryable(),
     }
   }
-  
-  // AppError
+
   if (error instanceof AppError) {
     return {
       message: error.userMessage,
-      type: error.code,
+      type: classifyErrorCode(error.code),
       context: error.details as Record<string, unknown>,
-      retryable: error.isRetryable
+      retryable: error.isRetryable,
     }
   }
-  
-  // Zod validation error
+
   if (error instanceof ZodError) {
     return {
       message: 'Girilen bilgiler geçersiz. Lütfen kontrol edip tekrar deneyin.',
       type: 'VALIDATION',
       fields: formatValidationErrors(error),
-      retryable: false
+      retryable: false,
     }
   }
-  
-  // Standard Error
+
+  if (isSerializedErrorLike(error)) {
+    const type = classifyErrorCode(error.code)
+    const catalogEntry = getErrorEntry(error.code)
+    const baseContext =
+      error.details && typeof error.details === 'object'
+        ? { ...(error.details as Record<string, unknown>) }
+        : {}
+
+    if (error.code === 'OPERATION_DELETE_PARTIAL_FAILURE') {
+      baseContext.cleanup = true
+    }
+
+    const fields = extractZodFieldsFromDetails(error.details)
+    const retryable =
+      type === 'NETWORK' ||
+      (type !== 'CONFLICT' && type !== 'VALIDATION' && catalogEntry.isRetryable)
+
+    return {
+      message: error.userMessage?.trim() || catalogEntry.userMessage || t('errors.unknown'),
+      type,
+      fields,
+      context: Object.keys(baseContext).length > 0 ? baseContext : undefined,
+      retryable,
+    }
+  }
+
   if (error instanceof Error) {
     return {
       message: getUserFriendlyError(error),
       type: 'ERROR',
       context: {
         originalMessage: error.message,
-        stack: error.stack
+        stack: error.stack,
       },
-      retryable: false
+      retryable: false,
     }
   }
-  
-  // Unknown error type
+
   return {
-    message: 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.',
+    message: t('errors.unknown'),
     type: 'UNKNOWN',
     context: { error },
-    retryable: false
+    retryable: false,
   }
 }
 
 /**
  * Gets error type classification from any error
- * 
- * @param error - Any error object
- * @returns Error type string
  */
 export function getErrorType(error: unknown): string {
   if (error instanceof DatabaseApiError) {
     return error.type
   }
-  
+
   if (error instanceof AppError) {
     return error.code
   }
-  
+
   if (error instanceof ZodError) {
     return ErrorType.VALIDATION
   }
-  
+
+  if (isSerializedErrorLike(error)) {
+    return classifyErrorCode(error.code)
+  }
+
   if (error instanceof Error) {
     const message = error.message.toLowerCase()
-    
+
     if (message.includes('network') || message.includes('timeout')) {
       return ErrorType.NETWORK
     }
-    
+
     if (message.includes('permission') || message.includes('unauthorized')) {
       return ErrorType.PERMISSION
     }
-    
+
     if (message.includes('not found')) {
       return ErrorType.NOT_FOUND
     }
-    
+
     if (message.includes('conflict') || message.includes('duplicate')) {
       return ErrorType.CONFLICT
     }
   }
-  
+
   return ErrorType.UNKNOWN
 }
 
 /**
  * Checks if an error is retryable
- * 
- * @param error - Any error object
- * @returns true if the operation should be retried
  */
 export function isErrorRetryable(error: unknown): boolean {
   if (error instanceof DatabaseApiError) {
     return error.isRetryable()
   }
-  
+
   if (error instanceof AppError) {
     return error.isRetryable
   }
-  
-  // Check error message for retryable patterns
+
+  if (isSerializedErrorLike(error)) {
+    return getErrorEntry(error.code).isRetryable
+  }
+
   if (error instanceof Error) {
     const message = error.message.toLowerCase()
     return (
@@ -282,71 +341,32 @@ export function isErrorRetryable(error: unknown): boolean {
       message.includes('enotfound')
     )
   }
-  
+
   return false
 }
 
 /**
  * Creates an error message for rollback failures
- * 
- * Implements Requirement 7.5: Cleanup failure notification
- * 
- * @param primaryError - The original error that triggered rollback
- * @param rollbackErrors - Errors that occurred during rollback
- * @returns Formatted error message with cleanup instructions
- * 
- * @example
- * ```typescript
- * try {
- *   await transaction.execute()
- * } catch (error) {
- *   try {
- *     await transaction.rollback()
- *   } catch (rollbackError) {
- *     const message = formatRollbackError(error, [rollbackError])
- *     console.error(message)
- *     notifyAdmin(message)
- *   }
- * }
- * ```
  */
 export function formatRollbackError(
   primaryError: unknown,
   rollbackErrors: unknown[]
 ): string {
   const primaryMessage = getUserFriendlyError(primaryError)
-  
+
   if (rollbackErrors.length === 0) {
     return primaryMessage
   }
-  
+
   const rollbackMessages = rollbackErrors
-    .map(rollbackError => getUserFriendlyError(rollbackError))
+    .map((rollbackError) => getUserFriendlyError(rollbackError))
     .join('\n- ')
-  
-  return `${primaryMessage}\n\nGeri alma işlemi sırasında hatalar oluştu:\n- ${rollbackMessages}\n\nManuel temizlik gerekebilir. Lütfen sistem yöneticisi ile iletişime geçin.`
+
+  return `${primaryMessage}\n\nGeri alma işlemi sırasında hatalar oluştu:\n- ${rollbackMessages}\n\nManuel temizlik gerekebilir. Lütfen yönetici ile iletişime geçin.`
 }
 
 /**
  * Creates an error message for batch operation failures
- * 
- * @param successCount - Number of successful operations
- * @param failureCount - Number of failed operations
- * @param sampleErrors - Sample errors from failures (max 3)
- * @returns Formatted batch error message
- * 
- * @example
- * ```typescript
- * const result = await processBatch(items, operation)
- * if (result.failures.length > 0) {
- *   const message = formatBatchError(
- *     result.successes.length,
- *     result.failures.length,
- *     result.failures.slice(0, 3).map(f => f.error)
- *   )
- *   toast.warning(message)
- * }
- * ```
  */
 export function formatBatchError(
   successCount: number,
@@ -354,59 +374,38 @@ export function formatBatchError(
   sampleErrors: unknown[]
 ): string {
   const total = successCount + failureCount
-  
+
   let message = `Toplu işlem tamamlandı: ${successCount}/${total} başarılı`
-  
+
   if (failureCount > 0) {
     message += `\n\n${failureCount} işlem başarısız oldu`
-    
+
     if (sampleErrors.length > 0) {
       const errorMessages = sampleErrors
         .slice(0, 3)
-        .map(sampleError => getUserFriendlyError(sampleError))
+        .map((sampleError) => getUserFriendlyError(sampleError))
         .join('\n- ')
-      
+
       message += `:\n- ${errorMessages}`
-      
+
       if (failureCount > 3) {
         message += `\n... ve ${failureCount - 3} hata daha`
       }
     }
   }
-  
+
   return message
 }
 
 /**
  * Creates an error message for version conflicts (optimistic locking)
- * 
- * @param resourceName - Name of the resource (e.g., "dergi", "kayıt")
- * @returns Formatted version conflict message
- * 
- * @example
- * ```typescript
- * if (currentVersion !== expectedVersion) {
- *   throw new Error(formatVersionConflictError('dergi'))
- * }
- * ```
  */
 export function formatVersionConflictError(resourceName: string = 'kayıt'): string {
-  return `Bu ${resourceName} başka bir kullanıcı tarafından değiştirildi. Lütfen sayfayı yenileyin ve tekrar deneyin.`
+  return `Bu ${resourceName} siz düzenlerken başka bir işlemle güncellenmiş. Güncel veriyi görmek için sayfayı yenileyin.`
 }
 
 /**
  * Creates an error message for duplicate entries
- * 
- * @param fieldName - Name of the field that has a duplicate (e.g., "sayı numarası")
- * @param value - The duplicate value
- * @returns Formatted duplicate error message
- * 
- * @example
- * ```typescript
- * if (existingMagazine) {
- *   throw new Error(formatDuplicateError('sayı numarası', issueNumber))
- * }
- * ```
  */
 export function formatDuplicateError(fieldName: string, value: string | number): string {
   return `${fieldName} "${value}" zaten mevcut. Lütfen farklı bir değer kullanın.`

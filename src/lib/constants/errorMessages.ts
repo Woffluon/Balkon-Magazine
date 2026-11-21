@@ -6,11 +6,11 @@ export const ERROR_MESSAGES = {
   VALIDATION: {
     MISSING_FIELDS: 'Lütfen tüm zorunlu alanları doldurun',
     INVALID_ISSUE_NUMBER: 'Geçersiz sayı numarası',
-    INVALID_DATE: 'Geçerli bir tarih giriniz',
-    INVALID_FILE_TYPE: 'Geçersiz dosya tipi',
-    INVALID_ID: 'Geçersiz ID formatı',
-    FILE_TOO_LARGE: 'Dosya boyutu çok büyük',
-    INVALID_FORMAT: 'Geçersiz format'
+    INVALID_DATE: 'Geçerli bir tarih girin',
+    INVALID_FILE_TYPE: 'Geçersiz dosya türü',
+    INVALID_ID: 'Geçersiz kayıt kimliği',
+    FILE_TOO_LARGE: 'Dosya boyutu izin verilen sınırı aşıyor',
+    INVALID_FORMAT: 'Geçersiz biçim'
   },
   DATABASE: {
     FETCH_FAILED: 'Veriler yüklenirken hata oluştu',
@@ -37,11 +37,11 @@ export const ERROR_MESSAGES = {
     INVALID_CREDENTIALS: 'Geçersiz kullanıcı adı veya şifre'
   },
   PROCESSING: {
-    PDF_LOAD_FAILED: 'PDF yüklenemedi',
+    PDF_LOAD_FAILED: 'PDF dosyası açılamadı',
     IMAGE_LOAD_FAILED: 'Görsel yüklenemedi',
-    CANVAS_UNAVAILABLE: 'Canvas context alınamadı',
-    CONVERSION_FAILED: 'Dönüştürme başarısız',
-    UNSUPPORTED_FORMAT: 'Desteklenmeyen dosya formatı',
+    CANVAS_UNAVAILABLE: 'Görsel işleme alanı başlatılamadı',
+    CONVERSION_FAILED: 'Dönüştürme başarısız oldu',
+    UNSUPPORTED_FORMAT: 'Desteklenmeyen dosya biçimi',
     PROCESSING_TIMEOUT: 'İşlem zaman aşımına uğradı'
   },
   GENERAL: {
