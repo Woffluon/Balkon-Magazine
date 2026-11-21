@@ -1,4 +1,15 @@
 import { useState, useCallback } from 'react'
+import { formatTimeTR } from '@/lib/formatters/tr'
+
+export type UploadLogType = 'info' | 'success' | 'error' | 'progress'
+
+export interface UploadLogEntry {
+  id: string
+  type: UploadLogType
+  message: string
+  /** ISO timestamp captured once when the entry is created */
+  timestamp: string
+}
 
 /**
  * Upload progress state interface
@@ -12,46 +23,29 @@ interface UploadProgressState {
   totalPages: number
 }
 
+function inferLogType(message: string): UploadLogType {
+  const lower = message.toLocaleLowerCase('tr-TR')
+  if (lower.includes('hata') || lower.includes('başarısız')) {
+    return 'error'
+  }
+  if (lower.includes('tamamlandı') || lower.includes('başarıyla') || lower.includes('eklendi') || lower.includes('yüklendi')) {
+    return 'success'
+  }
+  if (lower.includes('işleniyor') || lower.includes('başlatılıyor') || lower.includes('hazırlanıyor') || lower.includes('yükleniyor') || lower.includes('oluşturuluyor') || lower.includes('deneniyor') || lower.includes('devam ediliyor')) {
+    return 'progress'
+  }
+  return 'info'
+}
+
+function createLogId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
 /**
- * Custom hook for managing upload progress tracking and log entries
- * 
- * Provides separate progress tracking for cover and page uploads,
- * with methods to update progress, calculate overall completion,
- * and manage log entries with automatic timestamping.
- * 
- * Satisfies Requirement 2.3: Manages both log entries and progress state
- * 
- * @returns Progress state, log state, and control methods
- * 
- * @example
- * ```tsx
- * function UploadDialog() {
- *   const { 
- *     progress, 
- *     logs,
- *     updateCoverProgress, 
- *     updatePagesProgress, 
- *     addLog,
- *     getOverallProgress,
- *     getLogsAsString
- *   } = useUploadProgress()
- *   
- *   const uploadCover = async () => {
- *     addLog('Starting cover upload...')
- *     updateCoverProgress(50)
- *     // ... upload logic
- *     updateCoverProgress(100, true)
- *     addLog('Cover upload complete!')
- *   }
- *   
- *   return (
- *     <div>
- *       <div>Overall: {getOverallProgress()}%</div>
- *       <div>{logs.map((log, i) => <div key={i}>{log}</div>)}</div>
- *     </div>
- *   )
- * }
- * ```
+ * Custom hook for managing upload progress tracking and structured log entries.
  */
 export function useUploadProgress() {
   const [progress, setProgress] = useState<UploadProgressState>({
@@ -59,57 +53,43 @@ export function useUploadProgress() {
     coverDone: false,
     pagesProgress: 0,
     pagesDone: 0,
-    totalPages: 0
+    totalPages: 0,
   })
 
-  const [logs, setLogs] = useState<string[]>([])
+  const [logs, setLogs] = useState<UploadLogEntry[]>([])
 
-  /**
-   * Updates cover upload progress
-   * 
-   * @param percent - Progress percentage (0-100)
-   * @param done - Whether cover upload is complete
-   */
   const updateCoverProgress = useCallback((percent: number, isCompleted: boolean = false) => {
-    setProgress(previousProgress => ({
+    setProgress((previousProgress) => ({
       ...previousProgress,
       coverProgress: percent,
-      coverDone: isCompleted
+      coverDone: isCompleted,
     }))
   }, [])
 
-  /**
-   * Updates page upload progress
-   * 
-   * @param pagesDone - Number of pages uploaded
-   * @param totalPages - Total number of pages to upload
-   */
   const updatePagesProgress = useCallback((pagesCompleted: number, totalPageCount: number) => {
     const progressPercent = totalPageCount > 0 ? (pagesCompleted / totalPageCount) * 100 : 0
-    setProgress(previousProgress => ({
+    setProgress((previousProgress) => ({
       ...previousProgress,
       pagesProgress: progressPercent,
       pagesDone: pagesCompleted,
-      totalPages: totalPageCount
+      totalPages: totalPageCount,
     }))
   }, [])
 
   /**
-   * Adds a new log entry with automatic timestamp
-   * 
-   * Automatically scrolls the log container to the bottom
-   * to keep the latest entry visible.
-   * 
-   * @param message - The log message to add
+   * Adds a new structured log entry with a one-time timestamp.
    */
-  const addLog = useCallback((message: string) => {
-    const timestamp = new Date().toLocaleTimeString('tr-TR')
-    const logEntry = `${timestamp} - ${message}`
+  const addLog = useCallback((message: string, explicitType?: UploadLogType) => {
+    const entry: UploadLogEntry = {
+      id: createLogId(),
+      type: explicitType ?? inferLogType(message),
+      message,
+      timestamp: new Date().toISOString(),
+    }
 
-    setLogs(previousLogs => {
-      const updatedLogs = [...previousLogs, logEntry]
+    setLogs((previousLogs) => {
+      const updatedLogs = [...previousLogs, entry]
 
-      // Auto-scroll to bottom after state update
       queueMicrotask(() => {
         const el = document.getElementById('upload-logs')
         if (el) {
@@ -121,33 +101,19 @@ export function useUploadProgress() {
     })
   }, [])
 
-  /**
-   * Clears all log entries
-   */
   const clearLogs = useCallback(() => setLogs([]), [])
 
-  /**
-   * Resets all progress tracking and logs to initial state
-   */
   const reset = useCallback(() => {
     setProgress({
       coverProgress: 0,
       coverDone: false,
       pagesProgress: 0,
       pagesDone: 0,
-      totalPages: 0
+      totalPages: 0,
     })
     setLogs([])
   }, [])
 
-  /**
-   * Calculates overall upload progress
-   * 
-   * Takes into account both cover and page uploads.
-   * If pages exist, progress is weighted: 1 unit for cover + N units for pages.
-   * 
-   * @returns Overall progress percentage (0-100)
-   */
   const getOverallProgress = useCallback((): number => {
     if (progress.totalPages > 0) {
       const units = progress.totalPages + 1
@@ -157,13 +123,13 @@ export function useUploadProgress() {
     return progress.coverDone ? 100 : 0
   }, [progress.totalPages, progress.pagesDone, progress.coverDone])
 
-  /**
-   * Returns all logs as a single string (newline-separated)
-   * Useful for saving logs to a file
-   * 
-   * @returns All logs joined with newlines
-   */
-  const getLogsAsString = useCallback((): string => logs.join('\n'), [logs])
+  const getLogsAsString = useCallback(
+    (): string =>
+      logs
+        .map((entry) => `${formatTimeTR(entry.timestamp, true)} - ${entry.message}`)
+        .join('\n'),
+    [logs]
+  )
 
   return {
     progress,
@@ -174,6 +140,6 @@ export function useUploadProgress() {
     clearLogs,
     reset,
     getOverallProgress,
-    getLogsAsString
+    getLogsAsString,
   }
 }

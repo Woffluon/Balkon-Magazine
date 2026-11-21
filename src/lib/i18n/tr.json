@@ -17,7 +17,8 @@
     "refreshPage": "Sayfayı Yenile",
     "confirm": "Onayla",
     "optional": "İsteğe bağlı",
-    "required": "Zorunlu"
+    "required": "Zorunlu",
+    "selected": "Seçili"
   },
   "nav": {
     "brandTitle": "BALKON",
@@ -44,7 +45,9 @@
     "loginTitle": "Yönetici Girişi",
     "loginSubtitle": "Balkon Dergisi yönetim paneline giriş yapın.",
     "emailLabel": "E-posta",
+    "emailPlaceholder": "yonetici@okul.edu.tr",
     "passwordLabel": "Şifre",
+    "passwordPlaceholder": "••••••••",
     "submit": "Giriş Yap",
     "submitting": "Giriş yapılıyor...",
     "showPassword": "Şifreyi göster",
@@ -84,6 +87,9 @@
     "sortIssueAria": "Sayı numarasına göre sırala",
     "sortTitleAria": "Başlığa göre sırala",
     "sortDateAria": "Yayın tarihine göre sırala",
+    "sortDirectionAsc": "Artan",
+    "sortDirectionDesc": "Azalan",
+    "pageCount": "{count} sayfa",
     "actionsLabel": "İşlemler",
     "rename": "Yeniden Adlandır",
     "delete": "Sil",
@@ -104,7 +110,9 @@
     "stepInfo": "Bilgiler",
     "stepProcess": "PDF İşle",
     "stepUpload": "Yükle",
+    "stepsLabel": "Yükleme adımları",
     "titleLabel": "Başlık",
+    "titlePlaceholder": "Örn: Bahar Özel Sayısı",
     "issueLabel": "Sayı No",
     "issueValid": "Sayı numarası uygun",
     "dateLabel": "Yayın Tarihi",
@@ -114,7 +122,9 @@
     "coverHint": "Seçilmezse PDF ilk sayfası kapak olur (JPEG, PNG, WebP · maks. 10 MB).",
     "coverProgress": "Kapak yüklemesi",
     "pagesProgress": "Sayfalar ({completed} / {total})",
+    "overallProgress": "Genel ilerleme",
     "logsTitle": "İşlem Günlüğü",
+    "logsEmpty": "İşlem günlükleri burada görünecek.",
     "wakeLockActive": "Ekran uyanık tutuluyor",
     "wakeLockFailed": "Ekran uyanık tutulamadı; yükleme devam ediyor",
     "completedTitle": "Sayı {issue} yayına hazır",
@@ -152,7 +162,26 @@
     "selectMagazinePromptTitle": "Sayfa bazlı veriler için sayı seçin",
     "selectMagazinePromptBody": "Yukarıdaki filtreden belirli bir dergi sayısı seçerek sayfa okuma sürelerini ve düşüş hunisini inceleyebilirsiniz.",
     "noPageData": "Seçilen sayı ve tarih aralığında henüz sayfa okuma verisi oluşmadı",
-    "viewsUnit": "izlenme"
+    "viewsUnit": "izlenme",
+    "periodSub": "Seçilen dönemdeki toplam okuma",
+    "visitorsSub": "Tekil okuyucu oturumu",
+    "engagementSub": "Oturum başına ortalama sayfa",
+    "allTimeSub": "Kurulumdan bugüne tüm okumalar",
+    "dailyTrendDescription": "Günlük toplam ve tekil okunma eğilimi",
+    "deviceDescription": "Okuyucu cihaz türü dağılımı",
+    "pageDurationDescription": "Her sayfada geçirilen ortalama süre",
+    "funnelDescription": "Sayfalar ilerledikçe okuyucu devam oranı",
+    "legendTotal": "Toplam Okuma",
+    "legendUnique": "Tekil Okuyucu",
+    "noTrendData": "Seçilen aralıkta günlük okuma verisi bulunmuyor.",
+    "noDeviceData": "Cihaz dağılımı verisi bulunmuyor.",
+    "noTopMagazines": "Henüz popüler sayı verisi oluşmadı.",
+    "desktop": "Masaüstü",
+    "mobile": "Mobil",
+    "tablet": "Tablet",
+    "rangeAriaLabel": "Tarih aralığı seçimi",
+    "avgDurationLabel": "Ort. süre (sn)",
+    "readerRatioLabel": "Okuyucu oranı (%)"
   },
   "performance": {
     "title": "Performans İzleme",
@@ -182,6 +211,9 @@
     "policiesTitle": "Önbellek ve Dosya İşleme Kuralları",
     "samplesUnit": "{count} kayıt",
     "budgetRatio": "{met} / {total} Hedef İçinde",
+    "budgetsHeading": "Hedef Bütçe Durumu",
+    "rangeAriaLabel": "Performans zaman aralığı",
+    "budgetInsufficientSamples": "Değerlendirme için yeterli ölçüm yok",
     "metrics": {
       "LCP": {
         "name": "İlk Büyük İçerik Yüklemesi",
@@ -245,6 +277,14 @@
     "progressText": "{{current}} / {{total}}",
     "emptyHintCta": "Bu ekranın kısa turunu gör",
     "noTopicsFound": "Aramanızla eşleşen rehber konusu bulunamadı.",
+    "keyboardHeading": "Klavye Kısayolları",
+    "securityCategory": "Hesap ve Görünüm",
+    "shortcuts": {
+      "escape": "Açık turu veya pencereyi kapatır",
+      "arrows": "Tur adımları arasında ileri veya geri geçer",
+      "tab": "Etkileşimli düğmeler arasında gezinir",
+      "enter": "Odaktaki tur düğmesini veya konuyu açar"
+    },
     "steps": {
       "welcome": {
         "title": "Balkon Yönetici Paneline Hoş Geldiniz",
@@ -285,6 +325,31 @@
       "performanceRanges": {
         "title": "Zaman Aralığı ve Bütçeler",
         "description": "Son 24 saat, 7 gün veya 30 gün içindeki hız ve kararlılık ölçümlerini hedef bütçelerle karşılaştırın."
+      },
+      "completeCta": {
+        "title": "İlk Görevinize Hazırsınız",
+        "descriptionWithItems": "Yeni bir PDF yükleyebilir veya tablodaki mevcut sayıları düzenleyebilirsiniz.",
+        "descriptionEmpty": "Başlamak için Yeni Sayı Yükle düğmesine basıp ilk derginizi ekleyin."
+      },
+      "analyticsKpis": {
+        "title": "Temel Okunma Özeti",
+        "description": "Toplam izlenme, tekil ziyaretçi ve etkileşim oranını bu kartlardan izleyebilirsiniz."
+      },
+      "analyticsCharts": {
+        "title": "Grafikler ve Sayfa Hunisi",
+        "description": "Trend grafiğini inceleyin veya tek bir sayı seçerek sayfa bazlı okuma sürelerini görün."
+      },
+      "performanceBudgets": {
+        "title": "Hız ve Kararlılık Bütçeleri",
+        "description": "Her metriğin p75 değerini hedef bütçelerle karşılaştırıp Sınır Aşıldı durumlarını yakalayın."
+      },
+      "dashboardTable": {
+        "title": "Dergi Yönetimi Özeti",
+        "description": "Sayılarınızı buradan arayabilir, sıralayabilir ve satır menüsünden düzenleyebilirsiniz."
+      },
+      "uploadWorkflow": {
+        "title": "3 Adımlı PDF Yükleme",
+        "description": "Bilgileri girin, tarayıcıda PDF sayfalarını dönüştürün ve sunucuya kaydedin."
       }
     },
     "topics": {
@@ -324,7 +389,9 @@
     "logoutFailed": "Çıkış işlemi tamamlanamadı. Bağlantınızı kontrol edip tekrar deneyin.",
     "analyticsLoadFailed": "Okunma istatistikleri yüklenemedi. Lütfen tekrar deneyin.",
     "pageAnalyticsLoadFailed": "Sayfa bazlı okuma verileri yüklenemedi.",
-    "sessionStartFailed": "Yükleme oturumu başlatılamadı. Pencereyi kapatıp tekrar açın."
+    "sessionStartFailed": "Yükleme oturumu başlatılamadı. Pencereyi kapatıp tekrar açın.",
+    "adminBoundaryTitle": "Yönetici Panelinde Bir Hata Oluştu",
+    "adminBoundaryReturn": "Yönetici Paneline Dön"
   },
   "validation": {
     "titleRequired": "Dergi başlığı zorunludur.",

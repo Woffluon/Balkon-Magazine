@@ -4,6 +4,7 @@ import { PDF_CONFIG, IMAGE_CONFIG } from '@/lib/constants/upload'
 import { createRenderContext } from '@/types/pdfjs'
 import { logger } from '@/lib/services/Logger'
 import { ErrorHandler } from '@/lib/errors/errorHandler'
+import { ProcessingError, ValidationError } from '@/lib/errors/AppError'
 import { executeAsyncOperation, createStandardizedPromise } from '@/lib/utils/asyncPatterns'
 import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 import { APP_CONFIG } from '@/lib/config/app-config'
@@ -86,7 +87,12 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
       let canvasContext: CanvasRenderingContext2D | null = canvas.getContext(PDF_CONFIG.CONTEXT_TYPE)
 
       if (!canvasContext) {
-        const error = new Error('Canvas context unavailable')
+        const error = new ProcessingError(
+          'Canvas context unavailable',
+          'image_conversion',
+          'Görsel işleme alanı başlatılamadı. Sayfayı yenileyip tekrar deneyin.',
+          true
+        )
         logger.error('Canvas context creation failed', {
           hook: 'usePDFProcessor',
           operation: 'renderPageToBlob',
@@ -110,7 +116,12 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
         return await createStandardizedPromise<Blob>(
           (resolve, reject) => {
             if (!canvas) {
-              reject(new Error('Canvas is null'))
+              reject(new ProcessingError(
+                'Canvas element released before conversion',
+                'image_conversion',
+                'Sayfa görseli oluşturulurken beklenmeyen bir durum oluştu. Lütfen tekrar deneyin.',
+                true
+              ))
               return
             }
 
@@ -119,7 +130,12 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
                 if (blob) {
                   resolve(blob)
                 } else {
-                  reject(new Error('Failed to convert canvas to blob'))
+                  reject(new ProcessingError(
+                    'Failed to convert canvas to blob',
+                    'image_conversion',
+                    'Sayfa görseli oluşturulamadı. Lütfen tekrar deneyin.',
+                    true
+                  ))
                 }
               },
               IMAGE_CONFIG.FORMAT,
@@ -158,7 +174,12 @@ export function usePDFProcessor(): UsePDFProcessorReturn {
   const processPDF = useCallback(
     async (file: File, options?: PDFProcessorOptions): Promise<ProcessedPDF> => {
       if (!TypeGuards.isFile(file)) {
-        const error = new Error('Invalid file parameter: must be File instance')
+        const error = new ValidationError(
+          'Invalid file parameter: must be File instance',
+          'pdf',
+          'invalid_type',
+          'Geçersiz PDF dosyası seçildi. Lütfen tekrar deneyin.'
+        )
         logger.error('PDF processing validation failed', {
           hook: 'usePDFProcessor',
           operation: 'processPDF',

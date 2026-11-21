@@ -1,7 +1,7 @@
 # Faz 4–5 — Türkçeleştirme, i18n Altyapısı ve `tr-TR` Biçimlendirme Kılavuzu (`05-turkcelestirme.md`)
 
 **Tarih:** 21.11.2026  
-**Durum:** Faz 4 Çekirdek Tamamlandı (Wave 5 sayfa ve tur entegrasyonu sonrası kaynak tarama sonucu Bölüm 6'ya eklenecektir)  
+**Durum:** Faz 4–5 Çekirdek ve Wave 5b Entegrasyonu Tamamlandı  
 **Referans:** [03-strateji.md](./03-strateji.md) (Bölüm 2.2 ve Bölüm 5.2)
 
 ---
@@ -77,6 +77,21 @@
 Üst düzey 13 namespace dondurulmuş sözleşme olarak tanımlanmıştır:
 `common`, `nav`, `theme`, `auth`, `dashboard`, `magazines`, `upload`, `analytics`, `performance`, `password`, `tour`, `errors`, `validation`.
 
+#### Wave 5b Eklenen Anahtarlar (Sayfa ve Tur Entegrasyonu)
+
+| Namespace | Eklenen Anahtarlar | Kullanım |
+| --- | --- | --- |
+| `common` | `selected` | Seçim durumu etiketi |
+| `auth` | `emailPlaceholder`, `passwordPlaceholder` | Giriş formu yer tutucuları |
+| `magazines` | `pageCount`, `sortDirectionAsc`, `sortDirectionDesc` | Sayfa sayısı ve sıralama yönü |
+| `upload` | `titlePlaceholder`, `overallProgress`, `logsEmpty`, `stepsLabel` | Yükleme adımları, genel ilerleme ve boş günlük metni |
+| `analytics` | `periodSub`, `visitorsSub`, `engagementSub`, `allTimeSub`, `dailyTrendDescription`, `deviceDescription`, `pageDurationDescription`, `funnelDescription`, `legendTotal`, `legendUnique`, `noTrendData`, `noDeviceData`, `noTopMagazines`, `desktop`, `mobile`, `tablet`, `rangeAriaLabel`, `avgDurationLabel`, `readerRatioLabel` | Analitik KPI alt açıklamaları, grafik açıklamaları, boş durumlar ve cihaz etiketleri |
+| `performance` | `budgetsHeading`, `rangeAriaLabel`, `budgetInsufficientSamples` | Bütçe kart başlığı, aralık ARIA etiketi ve yetersiz örneklem uyarısı |
+| `errors` | `adminBoundaryTitle`, `adminBoundaryReturn` | Admin hata sınırı başlığı ve dönüş düğmesi |
+| `tour` | `steps.completeCta` (`title`, `descriptionWithItems`, `descriptionEmpty`), `steps.analyticsKpis`, `steps.analyticsCharts`, `steps.performanceBudgets`, `steps.dashboardTable`, `steps.uploadWorkflow`, `keyboardHeading`, `shortcuts` (`escape`, `arrows`, `tab`, `enter`), `securityCategory` | Ürün turu alt sayfa adımları, klavye kısayolları ve yardım konusu kategorisi |
+
+- **Dayanak:** Wave 5b eklemeleri sayfa, bileşen ve tur katmanlarında hiçbir anahtarın sabit metne düşmesini önler ve `NestedKeyOf<Dictionary>` birliğiyle derleme zamanında doğrulanır.
+
 ### 4.2 Tip Güvenliği ve Yer Tutucu Desteği (`src/lib/i18n/index.ts`)
 
 - `SUPPORTED_LOCALES = ['tr-TR'] as const` ve `defaultLocale = 'tr-TR'`.
@@ -93,17 +108,17 @@
 
 ---
 
-## 5. Faz 4 Durumu ve Wave 5 Sonrası Tarama Planı
+## 5. Faz 4–5 Kaynak Tarama ve Doğrulama Sonucu
 
 ### Faz 4 Çekirdek Doğrulaması
 
 - `src/components/ui/dialog.tsx`: `"Close"` → `"Kapat"`.
 - `src/components/ui/breadcrumb.tsx`: `aria-label="breadcrumb"` → `"İçerik haritası"`, `"More"` → `"Daha fazla"`.
-- `src/components/admin/AdminShell.tsx`, `ThemeToggle.tsx`: Tüm etiketler `t()` üzerinden `tr.json` sözlüğüne bağlandı.
+- `src/components/admin/AdminShell.tsx`, `ThemeToggle.tsx`: Tüm etiketler `t()` üzerinden `tr.json` sözlüğüne bağlandı; `AdminShell` üst çubuğundaki `data-tour="guide-trigger"` düğmesi `useAdminTour().openHelpDrawer()` ile bağlandı.
 
-### Wave 5 Sonrası Tarama (Beklenen Güncelleme)
+### Wave 5 Sonrası `rg` Taraması
 
-Wave 5'te `pages-author` (`src/app/(admin)/admin/**`, `src/lib/validators/**`, `src/lib/services/fileValidation.ts`, `src/lib/utils/errorMessages.ts`) ve `tour-author` (`src/lib/tour/**`, `src/components/admin/tour/**`) çalışmalarını tamamladığında:
+`src/app/(admin)/`, `src/components/admin/`, `src/lib/tour/`, `src/lib/validators/`, `src/lib/services/fileValidation.ts` ve `src/lib/utils/errorMessages.ts` üzerinde yapılan taramada:
 
-1. `rg` ile `src/app/(admin)/`, `src/components/admin/` ve `src/lib/validators/` altında kalan sabit İngilizce/jargon metinleri taranacak,
-2. Kalan yerel `.toLowerCase()`, localesiz `.localeCompare()` ve `.toFixed()` çağrılarının `0` olduğu teyit edilip sonuç tablosu bu bölüme eklenecektir.
+1. **Tarih/Sayı/Sıralama/Arama:** Admin sayfaları, bileşenleri, tur ve doğrulayıcılar içinde locale dışı `.toLowerCase()`, `.localeCompare()`, `.toFixed()`, `.toLocaleString()`, `.toLocaleDateString()` ve `.toLocaleTimeString()` çağrısı **0** adet bulundu (`src/lib/utils/errorMessages.ts` içindeki 3 satır yalnızca iç İngilizce hata nesnesi eşlemesi için `error.message.toLowerCase()` kullanır, kullanıcı arayüzüne metin üretmez).
+2. **Türkçe Olmayan Kullanıcı Metni / Jargon:** `dialogu`, `İdempotency`, `Offline Mod`, `Cache-First`, `Stale-While-Revalidate`, `Adaptive Quality` ve `Canvas context` kalıntıları **0** adet bulundu (`UploadDialog.tsx` içindeki eşleşmeler yalnızca TypeScript değişken/sınıf adları olan `idempotencyKey`/`idempotencyManager`, `actions.ts` içindekiler ise sunucu tarafı dahili `ValidationError` mesajlarıdır).

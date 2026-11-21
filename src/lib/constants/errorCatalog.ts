@@ -130,6 +130,17 @@ export const ERROR_CATALOG: ErrorMessageCatalog = {
     ],
     isRetryable: false
   },
+
+  DB_VERSION_CONFLICT: {
+    userMessage: 'Bu kayıt siz düzenlerken başka bir işlemle güncellenmiş. Güncel veriyi görmek için sayfayı yenileyin.',
+    technicalMessage: 'Optimistic locking version conflict',
+    severity: 'medium',
+    recoveryActions: [
+      'Sayfayı yenileyin',
+      'Güncel kayıt üzerinden işleminizi yeniden yapın'
+    ],
+    isRetryable: false
+  },
   
   DATABASE_CONSTRAINT_VIOLATION: {
     userMessage: 'İşlem veri bütünlüğü kurallarını ihlal ediyor.',
@@ -377,12 +388,12 @@ export const ERROR_CATALOG: ErrorMessageCatalog = {
   },
   
   VALIDATION_TITLE_INVALID_CHARACTERS: {
-    userMessage: 'Başlık sadece harf, rakam, boşluk ve şu işaretleri içerebilir: - . , ! ? Lütfen özel karakterleri kaldırın.',
+    userMessage: 'Başlık yalnızca harf, rakam ve temel noktalama işaretleri içerebilir.',
     technicalMessage: 'Title contains invalid characters',
     severity: 'low',
     recoveryActions: [
-      'Özel karakterleri kaldırın',
-      'Sadece harf, rakam ve izin verilen noktalama işaretlerini kullanın'
+      'Desteklenmeyen simgeleri kaldırın',
+      'Sadece harf, rakam ve yaygın noktalama işaretlerini kullanın'
     ],
     isRetryable: false
   },
@@ -424,13 +435,13 @@ export const ERROR_CATALOG: ErrorMessageCatalog = {
   },
   
   VALIDATION_URL_INVALID: {
-    userMessage: 'Geçerli bir URL giriniz. URL http:// veya https:// ile başlamalıdır.',
+    userMessage: 'Geçerli bir bağlantı adresi girin. Adres http:// veya https:// ile başlamalıdır.',
     technicalMessage: 'URL format validation failed',
     severity: 'low',
     recoveryActions: [
       'http:// veya https:// ile başlayan bir adres girin',
-      'URL formatını kontrol edin',
-      'Örnek: https://example.com/file.pdf'
+      'Bağlantı biçimini kontrol edin',
+      'Örnek: https://balkondergi.com/dosya.pdf'
     ],
     isRetryable: false
   },
@@ -454,7 +465,7 @@ export const ERROR_CATALOG: ErrorMessageCatalog = {
     recoveryActions: [
       'E-posta adresini kontrol edin',
       '@ işareti içerdiğinden emin olun',
-      'Örnek: kullanici@example.com'
+      'Örnek: yonetici@balkondergi.com'
     ],
     isRetryable: false
   },

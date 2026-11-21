@@ -1,67 +1,55 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { BarChart3, Gauge } from 'lucide-react'
+import { EmptyStateHint } from '@/components/admin/tour/EmptyStateHint'
+import { t } from '@/lib/i18n'
 import MagazineTable from './MagazineTable'
-import { UserMenu } from './UserMenu'
 import type { Magazine } from '@/types/magazine'
 
-// Lazy load UploadDialog to defer loading pdfjs-dist (~2.5MB) until needed
 const UploadDialog = dynamic(() => import('./UploadDialog'), {
   ssr: false,
   loading: () => (
-    <Button disabled className="w-full sm:w-auto text-sm sm:text-base px-3 sm:px-4 py-2">
-      <span className="hidden sm:inline">Yükleniyor...</span>
-      <span className="sm:hidden">...</span>
+    <Button disabled data-tour="upload-trigger" className="w-full sm:w-auto">
+      <span>{t('common.loading')}</span>
     </Button>
-  )
+  ),
 })
 
 interface AdminDashboardClientProps {
   magazines: Magazine[]
-  userEmail: string
+  userEmail?: string
 }
 
-export function AdminDashboardClient({ magazines, userEmail }: AdminDashboardClientProps) {
+export function AdminDashboardClient({ magazines }: AdminDashboardClientProps) {
   const hasItems = Boolean(magazines && magazines.length > 0)
 
   return (
-    <main className="w-full min-h-screen bg-[#f9f9f9] pt-4">
-      <div className="responsive-container py-6 sm:py-8">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-gray-900">Dergi Yönetimi</h1>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <Link href="/admin/analytics" passHref>
-              <Button variant="outline" className="w-full sm:w-auto text-sm sm:text-base px-3 sm:px-4 py-2 gap-2">
-                <BarChart3 className="w-4 h-4" />
-                <span className="hidden sm:inline">İstatistikler</span>
-              </Button>
-            </Link>
-            <Link href="/admin/performance" passHref>
-              <Button variant="outline" className="w-full sm:w-auto text-sm sm:text-base px-3 sm:px-4 py-2 gap-2">
-                <Gauge className="w-4 h-4" />
-                <span className="hidden sm:inline">Performans</span>
-              </Button>
-            </Link>
-            <UserMenu userEmail={userEmail} />
-            <UploadDialog />
-          </div>
+    <div className="responsive-container py-6 sm:py-8">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            {t('dashboard.title')}
+          </h1>
+          <p className="text-sm text-muted-foreground">{t('dashboard.subtitle')}</p>
         </div>
 
-        {!hasItems ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center">
-            <div className="mb-2 text-xl font-semibold text-gray-900">Henüz dergi bulunmuyor</div>
-            <p className="mb-6 max-w-md text-sm text-gray-600">Yeni sayılar ekleyerek yönetim panelinizi zenginleştirin. Kapak ve sayfaları kolayca yükleyin.</p>
-            <UploadDialog />
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <MagazineTable magazines={magazines} />
-          </div>
-        )}
+        <div className="shrink-0">
+          <UploadDialog />
+        </div>
       </div>
-    </main>
+
+      {!hasItems ? (
+        <EmptyStateHint
+          title={t('dashboard.emptyTitle')}
+          description={t('dashboard.emptyDescription')}
+          tourPage="upload"
+        />
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-sm">
+          <MagazineTable magazines={magazines} />
+        </div>
+      )}
+    </div>
   )
 }

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import { uploadFileToStorage } from '@/app/(admin)/admin/actions'
 import { logger } from '@/lib/services/Logger'
 import { ErrorHandler } from '@/lib/errors/errorHandler'
+import { AppError, ValidationError } from '@/lib/errors/AppError'
 import { executeAsyncOperation } from '@/lib/utils/asyncPatterns'
 import { TypeGuards, ValidationHelpers } from '@/lib/guards/runtimeTypeGuards'
 
@@ -163,7 +164,12 @@ export function useFileUpload(
       )
       
       if (!TypeGuards.isFile(file) && !(file instanceof Blob)) {
-        const error = new Error('Invalid file parameter: must be File or Blob')
+        const error = new ValidationError(
+          'Invalid file parameter: must be File or Blob',
+          'file',
+          'invalid_type',
+          'Geçersiz dosya seçildi. Lütfen tekrar deneyin.'
+        )
         logger.error('File upload validation failed', {
           hook: 'useFileUpload',
           operation: 'uploadFile',
@@ -198,7 +204,13 @@ export function useFileUpload(
 
         // Check if already aborted before starting
         if (abortController.signal.aborted) {
-          throw new Error('Upload cancelled')
+          throw new AppError(
+            'Upload cancelled by user',
+            'UPLOAD_CANCELLED',
+            499,
+            'Yükleme işlemi iptal edildi.',
+            true
+          )
         }
 
         // Execute upload with standardized async patterns (Requirement 7.1)
@@ -210,7 +222,13 @@ export function useFileUpload(
 
             // Check if aborted after reading file
             if (abortController.signal.aborted) {
-              throw new Error('Upload cancelled')
+              throw new AppError(
+                'Upload cancelled by user',
+                'UPLOAD_CANCELLED',
+                499,
+                'Yükleme işlemi iptal edildi.',
+                true
+              )
             }
 
             // Get content type with validation
@@ -240,7 +258,13 @@ export function useFileUpload(
 
             // Check if aborted after upload
             if (abortController.signal.aborted) {
-              throw new Error('Upload cancelled')
+              throw new AppError(
+                'Upload cancelled by user',
+                'UPLOAD_CANCELLED',
+                499,
+                'Yükleme işlemi iptal edildi.',
+                true
+              )
             }
 
             return result
@@ -260,7 +284,13 @@ export function useFileUpload(
         // Check result from server action with type validation
         const serverResult = uploadResult.data
         if (!TypeGuards.isObject(serverResult) || !TypeGuards.isBoolean(serverResult.success)) {
-          throw new Error('Invalid server response format')
+          throw new AppError(
+            'Invalid server response format',
+            'INVALID_SERVER_RESPONSE',
+            502,
+            'Sunucu yanıtı doğrulanamadı. Lütfen tekrar deneyin.',
+            true
+          )
         }
 
         if (!serverResult.success) {
@@ -268,9 +298,15 @@ export function useFileUpload(
             ? serverResult.error.userMessage
             : TypeGuards.isObject(serverResult.error) && TypeGuards.isString(serverResult.error.message)
             ? serverResult.error.message
-            : 'Upload failed'
+            : 'Dosya yüklenemedi. Lütfen tekrar deneyin.'
           
-          throw new Error(errorMessage)
+          throw new AppError(
+            errorMessage,
+            'STORAGE_UPLOAD_FAILED',
+            500,
+            errorMessage,
+            true
+          )
         }
 
         // Report completion
