@@ -1,0 +1,350 @@
+{
+  "common": {
+    "close": "Kapat",
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor...",
+    "delete": "Sil",
+    "deleting": "Siliniyor...",
+    "retry": "Tekrar Dene",
+    "reset": "Sıfırla",
+    "clear": "Temizle",
+    "search": "Ara",
+    "loading": "Yükleniyor...",
+    "more": "Daha fazla",
+    "backToHome": "Ana Sayfaya Dön",
+    "viewSite": "Siteyi Gör",
+    "refreshPage": "Sayfayı Yenile",
+    "confirm": "Onayla",
+    "optional": "İsteğe bağlı",
+    "required": "Zorunlu"
+  },
+  "nav": {
+    "brandTitle": "BALKON",
+    "brandSubtitle": "Dergisi",
+    "adminPanel": "Yönetici Paneli",
+    "magazines": "Dergi Sayıları",
+    "analytics": "Okunma İstatistikleri",
+    "performance": "Performans",
+    "guide": "Kullanım Rehberi",
+    "openMenu": "Menüyü aç",
+    "closeMenu": "Menüyü kapat",
+    "collapseSidebar": "Yan menüyü daralt",
+    "expandSidebar": "Yan menüyü genişlet",
+    "breadcrumbLabel": "İçerik haritası"
+  },
+  "theme": {
+    "toggleLabel": "Temayı değiştir",
+    "switchToDark": "Koyu temaya geç",
+    "switchToLight": "Açık temaya geç",
+    "light": "Açık",
+    "dark": "Koyu"
+  },
+  "auth": {
+    "loginTitle": "Yönetici Girişi",
+    "loginSubtitle": "Balkon Dergisi yönetim paneline giriş yapın.",
+    "emailLabel": "E-posta",
+    "passwordLabel": "Şifre",
+    "submit": "Giriş Yap",
+    "submitting": "Giriş yapılıyor...",
+    "showPassword": "Şifreyi göster",
+    "hidePassword": "Şifreyi gizle",
+    "signedInAs": "Giriş yapılan hesap",
+    "logout": "Çıkış Yap",
+    "loggingOut": "Çıkış yapılıyor...",
+    "backToPublic": "Balkon Dergisi ana sayfasına dön"
+  },
+  "dashboard": {
+    "title": "Dergi Sayıları",
+    "subtitle": "Yayınlanan sayıları yönetin, düzenleyin ve yeni PDF sayısı yükleyin.",
+    "emptyTitle": "Henüz dergi sayısı eklenmedi",
+    "emptyDescription": "İlk sayıyı eklemek için yeni bir PDF dosyası yükleyin.",
+    "totalCount": "{count} dergi",
+    "filteredCount": "{filtered} / {total} dergi"
+  },
+  "magazines": {
+    "searchPlaceholder": "Sayı no veya başlıkla ara...",
+    "searchAria": "Dergi sayılarında ara",
+    "clearSearch": "Aramayı Temizle",
+    "noResultsTitle": "Aramanızla eşleşen dergi bulunamadı",
+    "noResultsDescription": "Farklı bir sayı numarası veya başlık deneyin ya da aramayı temizleyin.",
+    "statusFilterLabel": "Durum",
+    "statusAll": "Tümü",
+    "statusPublished": "Yayında",
+    "statusDraft": "Taslak",
+    "densityLabel": "Yoğunluk",
+    "densityComfortable": "Rahat",
+    "densityCompact": "Kompakt",
+    "colIssue": "Sayı",
+    "colTitle": "Başlık",
+    "colDate": "Yayın Tarihi",
+    "colPages": "Sayfa",
+    "colStatus": "Durum",
+    "colActions": "İşlemler",
+    "sortIssueAria": "Sayı numarasına göre sırala",
+    "sortTitleAria": "Başlığa göre sırala",
+    "sortDateAria": "Yayın tarihine göre sırala",
+    "actionsLabel": "İşlemler",
+    "rename": "Yeniden Adlandır",
+    "delete": "Sil",
+    "renameTitle": "Sayıyı Yeniden Adlandır",
+    "newIssueLabel": "Yeni Sayı No",
+    "newTitleLabel": "Yeni Başlık",
+    "deleteTitle": "Sayıyı Sil",
+    "deleteWarning": "Sayı {issue} ({title}) ve tüm sayfa görselleri kalıcı olarak silinecek.",
+    "deleteIrreversible": "Bu işlem geri alınamaz.",
+    "confirmDelete": "Kalıcı Sil",
+    "renameSuccess": "Sayı bilgileri güncellendi.",
+    "deleteSuccess": "Sayı kalıcı olarak silindi."
+  },
+  "upload": {
+    "triggerLabel": "Yeni Sayı Yükle",
+    "dialogTitle": "Yeni Sayı Yükle",
+    "dialogDescription": "Dergi bilgilerini girin ve PDF dosyasını seçin. Sayfalar tarayıcınızda görsele dönüştürülüp yüklenir.",
+    "stepInfo": "Bilgiler",
+    "stepProcess": "PDF İşle",
+    "stepUpload": "Yükle",
+    "titleLabel": "Başlık",
+    "issueLabel": "Sayı No",
+    "issueValid": "Sayı numarası uygun",
+    "dateLabel": "Yayın Tarihi",
+    "pdfLabel": "PDF Dosyası",
+    "pdfHint": "Yalnızca sayfa dönüştürme için kullanılır, sunucuya ham PDF gönderilmez (maks. 500 MB).",
+    "coverLabel": "Kapak Görseli",
+    "coverHint": "Seçilmezse PDF ilk sayfası kapak olur (JPEG, PNG, WebP · maks. 10 MB).",
+    "coverProgress": "Kapak yüklemesi",
+    "pagesProgress": "Sayfalar ({completed} / {total})",
+    "logsTitle": "İşlem Günlüğü",
+    "wakeLockActive": "Ekran uyanık tutuluyor",
+    "wakeLockFailed": "Ekran uyanık tutulamadı; yükleme devam ediyor",
+    "completedTitle": "Sayı {issue} yayına hazır",
+    "completedDescription": "Tüm sayfalar işlendi ve dergi kaydı oluşturuldu.",
+    "viewMagazine": "Sayıyı Görüntüle",
+    "newUpload": "Yeni Yükleme",
+    "errorTitle": "Yükleme tamamlanamadı",
+    "savedPagesProgress": "Kaydedilen ilerleme: {count} sayfa",
+    "savedCoverProgress": "Kapak görseli daha önce yüklendi",
+    "submitSave": "Yükle ve Kaydet",
+    "submitRetry": "Tekrar Dene",
+    "submitUploading": "Yükleniyor...",
+    "submitCompleted": "Tamamlandı",
+    "closeWhileBusy": "Yükleme sürüyor. Pencereyi kapatırsanız işlem yarıda kalabilir."
+  },
+  "analytics": {
+    "title": "Okunma İstatistikleri",
+    "liveStatus": "Canlı veri",
+    "filterLabel": "Dergi Sayısı",
+    "allMagazines": "Tüm Sayılar",
+    "selectMagazinePlaceholder": "Bir sayı seçin",
+    "range7": "Son 7 Gün",
+    "range30": "Son 30 Gün",
+    "range90": "Son 90 Gün",
+    "range365": "Son 1 Yıl",
+    "totalViews": "Toplam İzlenme",
+    "uniqueVisitors": "Tekil Ziyaretçi",
+    "engagementRate": "Etkileşim Oranı",
+    "allTimeViews": "Genel Toplam",
+    "dailyTrendTitle": "Günlük Okunma Trendi",
+    "deviceTitle": "Cihaz Dağılımı",
+    "topMagazinesTitle": "En Popüler Sayılar",
+    "pageDurationTitle": "Sayfa Okuma Süreleri",
+    "funnelTitle": "Okuyucu Düşüş Hunisi",
+    "selectMagazinePromptTitle": "Sayfa bazlı veriler için sayı seçin",
+    "selectMagazinePromptBody": "Yukarıdaki filtreden belirli bir dergi sayısı seçerek sayfa okuma sürelerini ve düşüş hunisini inceleyebilirsiniz.",
+    "noPageData": "Seçilen sayı ve tarih aralığında henüz sayfa okuma verisi oluşmadı",
+    "viewsUnit": "izlenme"
+  },
+  "performance": {
+    "title": "Performans İzleme",
+    "subtitle": "Gerçek okuyucu oturumlarından hız ve kararlılık ölçümleri.",
+    "range24h": "Son 24 Saat",
+    "range7d": "Son 7 Gün",
+    "range30d": "Son 30 Gün",
+    "totalLogs": "Toplam Ölçüm",
+    "budgetCompliance": "Bütçe Uyumu",
+    "offlineCache": "Çevrimdışı Önbellek",
+    "offlineActive": "Servis Etkin",
+    "tableTitle": "Metrik Analizleri",
+    "p75Note": "Hedefler kullanıcıların %75'inin deneyimine (p75) göre değerlendirilir",
+    "colMetric": "Metrik",
+    "colSamples": "Örneklem",
+    "colAvg": "Ortalama",
+    "colP75": "p75",
+    "colP95": "p95",
+    "statusGood": "İyi",
+    "statusExceeded": "Sınır Aşıldı",
+    "budgetLabel": "Hedef Bütçe",
+    "currentP75Label": "Mevcut (p75)",
+    "emptyTitle": "Seçilen aralıkta performans ölçümü yok",
+    "emptyDescription": "Okuyucular dergi sayfalarını ziyaret ettiğinde hız ve kararlılık ölçümleri otomatik olarak burada toplanır.",
+    "errorTitle": "Performans ölçümleri yüklenemedi",
+    "errorDescription": "Ölçüm kayıtları alınırken bir sorun oluştu. Bağlantınızı kontrol edip sayfayı yenileyin.",
+    "policiesTitle": "Önbellek ve Dosya İşleme Kuralları",
+    "samplesUnit": "{count} kayıt",
+    "budgetRatio": "{met} / {total} Hedef İçinde",
+    "metrics": {
+      "LCP": {
+        "name": "İlk Büyük İçerik Yüklemesi",
+        "target": "2,5 sn ve altı"
+      },
+      "FID": {
+        "name": "İlk Etkileşim Gecikmesi",
+        "target": "100 ms ve altı"
+      },
+      "CLS": {
+        "name": "Görsel Yerleşim Kayması",
+        "target": "0,1 ve altı"
+      },
+      "FCP": {
+        "name": "İlk İçerik Boyaması",
+        "target": "1,8 sn ve altı"
+      },
+      "TTFB": {
+        "name": "Sunucu İlk Yanıt Süresi",
+        "target": "800 ms ve altı"
+      },
+      "INP": {
+        "name": "Etkileşim Yanıt Gecikmesi",
+        "target": "200 ms ve altı"
+      }
+    },
+    "policies": {
+      "serviceWorkerLabel": "Çevrimdışı Uygulama Önbelleği",
+      "serviceWorkerDesc": "Temel betikler, stiller ve yazı tipleri önce yerel önbellekten sunulur.",
+      "imagesLabel": "Dergi Sayfası Görselleri",
+      "imagesDesc": "Sayfalar arka planda güncellenirken 50 MB kapasiteli en son kullanılan görsel önbelleğinden hızla açılır.",
+      "qualityLabel": "Bağlantıya Göre Görsel Kalitesi",
+      "qualityDesc": "Yavaş mobil bağlantılarda %60, hızlı bağlantılarda %90 görsel kalitesi uygulanır.",
+      "pdfLimitLabel": "Eşzamanlı PDF Sayfa İşleme",
+      "pdfLimitDesc": "Tarayıcı belleğini korumak için aynı anda en fazla 3 sayfa işlenir."
+    }
+  },
+  "password": {
+    "menuLabel": "Şifre Değiştir",
+    "title": "Şifre Değiştir",
+    "description": "Hesap güvenliğiniz için mevcut şifrenizi doğrulayarak yeni bir şifre belirleyin.",
+    "currentLabel": "Mevcut Şifre",
+    "newLabel": "Yeni Şifre",
+    "confirmLabel": "Yeni Şifre (Tekrar)",
+    "submit": "Şifreyi Güncelle",
+    "submitting": "Güncelleniyor...",
+    "successMessage": "Şifreniz güncellendi."
+  },
+  "tour": {
+    "triggerLabel": "Kullanım Rehberi",
+    "restartLabel": "Turu Yeniden Başlat",
+    "drawerTitle": "Balkon Yönetici Rehberi",
+    "drawerDescription": "Etkileşimli turu başlatabilir veya adım adım yardım konularını arayabilirsiniz.",
+    "drawerSearchPlaceholder": "Konu ara (ör. PDF, silme, istatistik)",
+    "startMainTour": "Etkileşimli Turu Başlat",
+    "startPageTour": "Bu Sayfanın Kısa Turu",
+    "nextBtn": "İleri",
+    "prevBtn": "Geri",
+    "doneBtn": "Bitir",
+    "closeLabel": "Turu kapat",
+    "progressText": "{{current}} / {{total}}",
+    "emptyHintCta": "Bu ekranın kısa turunu gör",
+    "noTopicsFound": "Aramanızla eşleşen rehber konusu bulunamadı.",
+    "steps": {
+      "welcome": {
+        "title": "Balkon Yönetici Paneline Hoş Geldiniz",
+        "description": "Bu kısa turda dergi sayılarını nasıl yükleyeceğinizi, istatistikleri ve performans ölçümlerini nasıl takip edeceğinizi görebilirsiniz."
+      },
+      "sidebar": {
+        "title": "Modüller Arası Gezinme",
+        "description": "Yan menüden Dergi Sayıları, Okunma İstatistikleri ve Performans ekranlarına tek tıkla geçebilirsiniz."
+      },
+      "theme": {
+        "title": "Açık ve Koyu Tema",
+        "description": "Çalışma ortamınıza göre açık veya koyu görünüm arasında geçiş yapabilirsiniz. Seçiminiz yalnızca yönetici panelini etkiler."
+      },
+      "guide": {
+        "title": "Kullanım Rehberi",
+        "description": "İhtiyaç duyduğunuz anda rehberi açabilir, konu başlıklarını arayabilir veya bu turu yeniden başlatabilirsiniz."
+      },
+      "userMenu": {
+        "title": "Hesap ve Şifre İşlemleri",
+        "description": "Oturum açtığınız hesabı buradan görebilir, şifrenizi değiştirebilir ve güvenli çıkış yapabilirsiniz."
+      },
+      "uploadBtn": {
+        "title": "Yeni Sayı Yükle",
+        "description": "PDF dosyanızı seçin; sayfalar tarayıcınızda görsele dönüştürülüp adım adım sunucuya aktarılır."
+      },
+      "search": {
+        "title": "Türkçe Duyarlı Arama ve Filtre",
+        "description": "Sayı numarası veya başlıkla arama yapabilir, yayın durumuna göre süzebilir ve tablo yoğunluğunu değiştirebilirsiniz."
+      },
+      "tableActions": {
+        "title": "Satır İşlemleri",
+        "description": "Her sayının yanındaki menüden sayıyı yeniden adlandırabilir veya kalıcı olarak silebilirsiniz."
+      },
+      "analyticsFilters": {
+        "title": "Dergi ve Tarih Filtreleri",
+        "description": "Tüm sayılar için genel trendi inceleyin veya belirli bir sayı seçerek sayfa bazlı okuma sürelerini görün."
+      },
+      "performanceRanges": {
+        "title": "Zaman Aralığı ve Bütçeler",
+        "description": "Son 24 saat, 7 gün veya 30 gün içindeki hız ve kararlılık ölçümlerini hedef bütçelerle karşılaştırın."
+      }
+    },
+    "topics": {
+      "upload": {
+        "title": "Yeni sayı nasıl yüklenir?",
+        "summary": "Dergi Sayıları ekranında 'Yeni Sayı Yükle' düğmesine basın, başlık ve sayı numarasını girip PDF dosyasını seçin. Sayfalar tarayıcınızda görsele dönüştürülüp yüklenir; işlem bitene kadar sekmeyi kapatmayın."
+      },
+      "conflict": {
+        "title": "Sayı numarası çakışırsa veya sürüm hatası alırsam ne olur?",
+        "summary": "Aynı anda başka bir oturumda kayıt güncellendiyse sistem veri kaybını önlemek için işlemi durdurur. 'Sayfayı Yenile' düğmesiyle güncel listeyi alıp yeniden adlandırma yapabilirsiniz."
+      },
+      "delete": {
+        "title": "Bir sayıyı silmeden önce neleri bilmeliyim?",
+        "summary": "Satır menüsündeki 'Sil' seçeneği hem veritabanı kaydını hem de depolamadaki tüm sayfa görsellerini kalıcı olarak kaldırır. Bu işlem geri alınamaz."
+      },
+      "analytics": {
+        "title": "Okunma istatistikleri nasıl okunur?",
+        "summary": "Üst filtrede 'Tüm Sayılar' seçiliyken toplam izlenme ve popüler sayılar görünür. Sayfa okuma süreleri ve okuyucu düşüş hunisi için listeden tek bir sayı seçin."
+      },
+      "performance": {
+        "title": "Performans bütçesi (p75) ne demektir?",
+        "summary": "p75 değeri, ziyaretçilerin %75'inin karşılaştığı sayfa yükleme ve etkileşim hızını gösterir. Değer hedef bütçenin altındaysa rozet 'İyi', üstündeyse 'Sınır Aşıldı' olarak işaretlenir."
+      },
+      "security": {
+        "title": "Şifre değiştirme ve tema tercihi nasıl çalışır?",
+        "summary": "Üst çubuktaki hesap menüsünden şifrenizi güncelleyebilirsiniz. Sağ üstteki tema anahtarı yalnızca yönetici panelini açık veya koyu görünüme geçirir; okurların gördüğü dergi sayfaları değişmez."
+      }
+    }
+  },
+  "errors": {
+    "unknown": "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.",
+    "network": "Bağlantı kurulamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+    "conflict": "Bu kayıt siz düzenlerken başka bir işlemle güncellenmiş. Güncel veriyi görmek için sayfayı yenileyin.",
+    "cleanupWarning": "Kayıt kaldırıldı ancak bazı geçici depolama dosyaları silinemedi.",
+    "retryHint": "Sorun devam ederse sayfayı yenileyip işlemi tekrar başlatın.",
+    "unauthorized": "Oturum süreniz dolmuş veya bu işlem için yetkiniz bulunmuyor. Yeniden giriş yapın.",
+    "logoutFailed": "Çıkış işlemi tamamlanamadı. Bağlantınızı kontrol edip tekrar deneyin.",
+    "analyticsLoadFailed": "Okunma istatistikleri yüklenemedi. Lütfen tekrar deneyin.",
+    "pageAnalyticsLoadFailed": "Sayfa bazlı okuma verileri yüklenemedi.",
+    "sessionStartFailed": "Yükleme oturumu başlatılamadı. Pencereyi kapatıp tekrar açın."
+  },
+  "validation": {
+    "titleRequired": "Dergi başlığı zorunludur.",
+    "titleMax": "Başlık en fazla 200 karakter olabilir.",
+    "titleCharset": "Başlık yalnızca harf, rakam ve temel noktalama işaretleri içerebilir.",
+    "issueRequired": "Sayı numarası zorunludur.",
+    "issueRange": "Sayı numarası 1 ile 9999 arasında bir tam sayı olmalıdır.",
+    "issueDuplicate": "Bu sayı numarası zaten kullanılıyor. Farklı bir numara seçin.",
+    "dateRequired": "Yayın tarihi zorunludur.",
+    "dateFormat": "Geçerli bir tarih seçin (GG.AA.YYYY).",
+    "dateInvalid": "Girilen yayın tarihi geçersiz.",
+    "pdfInvalidType": "Yalnızca PDF (.pdf) dosyası seçebilirsiniz.",
+    "pdfInvalidFile": "Seçilen PDF dosyası okunamadı veya bozuk görünüyor.",
+    "pdfSizeLimit": "PDF dosyası en fazla 500 MB olabilir.",
+    "coverInvalidType": "Kapak görseli JPEG, PNG veya WebP formatında olmalıdır.",
+    "coverSizeLimit": "Kapak görseli en fazla 10 MB olabilir.",
+    "emailInvalid": "Geçerli bir e-posta adresi girin.",
+    "passwordRequired": "Şifre alanı boş bırakılamaz.",
+    "passwordMin": "Şifre en az 6 karakter olmalıdır.",
+    "passwordSame": "Yeni şifre mevcut şifrenizle aynı olamaz.",
+    "passwordMismatch": "Yeni şifreler birbiriyle eşleşmiyor."
+  }
+}

@@ -9,7 +9,9 @@ const Breadcrumb = React.forwardRef<
     React.ComponentPropsWithoutRef<"nav"> & {
         separator?: React.ReactNode
     }
->(({ ...props }, ref) => <nav ref={ref} aria-label="breadcrumb" {...props} />)
+>(({ ...props }, ref) => (
+    <nav ref={ref} aria-label="İçerik haritası" {...props} />
+))
 Breadcrumb.displayName = "Breadcrumb"
 
 const BreadcrumbList = React.forwardRef<
@@ -50,7 +52,10 @@ const BreadcrumbLink = React.forwardRef<
     return (
         <Comp
             ref={ref}
-            className={cn("transition-colors hover:text-foreground", className)}
+            className={cn(
+                "rounded-xs transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                className
+            )}
             {...props}
         />
     )
@@ -99,7 +104,7 @@ const BreadcrumbEllipsis = ({
         {...props}
     >
         <MoreHorizontal className="h-4 w-4" />
-        <span className="sr-only">More</span>
+        <span className="sr-only">Daha fazla</span>
     </span>
 )
 BreadcrumbEllipsis.displayName = "BreadcrumbEllipsis"
