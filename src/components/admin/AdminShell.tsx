@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import { ThemeToggle } from '@/components/admin/ThemeToggle'
 import { UserMenu } from '@/app/(admin)/admin/UserMenu'
+import { useAdminTour } from '@/hooks/useAdminTour'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
@@ -76,6 +77,7 @@ export function AdminShell({ userEmail, children, onOpenGuide }: AdminShellProps
   const pathname = usePathname()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { openHelpDrawer, isHelpDrawerOpen } = useAdminTour()
 
   const isLoginRoute =
     pathname === '/admin/login' || Boolean(pathname?.startsWith('/admin/login/'))
@@ -297,9 +299,11 @@ export function AdminShell({ userEmail, children, onOpenGuide }: AdminShellProps
             <Button
               type="button"
               variant="outline"
-              onClick={onOpenGuide}
+              onClick={onOpenGuide ?? openHelpDrawer}
               data-tour="guide-trigger"
               aria-label={t('nav.guide')}
+              aria-expanded={isHelpDrawerOpen}
+              aria-haspopup="dialog"
               title={t('nav.guide')}
               className="min-h-9 min-w-9 px-2.5 sm:px-3"
             >

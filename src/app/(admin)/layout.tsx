@@ -1,6 +1,7 @@
 import { Suspense, type ReactNode } from 'react'
 import { getOptionalAuth } from '@/lib/middleware/authMiddleware'
 import { AdminThemeProvider } from '@/components/admin/AdminThemeProvider'
+import { AdminTourProvider } from '@/components/admin/tour/AdminTourProvider'
 import { AdminShell } from '@/components/admin/AdminShell'
 
 /**
@@ -41,11 +42,13 @@ export default async function AdminLayout({
   return (
     <div className="admin-theme min-h-screen bg-background text-foreground antialiased">
       <AdminThemeProvider>
-        <AdminShell userEmail={userEmail}>
-          <Suspense fallback={<AdminLoading />}>
-            {children}
-          </Suspense>
-        </AdminShell>
+        <AdminTourProvider userEmail={userEmail}>
+          <AdminShell userEmail={userEmail}>
+            <Suspense fallback={<AdminLoading />}>
+              {children}
+            </Suspense>
+          </AdminShell>
+        </AdminTourProvider>
       </AdminThemeProvider>
     </div>
   )

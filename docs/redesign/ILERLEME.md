@@ -12,13 +12,13 @@
 | Faz 1 | Araştırma | `researcher` | Tamamlandı | `docs/redesign/01-arastirma.md` |
 | Faz 2 | Audit (Denetim) | `explorer` | Tamamlandı | `docs/redesign/02-audit.md` |
 | Faz 3 | Tasarım Stratejisi ve Sözleşmeler | `researcher` | Tamamlandı | `docs/redesign/03-strateji.md` |
-| Faz 4 | Uygulama (Tasarım Sistemi ve Bileşenler) | `shell-i18n`, `pages-author` | Çekirdek tamamlandı, sayfalar sırada | `docs/redesign/04-uygulama.md` |
-| Faz 5 | Türkçeleştirme (`tr-TR` ve i18n) | `shell-i18n`, `pages-author` | Çekirdek tamamlandı, sayfalar sırada | `docs/redesign/05-turkcelestirme.md` |
-| Faz 6 | Etkileşimli Kullanım Rehberi | `tour-author` | Başlatılıyor | `docs/redesign/06-urun-turu.md` |
-| Faz 7 | Doğrulama ve Teslim | `verifier` | Bekliyor | `docs/redesign/07-dogrulama.md` |
+| Faz 4 | Uygulama (Tasarım Sistemi ve Bileşenler) | `shell-i18n`, `pages-author` | Tamamlandı | `docs/redesign/04-uygulama.md` |
+| Faz 5 | Türkçeleştirme (`tr-TR` ve i18n) | `shell-i18n`, `pages-author` | Tamamlandı | `docs/redesign/05-turkcelestirme.md` |
+| Faz 6 | Etkileşimli Kullanım Rehberi | `tour-author`, `shell-i18n` | Tamamlandı | `docs/redesign/06-urun-turu.md` |
+| Faz 7 | Doğrulama ve Teslim | `verifier` | Devam ediyor | `docs/redesign/07-dogrulama.md` |
 
 ## Sıradaki Adım
-- Wave 4 çekirdek katmanı (`shell-i18n`) doğrulanıp commitlendikten sonra Wave 5 kapsamında `pages-author` (Faz 4/5 sayfalar) ve `tour-author` (Faz 6 ürün turu) paralel başlatılacak.
+- `verifier` Faz 7 doğrulama ve kalite kapılarını (`type-check`, `lint`, `test`, `build`, çevrilmemiş metin taraması, duyarlılık, erişilebilirlik ve önce/sonra karşılaştırması) yürütüyor (`docs/redesign/07-dogrulama.md`).
 
 ## Açık Sorunlar ve Kararlar
 - Kamusal `(public)/` sayfaları `.dark`, `bg-background`, `bg-card`, `text-foreground` veya `--primary` tüketmediği için `globals.css` içindeki mevcut `:root`/`.dark` korunacak; admin tema token'ları `.admin-theme` ve `.admin-theme.dark` altında izole edilecek.
