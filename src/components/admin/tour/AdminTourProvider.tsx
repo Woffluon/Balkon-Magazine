@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react'
 import { usePathname } from 'next/navigation'
@@ -42,6 +43,41 @@ interface ActiveTourMeta {
 const MAIN_TOUR_PREFIX = 'balkon_admin_tour_v1'
 const PAGE_TOUR_PREFIX = 'balkon_admin_tour_page_v1'
 
+const tourStatusListeners = new Set<() => void>()
+const fallbackTourStatuses = new Map<string, TourCompletionStatus>()
+
+function notifyTourStatusListeners(): void {
+  tourStatusListeners.forEach((listener) => listener())
+}
+
+function subscribeToTourStatus(onStoreChange: () => void): () => void {
+  tourStatusListeners.add(onStoreChange)
+  const handleStorage = (event: StorageEvent) => {
+    if (
+      event.key === null ||
+      event.key.startsWith(MAIN_TOUR_PREFIX) ||
+      event.key.startsWith(PAGE_TOUR_PREFIX)
+    ) {
+      if (event.key === null) {
+        fallbackTourStatuses.clear()
+      } else {
+        fallbackTourStatuses.delete(event.key)
+      }
+      onStoreChange()
+    }
+  }
+  window.addEventListener('storage', handleStorage)
+
+  return () => {
+    tourStatusListeners.delete(onStoreChange)
+    window.removeEventListener('storage', handleStorage)
+  }
+}
+
+function getFalseSnapshot(): boolean {
+  return false
+}
+
 function normalizeUserKey(userEmail?: string): string {
   const trimmed = userEmail?.trim()
   return trimmed && trimmed.length > 0 ? trimmed : 'anon'
@@ -56,6 +92,10 @@ function getPageStorageKey(userKey: string, page: TourPageKey): string {
 }
 
 function readTourStatus(storageKey: string): TourCompletionStatus | null {
+  const fallback = fallbackTourStatuses.get(storageKey)
+  if (fallback !== undefined) {
+    return fallback
+  }
   try {
     const value = window.localStorage.getItem(storageKey)
     if (value === 'completed' || value === 'dismissed') {
@@ -70,9 +110,12 @@ function readTourStatus(storageKey: string): TourCompletionStatus | null {
 function persistTourStatus(storageKey: string, status: TourCompletionStatus): void {
   try {
     window.localStorage.setItem(storageKey, status)
+    fallbackTourStatuses.delete(storageKey)
   } catch {
-    // Ignore storage failures in restricted/private browser contexts
+    // Fall back to in-memory status when storage writes fail in restricted/private browser contexts
+    fallbackTourStatuses.set(storageKey, status)
   }
+  notifyTourStatusListeners()
 }
 
 function prefersReducedMotion(): boolean {
@@ -112,21 +155,40 @@ export function AdminTourProvider({
   const mainStorageKey = getMainStorageKey(userKey)
   const loginRoute = isLoginPath(pathname)
 
+  const [prevPathname, setPrevPathname] = useState(pathname)
   const [isHelpDrawerOpen, setIsHelpDrawerOpen] = useState(false)
   const [isTourActive, setIsTourActive] = useState(false)
-  const [hasCompletedMainTour, setHasCompletedMainTour] = useState(false)
   const [liveAnnouncement, setLiveAnnouncement] = useState('')
+
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname)
+    if (isHelpDrawerOpen) {
+      setIsHelpDrawerOpen(false)
+    }
+  }
+
+  const getMainTourCompletedSnapshot = useCallback(
+    () => readTourStatus(mainStorageKey) === 'completed',
+    [mainStorageKey]
+  )
+  const hasCompletedMainTour = useSyncExternalStore(
+    subscribeToTourStatus,
+    getMainTourCompletedSnapshot,
+    getFalseSnapshot
+  )
 
   const driverRef = useRef<Driver | null>(null)
   const activeMetaRef = useRef<ActiveTourMeta | null>(null)
   const runIdRef = useRef(0)
   const pendingLaunchTimeoutRef = useRef<number | null>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
-  const isHelpDrawerOpenRef = useRef(false)
+  const isHelpDrawerOpenRef = useRef(isHelpDrawerOpen)
   const pathnameRef = useRef(pathname)
 
-  isHelpDrawerOpenRef.current = isHelpDrawerOpen
-  pathnameRef.current = pathname
+  useEffect(() => {
+    isHelpDrawerOpenRef.current = isHelpDrawerOpen
+    pathnameRef.current = pathname
+  }, [isHelpDrawerOpen, pathname])
 
   const clearPendingLaunch = useCallback(() => {
     if (pendingLaunchTimeoutRef.current !== null) {
@@ -146,10 +208,6 @@ export function AdminTourProvider({
     setIsTourActive(false)
     setLiveAnnouncement('')
   }, [clearPendingLaunch])
-
-  useEffect(() => {
-    setHasCompletedMainTour(readTourStatus(mainStorageKey) === 'completed')
-  }, [mainStorageKey])
 
   const launchTour = useCallback(
     (
@@ -247,9 +305,6 @@ export function AdminTourProvider({
               const status: TourCompletionStatus =
                 reason === 'done' ? 'completed' : 'dismissed'
               persistTourStatus(closedMeta.storageKey, status)
-              if (closedMeta.kind === 'main') {
-                setHasCompletedMainTour(status === 'completed')
-              }
             }
 
             if (reason !== 'api' && reason !== 'replaced') {
@@ -339,10 +394,8 @@ export function AdminTourProvider({
     setIsHelpDrawerOpen(false)
   }, [])
 
-  // Clean up active tour and drawer whenever the route changes or provider unmounts.
+  // Clean up active tour whenever the route changes or provider unmounts.
   useEffect(() => {
-    setIsHelpDrawerOpen(false)
-    destroyActiveDriver()
     return () => {
       destroyActiveDriver()
     }

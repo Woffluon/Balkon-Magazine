@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { logger } from '@/lib/services/Logger'
 
 /**
@@ -12,6 +12,44 @@ export interface UseWakeLockReturn {
   request: () => Promise<void>
   /** Releases the current wake lock */
   release: () => Promise<void>
+}
+
+async function requestScreenSentinel(): Promise<WakeLockSentinel | null> {
+  if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) {
+    logger.warn('Wake Lock API not supported', {
+      operation: 'wake_lock_request'
+    })
+    return null
+  }
+
+  try {
+    return await navigator.wakeLock.request('screen')
+  } catch (error) {
+    logger.warn('Wake lock request failed', {
+      error,
+      operation: 'wake_lock_request'
+    })
+    return null
+  }
+}
+
+async function releaseSentinel(
+  sentinel: WakeLockSentinel,
+  operation: 'wake_lock_release' | 'wake_lock_cleanup'
+): Promise<void> {
+  try {
+    await sentinel.release()
+  } catch (error) {
+    logger.warn(
+      operation === 'wake_lock_cleanup'
+        ? 'Wake lock cleanup failed'
+        : 'Wake lock release failed',
+      {
+        error,
+        operation
+      }
+    )
+  }
 }
 
 /**
@@ -54,8 +92,53 @@ export interface UseWakeLockReturn {
  * ```
  */
 export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
-  const [wakeLock, setWakeLock] = useState<WakeLockSentinel | null>(null)
   const [isActive, setIsActive] = useState<boolean>(false)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
+  const isMountedRef = useRef<boolean>(true)
+
+  const attachSentinel = useCallback((lock: WakeLockSentinel) => {
+    if (wakeLockRef.current && !wakeLockRef.current.released) {
+      void releaseSentinel(lock, 'wake_lock_cleanup')
+      return
+    }
+
+    wakeLockRef.current = lock
+    setIsActive(true)
+
+    // Listen for wake lock release (e.g., user switches tabs)
+    lock.addEventListener('release', () => {
+      if (wakeLockRef.current === lock) {
+        wakeLockRef.current = null
+      }
+      if (isMountedRef.current) {
+        setIsActive(false)
+      }
+    })
+  }, [])
+
+  const acquireLock = useCallback(
+    async (isCancelled?: () => boolean): Promise<void> => {
+      if (wakeLockRef.current && !wakeLockRef.current.released) {
+        return
+      }
+
+      const lock = await requestScreenSentinel()
+      if (!lock) {
+        if (!isCancelled?.() && isMountedRef.current) {
+          setIsActive(false)
+        }
+        return
+      }
+
+      if (isCancelled?.() || !isMountedRef.current) {
+        await releaseSentinel(lock, 'wake_lock_cleanup')
+        return
+      }
+
+      attachSentinel(lock)
+    },
+    [attachSentinel]
+  )
 
   /**
    * Requests a wake lock to prevent screen sleep
@@ -64,31 +147,8 @@ export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
    * Handles errors gracefully (e.g., user denied permission).
    */
   const request = useCallback(async (): Promise<void> => {
-    // Check if Wake Lock API is available
-    if (!('wakeLock' in navigator)) {
-      logger.warn('Wake Lock API not supported', {
-        operation: 'wake_lock_request'
-      })
-      return
-    }
-
-    try {
-      const lock = await navigator.wakeLock.request('screen')
-      setWakeLock(lock)
-      setIsActive(true)
-
-      // Listen for wake lock release (e.g., user switches tabs)
-      lock.addEventListener('release', () => {
-        setIsActive(false)
-      })
-    } catch (error) {
-      logger.warn('Wake lock request failed', {
-        error,
-        operation: 'wake_lock_request'
-      })
-      setIsActive(false)
-    }
-  }, [])
+    await acquireLock()
+  }, [acquireLock])
 
   /**
    * Releases the current wake lock
@@ -97,20 +157,20 @@ export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
    * Safe to call even if no wake lock is active.
    */
   const release = useCallback(async (): Promise<void> => {
-    if (wakeLock) {
-      try {
-        await wakeLock.release()
-      } catch (error) {
-        logger.warn('Wake lock release failed', {
-          error,
-          operation: 'wake_lock_release'
-        })
-      } finally {
-        setWakeLock(null)
+    const currentLock = wakeLockRef.current
+    if (!currentLock) {
+      return
+    }
+
+    wakeLockRef.current = null
+    try {
+      await releaseSentinel(currentLock, 'wake_lock_release')
+    } finally {
+      if (isMountedRef.current) {
         setIsActive(false)
       }
     }
-  }, [wakeLock])
+  }, [])
 
   /**
    * Auto-request wake lock when enabled
@@ -119,12 +179,26 @@ export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
    * and releases it when enabled becomes false.
    */
   useEffect(() => {
-    if (enabled && !isActive) {
-      request()
-    } else if (!enabled && isActive) {
-      release()
+    if (!enabled) {
+      return
     }
-  }, [enabled, isActive, request, release])
+
+    let cancelled = false
+    void acquireLock(() => cancelled)
+
+    return () => {
+      cancelled = true
+      const currentLock = wakeLockRef.current
+      if (currentLock) {
+        wakeLockRef.current = null
+        void releaseSentinel(currentLock, 'wake_lock_cleanup').finally(() => {
+          if (isMountedRef.current) {
+            setIsActive(false)
+          }
+        })
+      }
+    }
+  }, [enabled, acquireLock])
 
   /**
    * Auto-release on unmount
@@ -133,17 +207,16 @@ export function useWakeLock(enabled: boolean = false): UseWakeLockReturn {
    * to prevent battery drain.
    */
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
-      if (wakeLock) {
-        wakeLock.release().catch((error) => {
-          logger.warn('Wake lock cleanup failed', {
-            error,
-            operation: 'wake_lock_cleanup'
-          })
-        })
+      isMountedRef.current = false
+      const currentLock = wakeLockRef.current
+      if (currentLock) {
+        wakeLockRef.current = null
+        void releaseSentinel(currentLock, 'wake_lock_cleanup')
       }
     }
-  }, [wakeLock])
+  }, [])
 
   return {
     isActive,

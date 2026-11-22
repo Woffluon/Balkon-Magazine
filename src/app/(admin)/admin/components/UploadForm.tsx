@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ProgressBar } from './ProgressBar'
@@ -205,15 +205,6 @@ export function UploadForm({
     issue: false,
     date: false,
   })
-
-  // Clear file feedback when parent resets form
-  useEffect(() => {
-    if (!title && issue === '' && !date && !hasPdfSelected) {
-      setPdfValidation({ error: null, fileName: null, fileSize: null, isValid: false })
-      setCoverValidation({ error: null, fileName: null, fileSize: null, isValid: false })
-      setTouched({ title: false, issue: false, date: false })
-    }
-  }, [title, issue, date, hasPdfSelected])
 
   const titleState = validateTitleValue(title)
   const issueState = validateIssueNumber(issue, existingMagazines)

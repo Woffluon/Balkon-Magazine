@@ -26,10 +26,15 @@ export function useDebounce<T>(value: T, delay: number = 300): T {
  */
 export function useThrottle<T>(value: T, limit: number = 100): T {
   const [throttledValue, setThrottledValue] = useState<T>(value)
-  const lastUpdated = useRef<number>(Date.now())
+  const lastUpdated = useRef<number>(0)
 
   useEffect(() => {
     const now = Date.now()
+    if (lastUpdated.current === 0) {
+      lastUpdated.current = now
+      return
+    }
+
     const timePassed = now - lastUpdated.current
 
     if (timePassed >= limit) {

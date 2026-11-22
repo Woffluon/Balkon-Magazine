@@ -68,6 +68,7 @@ export default function UploadDialog() {
   const [idempotencyKey, setIdempotencyKey] = useState<string>('')
   const [isUploadCompleted, setIsUploadCompleted] = useState(false)
   const [completedIssueNumber, setCompletedIssueNumber] = useState<number | null>(null)
+  const [formResetKey, setFormResetKey] = useState(0)
   const router = useRouter()
 
   const idempotencyManager = useMemo(() => new IdempotencyManager(), [])
@@ -90,40 +91,54 @@ export default function UploadDialog() {
   const { uploadFile: uploadToStorage } = useFileUpload()
   const { saveState, loadState, clearState } = useUploadPersistence(isUploadInProgress)
 
-  const reset = useCallback(() => {
-    resetForm()
-    resetProgress()
-    clearState()
-    setShowValidationErrors(false)
-    setUploadStage('info')
-    setCompletedIssueNumber(null)
-    setErrorState({
-      hasError: false,
-      errorMessage: '',
-      errorType: 'unknown',
-    })
+  const startIdempotencySession = useCallback(() => {
+    const key = idempotencyManager.generateKey()
+    setIdempotencyKey(key)
 
-    if (idempotencyKey && isUploadCompleted) {
-      idempotencyManager.clear(idempotencyKey)
+    const wasAlreadyCompleted = idempotencyManager.isCompleted(key)
+    setIsUploadCompleted(wasAlreadyCompleted)
+
+    if (wasAlreadyCompleted) {
+      addLog('Bu yükleme oturumu daha önce tamamlanmış.')
     }
+  }, [idempotencyManager, addLog])
 
-    setIdempotencyKey('')
-    setIsUploadCompleted(false)
-  }, [resetForm, resetProgress, clearState, idempotencyKey, isUploadCompleted, idempotencyManager])
+  const reset = useCallback(
+    (reopenSession = false) => {
+      resetForm()
+      resetProgress()
+      clearState()
+      setFormResetKey((prev) => prev + 1)
+      setShowValidationErrors(false)
+      setUploadStage('info')
+      setCompletedIssueNumber(null)
+      setErrorState({
+        hasError: false,
+        errorMessage: '',
+        errorType: 'unknown',
+      })
 
-  useEffect(() => {
-    if (isDialogOpen && !idempotencyKey) {
-      const key = idempotencyManager.generateKey()
-      setIdempotencyKey(key)
-
-      const wasAlreadyCompleted = idempotencyManager.isCompleted(key)
-      setIsUploadCompleted(wasAlreadyCompleted)
-
-      if (wasAlreadyCompleted) {
-        addLog('Bu yükleme oturumu daha önce tamamlanmış.')
+      if (idempotencyKey && isUploadCompleted) {
+        idempotencyManager.clear(idempotencyKey)
       }
-    }
-  }, [isDialogOpen, idempotencyKey, idempotencyManager, addLog])
+
+      if (reopenSession) {
+        startIdempotencySession()
+      } else {
+        setIdempotencyKey('')
+        setIsUploadCompleted(false)
+      }
+    },
+    [
+      resetForm,
+      resetProgress,
+      clearState,
+      idempotencyKey,
+      isUploadCompleted,
+      idempotencyManager,
+      startIdempotencySession,
+    ]
+  )
 
   useEffect(() => {
     if (isDialogOpen) {
@@ -519,20 +534,29 @@ export default function UploadDialog() {
         toast.warning(t('upload.closeWhileBusy'))
         return
       }
-      if (!shouldOpen) {
-        if (isUploadCompleted) {
-          reset()
-        } else {
-          clearState()
+      if (shouldOpen) {
+        if (!idempotencyKey) {
+          startIdempotencySession()
         }
+      } else if (isUploadCompleted) {
+        reset(false)
+      } else {
+        clearState()
       }
       setIsDialogOpen(shouldOpen)
     },
-    [isUploadInProgress, isUploadCompleted, clearState, reset]
+    [
+      isUploadInProgress,
+      isUploadCompleted,
+      idempotencyKey,
+      clearState,
+      reset,
+      startIdempotencySession,
+    ]
   )
 
   const handleStartNewUpload = () => {
-    reset()
+    reset(true)
   }
 
   const steps: Array<{ key: UploadStage; number: number; label: string }> = [
@@ -618,6 +642,7 @@ export default function UploadDialog() {
 
         <form onSubmit={handleSubmit} noValidate className="grid gap-4">
           <UploadForm
+            key={formResetKey}
             title={formState.title}
             issue={formState.issue}
             date={formState.date}
@@ -721,7 +746,7 @@ export default function UploadDialog() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        reset()
+                        reset(true)
                         addLog('İşlem iptal edildi ve ilerleme sıfırlandı.')
                       }}
                     >

@@ -6,7 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react'
 import { usePathname } from 'next/navigation'
@@ -22,8 +22,17 @@ export interface AdminThemeContextValue {
 const ADMIN_THEME_STORAGE_KEY = 'balkon_admin_theme'
 
 const AdminThemeContext = createContext<AdminThemeContextValue | null>(null)
+const themeListeners = new Set<() => void>()
+let fallbackTheme: AdminTheme | null = null
+
+function notifyThemeListeners(): void {
+  themeListeners.forEach((listener) => listener())
+}
 
 function readStoredTheme(): AdminTheme {
+  if (fallbackTheme !== null) {
+    return fallbackTheme
+  }
   try {
     const saved = window.localStorage.getItem(ADMIN_THEME_STORAGE_KEY)
     return saved === 'dark' ? 'dark' : 'light'
@@ -35,9 +44,31 @@ function readStoredTheme(): AdminTheme {
 function persistTheme(theme: AdminTheme): void {
   try {
     window.localStorage.setItem(ADMIN_THEME_STORAGE_KEY, theme)
+    fallbackTheme = null
   } catch {
-    // Ignore storage write failures (e.g., private browsing restrictions)
+    // Fall back to in-memory theme when storage writes fail (e.g., private browsing restrictions)
+    fallbackTheme = theme
   }
+}
+
+function subscribeToTheme(onStoreChange: () => void): () => void {
+  themeListeners.add(onStoreChange)
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === null || event.key === ADMIN_THEME_STORAGE_KEY) {
+      fallbackTheme = null
+      onStoreChange()
+    }
+  }
+  window.addEventListener('storage', handleStorage)
+
+  return () => {
+    themeListeners.delete(onStoreChange)
+    window.removeEventListener('storage', handleStorage)
+  }
+}
+
+function getServerThemeSnapshot(): AdminTheme {
+  return 'light'
 }
 
 /**
@@ -47,12 +78,12 @@ function persistTheme(theme: AdminTheme): void {
  */
 export function AdminThemeProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const [theme, setThemeState] = useState<AdminTheme>('light')
+  const theme = useSyncExternalStore(
+    subscribeToTheme,
+    readStoredTheme,
+    getServerThemeSnapshot
+  )
   const isAdminRoute = Boolean(pathname?.startsWith('/admin'))
-
-  useEffect(() => {
-    setThemeState(readStoredTheme())
-  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -74,16 +105,14 @@ export function AdminThemeProvider({ children }: { children: ReactNode }) {
   }, [isAdminRoute, theme])
 
   const setTheme = useCallback((nextTheme: AdminTheme) => {
-    setThemeState(nextTheme)
     persistTheme(nextTheme)
+    notifyThemeListeners()
   }, [])
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => {
-      const next: AdminTheme = prev === 'dark' ? 'light' : 'dark'
-      persistTheme(next)
-      return next
-    })
+    const next: AdminTheme = readStoredTheme() === 'dark' ? 'light' : 'dark'
+    persistTheme(next)
+    notifyThemeListeners()
   }, [])
 
   const value = useMemo<AdminThemeContextValue>(

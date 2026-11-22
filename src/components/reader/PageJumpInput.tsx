@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { logger } from '@/lib/services/Logger'
 
@@ -41,16 +41,9 @@ export function PageJumpInput({
   onPageJump
 }: PageJumpInputProps) {
   const displayPage = currentPage + 1
-  const [inputValue, setInputValue] = useState(String(displayPage))
-  const [isFocused, setIsFocused] = useState(false)
+  const [draftValue, setDraftValue] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  // Sync state when page changes externally (unless user is actively typing)
-  useEffect(() => {
-    if (!isFocused) {
-      setInputValue(String(displayPage))
-    }
-  }, [displayPage, isFocused])
+  const inputValue = draftValue ?? String(displayPage)
 
   if (!isVisible) {
     return null
@@ -68,7 +61,7 @@ export function PageJumpInput({
     if (!numericValue) {
       // Empty input defaults to page 1 (index 0)
       onPageJump(0)
-      setInputValue('1')
+      setDraftValue(null)
       return
     }
 
@@ -89,7 +82,7 @@ export function PageJumpInput({
 
     const pageIndex = pageNumber - 1
     onPageJump(pageIndex)
-    setInputValue(String(pageNumber))
+    setDraftValue(null)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -99,7 +92,7 @@ export function PageJumpInput({
       inputRef.current?.blur()
     } else if (e.key === 'Escape') {
       e.preventDefault()
-      setInputValue(String(displayPage))
+      setDraftValue(null)
       inputRef.current?.blur()
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       // Prevent propagating to parent flipbook navigation
@@ -108,11 +101,7 @@ export function PageJumpInput({
   }
 
   const handleBlur = () => {
-    setIsFocused(false)
-  }
-
-  const handleFocus = () => {
-    setIsFocused(true)
+    setDraftValue(null)
   }
 
   const handleGoMouseDown = (e: React.MouseEvent) => {
@@ -127,7 +116,7 @@ export function PageJumpInput({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/[^0-9]/g, '')
-    setInputValue(val)
+    setDraftValue(val)
   }
 
   return (
@@ -140,7 +129,6 @@ export function PageJumpInput({
           value={inputValue}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
           onBlur={handleBlur}
           disabled={isDisabled}
           aria-label="Sayfa numarası"
