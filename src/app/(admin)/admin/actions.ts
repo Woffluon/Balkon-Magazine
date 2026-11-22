@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { createStandardizedSupabaseClient } from '@/lib/utils/supabaseClientUtils'
 import { parseFormDataWithZod } from '@/lib/validators/formDataParser'
 import {
@@ -106,7 +106,7 @@ async function performMagazineCreation(data: unknown, userId: string) {
  */
 function revalidateAfterCreation(issueNumber: number) {
   // Revalidate cache and paths (Requirements 8.2, 8.4)
-  revalidateTag('magazines') // Invalidate magazines cache
+  updateTag('magazines') // Invalidate magazines cache
   revalidatePath('/admin')
   revalidatePath('/')
   revalidatePath(`/dergi/${issueNumber}`)
@@ -204,7 +204,7 @@ async function performMagazineDeletion(data: { id: string; issue_number: number 
  */
 function revalidateAfterDeletion(issueNumber: number) {
   // Revalidate cache and paths (Requirements 8.2, 8.4)
-  revalidateTag('magazines') // Invalidate magazines cache
+  updateTag('magazines') // Invalidate magazines cache
   revalidatePath('/admin')
   revalidatePath('/')
   revalidatePath(`/dergi/${issueNumber}`)
@@ -307,7 +307,7 @@ async function performMagazineRename(
  */
 function revalidateAfterRename(oldIssue: number, newIssue: number) {
   // Revalidate cache and paths (Requirements 8.2, 8.4)
-  revalidateTag('magazines') // Invalidate magazines cache
+  updateTag('magazines') // Invalidate magazines cache
   revalidatePath('/admin')
   revalidatePath('/')
   revalidatePath(`/dergi/${oldIssue}`)
@@ -451,7 +451,7 @@ export async function revalidateMagazinePage(issueNumber: number) {
 export async function revalidateMagazines() {
   await requireAdmin()
   
-  revalidateTag('magazines')
+  updateTag('magazines')
   revalidatePath('/') // Also revalidate home page
   
   return { success: true, revalidated: 'magazines tag' }

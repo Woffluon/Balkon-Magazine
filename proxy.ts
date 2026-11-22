@@ -49,7 +49,7 @@ function redirectWithSecurityHeaders(path: string, request: NextRequest, nonce: 
 }
 
 /**
- * Middleware for authentication and session management
+ * Proxy for authentication and session management
  * 
  * Features:
  * - Automatic session refresh when within 5 minutes of expiration
@@ -62,7 +62,7 @@ function redirectWithSecurityHeaders(path: string, request: NextRequest, nonce: 
  * Note: Supabase JWT expiry should be configured to 1 hour in the Supabase dashboard:
  * Settings > Auth > JWT Expiry = 3600 seconds (1 hour)
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const nonce = createNonce()
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
@@ -173,7 +173,7 @@ export async function middleware(request: NextRequest) {
 }
 
 /**
- * Middleware configuration
+ * Proxy configuration
  * 
  * Note: Route groups like (admin) are ignored in URLs, so /admin/:path* 
  * still matches routes in src/app/(admin)/admin/
@@ -185,4 +185,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|favicon.png|og-image.jpg|pdf.worker.min.mjs).*)',
   ],
 }
-
